@@ -30,8 +30,6 @@ export default class ArchiveBoxArchiver implements IArchiver {
   async queueForArchival(url: string): Promise<void> {
     if (this.urlQueue.indexOf(url) !== -1) return
     this.urlQueue.push(url)
-
-    console.log(url)
   }
 
   async submitQueue(): Promise<void> {

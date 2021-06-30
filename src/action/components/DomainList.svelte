@@ -8,6 +8,7 @@
   let isRegex
   let domainInput = ""
   let selectedEntries
+  let verifyClear = false
 
   function addDomain() {
     if (domainInput.trim() === "") return
@@ -17,6 +18,15 @@
 
   function removeDomain() {
     onRemoved(selectedEntries)
+  }
+
+  function maybeClear() {
+    if (verifyClear) {
+      onCleared()
+      verifyClear = false
+    } else {
+      verifyClear = true
+    }
   }
 
   function handleKeydown(e) {
@@ -35,7 +45,7 @@
       on:keydown={handleKeydown}>
     <button on:click={addDomain}>+</button>
     <button on:click={removeDomain}>-</button>
-    <button on:click={onCleared}>Clear</button>
+    <button on:click={maybeClear}>{verifyClear ? "Really?" : "Clear"}</button>
   </div>
 
   <select multiple bind:value={selectedEntries}>
