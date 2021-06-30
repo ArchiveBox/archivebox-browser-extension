@@ -4,7 +4,7 @@ export interface DomainEntry {
   value: string
 }
 
-export enum ListType {
+export const enum ListType {
   Allowlist = "allowlist",
   Blocklist = "blocklist"
 }

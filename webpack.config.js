@@ -56,7 +56,6 @@ module.exports = {
             const manifest = JSON.parse(content.toString())
             manifest.version = package.version
             manifest.description = package.description
-
             return JSON.stringify(manifest)
           }
         },

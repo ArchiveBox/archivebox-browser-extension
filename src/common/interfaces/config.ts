@@ -1,4 +1,4 @@
-export enum GlobalConfigKey {
+export const enum GlobalConfigKey {
   ArchiveMode = "archiveMode"
 }
 

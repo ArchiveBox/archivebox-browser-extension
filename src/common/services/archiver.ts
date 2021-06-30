@@ -2,7 +2,7 @@ import IArchiver from "../interfaces/archiver"
 import IDomainList, { ListType } from "../interfaces/domainList"
 import IConfig, { GlobalConfigKey } from "../interfaces/config"
 
-export enum ConfigKey {
+export const enum ConfigKey {
   ArchiveBoxUrl = "archiveBoxUrl",
   ArchiveBoxKey = "archiveBoxKey"
 }
