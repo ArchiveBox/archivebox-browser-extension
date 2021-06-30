@@ -49,7 +49,7 @@
   </div>
 
   <select multiple bind:value={selectedEntries}>
-    {#each options as { id, value, type } }
+    {#each options as { id, value, type } (id) }
       <option value="{id}">{type === "regex" ? "[regex] " : ""}{value}</option>
     {/each}
   </select>
@@ -66,6 +66,10 @@
       background: #3c3c3c;
       color: #FFF;
     }
+  }
+
+  option {
+    padding: 5px;
   }
 
   .add-remove {
