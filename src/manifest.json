@@ -1,0 +1,33 @@
+{
+  "name": "ArchiveBox Exporter",
+  "description": "",
+  "version": "0.0.0",
+  "manifest_version": 2,
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "archivebox@tjhorner.dev",
+      "strict_min_version": "42.0"
+    }
+  },
+
+  "icons": {
+    "128": "static/128.png"
+  },
+
+  "permissions": [
+    "history",
+    "contextMenus",
+    "storage",
+    "alarms"
+  ],
+
+  "browser_action": {
+    "default_title": "ArchiveBox",
+    "default_popup": "static/action.html"
+  },
+
+  "background": {
+    "scripts": [ "background.js" ]
+  }
+}

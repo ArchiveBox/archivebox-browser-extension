@@ -1,0 +1,30 @@
+{
+  "name": "archivebox-exporter",
+  "version": "1.0.0",
+  "description": "Automatically or manually send pages to your ArchiveBox for archival.",
+  "main": "index.js",
+  "scripts": {
+    "build": "webpack",
+    "dev": "NODE_ENV=development webpack --watch"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@tsconfig/svelte": "^2.0.1",
+    "@types/chrome": "^0.0.145",
+    "@types/uuid": "^8.3.0",
+    "clean-webpack-plugin": "^4.0.0-alpha.0",
+    "copy-webpack-plugin": "^9.0.1",
+    "svelte": "^3.38.3",
+    "svelte-loader": "^3.1.2",
+    "ts-loader": "^9.2.3",
+    "typescript": "^4.3.4",
+    "webpack": "^5.41.1",
+    "webpack-cli": "^4.7.2"
+  },
+  "dependencies": {
+    "uuid": "^8.3.2",
+    "wildcard-domain-matcher": "^1.0.0"
+  }
+}

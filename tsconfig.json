@@ -1,0 +1,12 @@
+{
+  "extends": "@tsconfig/svelte/tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist/",
+    "module": "esnext",
+    "allowJs": true,
+    "types": [ "svelte", "chrome" ],
+    "lib": [ "es6", "dom" ],
+    "esModuleInterop": true,
+    "importsNotUsedAsValues": "remove"
+  }
+}
