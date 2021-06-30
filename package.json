@@ -1,15 +1,15 @@
 {
   "name": "archivebox-exporter",
+  "private": true,
   "version": "1.0.0",
   "description": "Automatically or manually send pages to your ArchiveBox for archival.",
-  "main": "index.js",
   "scripts": {
     "build": "webpack",
     "dev": "NODE_ENV=development webpack --watch"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [ ],
+  "author": "TJ Horner <me@tjhorner.dev>",
+  "license": "MIT",
   "devDependencies": {
     "@tsconfig/svelte": "^2.0.1",
     "@types/chrome": "^0.0.145",
