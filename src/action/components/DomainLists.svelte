@@ -21,7 +21,7 @@
     return async function(domain, isRegex) {
       await storage.addEntry({
         id: v4(),
-        type: isRegex? "regex" : "domain",
+        type: isRegex ? "regex" : "domain",
         value: domain
       }, listType)
 
