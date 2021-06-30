@@ -51,6 +51,13 @@
     min-height: 150px;
   }
 
+  @media(prefers-color-scheme: dark) {
+    select {
+      background: #3c3c3c;
+      color: #FFF;
+    }
+  }
+
   .add-remove {
     margin-bottom: 5px;
     display: flex;

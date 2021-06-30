@@ -22,13 +22,24 @@
 
   .main {
     width: 400px;
+    padding: 10px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-    color: #2d2d2d;
   }
 
   hr {
     margin: 10px 0;
     border: none;
     border-top: 1px solid lightgray;
+  }
+
+  @media(prefers-color-scheme: dark) {
+    .main {
+      background: #2d2d2d;
+      color: #FFF;
+    }
+
+    hr {
+      border-color: #444444;
+    }
   }
 </style>
