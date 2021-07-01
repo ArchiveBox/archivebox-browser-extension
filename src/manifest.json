@@ -6,8 +6,7 @@
 
   "browser_specific_settings": {
     "gecko": {
-      "id": "archivebox@tjhorner.dev",
-      "strict_min_version": "42.0"
+      "id": "archivebox@tjhorner.dev"
     }
   },
 

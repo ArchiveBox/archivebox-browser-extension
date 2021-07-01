@@ -18,6 +18,18 @@ I've forked ArchiveBox and added a temporary API endpoint for adding URLs while 
 - Archive any arbitrary page with the "Archive Current Page" context menu item
 - Archive any link with the "Archive Link" context menu item
 
+## Development
+
+If you wish to contribute to (or just build for yourself) this extension, you will need to download and install [Node.js](https://nodejs.org/en/).
+
+Once that's installed, navigate to this project's root and run `npm install` to install dependencies.
+
+To build a production version (minified, optimized, etc.), run `npm run build`.
+
+If you plan on making changes often, you can use the command `npm run dev` to automatically rebuild the extension as you modify files.
+
+Both commands will produce an output in the `dist` directory.
+
 ## License
 
 MIT
