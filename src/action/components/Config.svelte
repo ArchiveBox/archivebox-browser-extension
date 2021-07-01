@@ -4,6 +4,7 @@
   import { GlobalConfigKey } from "../../common/interfaces/config"
   import SyncedConfig from "../../common/services/config"
   import ChromeSyncStorage from "../../common/services/storage"
+  import ConfigField from "./ConfigField.svelte"
 
   const config = new SyncedConfig(new ChromeSyncStorage())
 
@@ -23,22 +24,41 @@
 </script>
 
 <div class="config">
-  <h2>Config</h2>
+  <details>
+    <summary>Config</summary>
 
-  <div>
-    <label for={GlobalConfigKey.ArchiveMode}>Archive Mode</label><br>
-    <!-- svelte-ignore a11y-no-onchange -->
-    <select id={GlobalConfigKey.ArchiveMode} bind:value={selectedArchiveMode} on:change={changeArchiveMode}>
-      <option value="allowlist">Allowlist (don't archive by default)</option>
-      <option value="blocklist">Blocklist (archive by default)</option>
-    </select>
-  </div>
+    <p>
+      <a href="https://github.com/tjhorner/archivebox-exporter/wiki/Setup" target="_blank">Need help?</a>
+    </p>
+
+    <div>
+      <label for={GlobalConfigKey.ArchiveMode}>Archive Mode</label><br>
+      <!-- svelte-ignore a11y-no-onchange -->
+      <select id={GlobalConfigKey.ArchiveMode} bind:value={selectedArchiveMode} on:change={changeArchiveMode}>
+        <option value="allowlist">Allowlist (don't archive by default)</option>
+        <option value="blocklist">Blocklist (archive by default)</option>
+      </select>
+    </div>
+
+    <ConfigField
+      configKey={GlobalConfigKey.ArchiveBoxBaseUrl}
+      friendlyName="ArchiveBox Base URL" />
+
+    <ConfigField
+      configKey={GlobalConfigKey.ArchiveBoxApiKey}
+      friendlyName="ArchiveBox API Key" />
+  </details>
 </div>
 
 <style>
-  h2 {
-    margin-top: 0;
-    margin-bottom: 10px;
+  summary {
+    font-size: 1.2em;
+    font-weight: bold;
+    cursor: pointer;
+  }
+
+  a {
+    color: lightblue;
   }
 
   label {
@@ -47,5 +67,13 @@
 
   select {
     margin-top: 3px;
+  }
+  
+  div {
+    margin-bottom: 3px;
+  }
+
+  p {
+    margin: 5px 0;
   }
 </style>

@@ -33,11 +33,46 @@ export default class ArchiveBoxArchiver implements IArchiver {
   }
 
   async submitQueue(): Promise<void> {
-    console.warn("Queue submittal not actually implemented yet!")
+    this.sendUrls(this.urlQueue)
     this.urlQueue = [ ]
   }
 
   async archiveImmediately(url: string): Promise<void> {
-    console.log("Archiving url immediately:", url)
+    await this.sendUrls([ url ])
+  }
+
+  private requestPermissionsForHost(host: string): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      chrome.permissions.request({
+        origins: [ `${host}/*` ]
+      }, granted => {
+        if (chrome.runtime.lastError) return reject(chrome.runtime.lastError)
+        resolve(granted)
+      })
+    })
+  }
+
+  private async sendUrls(urls: string[]): Promise<boolean> {
+    const baseUrl = await this.config.get(GlobalConfigKey.ArchiveBoxBaseUrl, "")
+    const apiKey = await this.config.get(GlobalConfigKey.ArchiveBoxApiKey, "")
+
+    const granted = await this.requestPermissionsForHost(baseUrl)
+    if (!granted) return false
+
+    const body = new FormData()
+    body.append("urls", urls.join("\n"))
+    body.append("tag", "browser")
+    body.append("depth", "0")
+
+    const result = await fetch(`${baseUrl}/api/add/`, {
+      method: "post",
+      body,
+      headers: {
+        "Authorization": `Bearer ${apiKey}`
+      }
+    })
+
+    const json = await result.json()
+    return json.ok
   }
 }

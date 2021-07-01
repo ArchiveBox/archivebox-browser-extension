@@ -1,5 +1,7 @@
 export const enum GlobalConfigKey {
-  ArchiveMode = "archiveMode"
+  ArchiveMode = "archiveMode",
+  ArchiveBoxBaseUrl = "archiveBoxBaseUrl",
+  ArchiveBoxApiKey = "archiveBoxApiKey"
 }
 
 export default interface IConfig {

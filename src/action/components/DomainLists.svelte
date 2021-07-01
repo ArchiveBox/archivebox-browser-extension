@@ -1,4 +1,4 @@
-<script lang="ts">
+<script>
   export let archiveMode
 
   import { v4 } from "uuid"
@@ -50,7 +50,7 @@
 </script>
 
 <div class="lists">
-  <div class="list" class:hidden="{archiveMode !== 'allowlist'}">
+  <div class="list" class:hidden={archiveMode !== 'allowlist'}>
     <h2>Archived Domains</h2>
     <p>
       Pages you visit on these domains will be sent to your ArchiveBox.
@@ -65,7 +65,7 @@
       onCleared={onCleared(ListType.Allowlist)} />
   </div>
 
-  <div class="list" class:hidden="{archiveMode !== 'blocklist'}">
+  <div class="list" class:hidden={archiveMode !== 'blocklist'}>
     <h2>Ignored Domains</h2>
     <p>
       Every page you visit <strong>except on these domains</strong> will be sent to your ArchiveBox.

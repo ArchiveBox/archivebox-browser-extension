@@ -1,4 +1,4 @@
-<script lang="ts">
+<script>
   export let options = [ ]
   export let onAdded
   export let onRemoved
