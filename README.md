@@ -6,7 +6,14 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
 - Prevent link rot for important information!
 - Access important information even if you're offline
 
-> **⚠️ Note:** At the moment, the changes required for this extension to work are not yet merged into the stable release, so you will need to run the `dev` branch of ArchiveBox by following the steps [outlined here](https://github.com/ArchiveBox/ArchiveBox#install-and-run-a-specific-github-branch).
+**Download:**
+
+(These links may not work until the respective web stores review them.)
+
+- [Chrome/Edge/Other Chromium](https://chrome.google.com/webstore/detail/habonpimjphpdnmcfkaockjnffodikoj)
+- [Firefox](https://addons.mozilla.org/en-US/firefox/addon/archivebox-exporter/)
+
+> **⚠️ Note:** At the moment, the changes required for this extension to work are not yet merged into the stable release of ArchiveBox, so you will need to run the `dev` branch by following the steps [outlined here](https://github.com/ArchiveBox/ArchiveBox#install-and-run-a-specific-github-branch).
 
 ## Features
 
