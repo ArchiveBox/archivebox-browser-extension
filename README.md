@@ -6,9 +6,7 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
 - Prevent link rot for important information!
 - Access important information even if you're offline
 
-**Warning:** This extension is not yet complete! I am waiting for ArchiveBox to implement an API that can accept URLs to archive. But at the moment, everything else is ready! You can check the status in [this GitHub issue](https://github.com/ArchiveBox/ArchiveBox/issues/577#issuecomment-870974915).
-
-I've forked ArchiveBox and added a temporary API endpoint for adding URLs while ArchiveBox works to officially add an API. You can see the setup instructions [here](https://github.com/tjhorner/archivebox-exporter/wiki/Setup).
+> **⚠️ Note:** At the moment, the changes required for this extension to work are not yet merged into the stable release, so you will need to run the `dev` branch of ArchiveBox by following the steps [outlined here](https://github.com/ArchiveBox/ArchiveBox#install-and-run-a-specific-github-branch).
 
 ## Features
 
