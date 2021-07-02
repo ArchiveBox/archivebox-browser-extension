@@ -8,8 +8,6 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
 
 ## Download
 
-(These links may not work until the respective web stores review them.)
-
 - [Chrome/Edge/Other Chromium](https://chrome.google.com/webstore/detail/habonpimjphpdnmcfkaockjnffodikoj)
 - [Firefox](https://addons.mozilla.org/en-US/firefox/addon/archivebox-exporter/)
 
