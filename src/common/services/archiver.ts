@@ -55,6 +55,7 @@ export default class ArchiveBoxArchiver implements IArchiver {
 
   private async sendUrls(urls: string[]): Promise<boolean> {
     const baseUrl = await this.config.get(GlobalConfigKey.ArchiveBoxBaseUrl, "")
+    const tags = await this.config.get(GlobalConfigKey.Tags, "")
 
     if (baseUrl === "") return
 
@@ -63,7 +64,7 @@ export default class ArchiveBoxArchiver implements IArchiver {
 
     const body = new FormData()
     body.append("url", urls.join("\n"))
-    body.append("tag", "browser")
+    body.append("tag", tags)
     body.append("depth", "0")
     body.append("parser", "url_list")
 

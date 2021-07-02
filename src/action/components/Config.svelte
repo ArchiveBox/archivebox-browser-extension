@@ -42,7 +42,13 @@
 
     <ConfigField
       configKey={GlobalConfigKey.ArchiveBoxBaseUrl}
-      friendlyName="ArchiveBox Base URL" />
+      friendlyName="ArchiveBox Base URL"
+      placeholder="https://example.com" />
+
+    <ConfigField
+      configKey={GlobalConfigKey.Tags}
+      friendlyName="Tags"
+      placeholder="tag1,tag2,tag3" />
   </details>
 </div>
 

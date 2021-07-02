@@ -1,6 +1,7 @@
 <script>
   export let friendlyName
   export let configKey
+  export let placeholder = ""
 
   import SyncedConfig from "../../common/services/config"
   import ChromeSyncStorage from "../../common/services/storage"
@@ -23,7 +24,7 @@
 
 <div>
   <label for="config_{configKey}">{friendlyName}</label><br>
-  <input id="config_{configKey}" bind:value={value} on:blur={updateValue}>
+  <input id="config_{configKey}" bind:value={value} on:blur={updateValue} {placeholder}>
 </div>
 
 <style>
