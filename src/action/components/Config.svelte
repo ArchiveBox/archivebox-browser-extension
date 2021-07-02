@@ -53,10 +53,6 @@
     cursor: pointer;
   }
 
-  a {
-    color: lightblue;
-  }
-
   label {
     font-weight: bold;
   }

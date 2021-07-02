@@ -79,6 +79,11 @@
       onRemoved={onRemoved(ListType.Blocklist)}
       onCleared={onCleared(ListType.Blocklist)} />
   </div>
+
+  <p>
+    Regex entries are listed in <span style="color: #3bcfff">blue</span>. You can find more docs
+    <a href="https://github.com/tjhorner/archivebox-exporter/wiki/Domain-Lists" target="_blank">here</a>.
+  </p>
 </div>
 
 <style>
@@ -86,7 +91,12 @@
     margin: 0;
   }
 
-  p {
+  .lists > p {
+    margin: 0;
+    margin-top: 5px;
+  }
+
+  .list p {
     margin-top: 5px;
   }
 

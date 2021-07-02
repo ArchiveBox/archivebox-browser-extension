@@ -30,6 +30,10 @@
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   }
 
+  :global(a) {
+    color: #3bcfff;
+  }
+
   hr {
     margin: 10px 0;
     border: none;

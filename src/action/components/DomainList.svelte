@@ -50,7 +50,7 @@
 
   <select multiple bind:value={selectedEntries}>
     {#each options as { id, value, type } (id) }
-      <option value="{id}">{type === "regex" ? "[regex] " : ""}{value}</option>
+      <option value="{id}" class:is-regex={type === "regex"}>{value}</option>
     {/each}
   </select>
 </div>
@@ -89,5 +89,9 @@
 
   label {
     font-weight: bold;
+  }
+
+  .is-regex {
+    color: #3bcfff;
   }
 </style>
