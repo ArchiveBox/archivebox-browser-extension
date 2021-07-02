@@ -42,11 +42,25 @@ export default class ArchiveBoxArchiver implements IArchiver {
     await this.sendUrls([ url ])
   }
 
-  private requestPermissionsForHost(host: string): Promise<boolean> {
+  private hasPermissions(permissions: chrome.permissions.Permissions): Promise<boolean> {
     return new Promise((resolve, reject) => {
-      chrome.permissions.request({
-        origins: [ `${host}/*` ]
-      }, granted => {
+      chrome.permissions.contains(permissions, granted => {
+        if (chrome.runtime.lastError) return reject(chrome.runtime.lastError)
+        resolve(granted)
+      })
+    })
+  }
+
+  private async requestPermissionsForHost(host: string): Promise<boolean> {
+    const perms: chrome.permissions.Permissions = {
+      origins: [ `${host}/*` ]
+    }
+
+    const alreadyGranted = await this.hasPermissions(perms)
+    if (alreadyGranted) return true
+
+    return new Promise((resolve, reject) => {
+      chrome.permissions.request(perms, granted => {
         if (chrome.runtime.lastError) return reject(chrome.runtime.lastError)
         resolve(granted)
       })

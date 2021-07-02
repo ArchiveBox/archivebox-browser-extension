@@ -32,6 +32,15 @@ async function main() {
   })
 
   chrome.contextMenus.create({
+    id: "flushQueue",
+    title: "Flush URL Queue",
+    contexts: [ "browser_action" ],
+    onclick: async () => {
+      await archiver.submitQueue()
+    }
+  })
+
+  chrome.contextMenus.create({
     id: "archivePage",
     title: "Archive Current Page",
     contexts: [ "all" ],
