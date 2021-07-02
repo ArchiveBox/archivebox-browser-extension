@@ -33,6 +33,7 @@ export default class ArchiveBoxArchiver implements IArchiver {
   }
 
   async submitQueue(): Promise<void> {
+    if (this.urlQueue.length === 0) return
     this.sendUrls(this.urlQueue)
     this.urlQueue = [ ]
   }
@@ -62,19 +63,17 @@ export default class ArchiveBoxArchiver implements IArchiver {
     if (!granted) return false
 
     const body = new FormData()
-    body.append("urls", urls.join("\n"))
+    body.append("url", urls.join("\n"))
     body.append("tag", "browser")
     body.append("depth", "0")
+    body.append("parser", "url_list")
 
-    const result = await fetch(`${baseUrl}/api/add/`, {
+    await fetch(`${baseUrl}/add/`, {
       method: "post",
-      body,
-      headers: {
-        "Authorization": `Bearer ${apiKey}`
-      }
+      credentials: "include",
+      body
     })
 
-    const json = await result.json()
-    return json.ok
+    return true
   }
 }
