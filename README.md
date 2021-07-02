@@ -6,7 +6,7 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
 - Prevent link rot for important information!
 - Access important information even if you're offline
 
-**Download:**
+## Download
 
 (These links may not work until the respective web stores review them.)
 
