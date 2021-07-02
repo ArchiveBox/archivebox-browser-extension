@@ -55,9 +55,8 @@ export default class ArchiveBoxArchiver implements IArchiver {
 
   private async sendUrls(urls: string[]): Promise<boolean> {
     const baseUrl = await this.config.get(GlobalConfigKey.ArchiveBoxBaseUrl, "")
-    const apiKey = await this.config.get(GlobalConfigKey.ArchiveBoxApiKey, "")
 
-    if (baseUrl === "" || apiKey === "") return
+    if (baseUrl === "") return
 
     const granted = await this.requestPermissionsForHost(baseUrl)
     if (!granted) return false

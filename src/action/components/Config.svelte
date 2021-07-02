@@ -43,10 +43,6 @@
     <ConfigField
       configKey={GlobalConfigKey.ArchiveBoxBaseUrl}
       friendlyName="ArchiveBox Base URL" />
-
-    <ConfigField
-      configKey={GlobalConfigKey.ArchiveBoxApiKey}
-      friendlyName="ArchiveBox API Key" />
   </details>
 </div>
 

@@ -1,7 +1,7 @@
 {
   "name": "archivebox-exporter",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Automatically or manually send pages to your ArchiveBox for archival.",
   "scripts": {
     "build": "webpack",
