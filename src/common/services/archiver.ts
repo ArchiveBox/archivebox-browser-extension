@@ -1,19 +1,22 @@
 import IArchiver from "../interfaces/archiver"
 import IDomainList, { ListType } from "../interfaces/domainList"
 import IConfig, { GlobalConfigKey } from "../interfaces/config"
+import { EventEmitter } from "events"
 
 export const enum ConfigKey {
   ArchiveBoxUrl = "archiveBoxUrl",
   ArchiveBoxKey = "archiveBoxKey"
 }
 
-export default class ArchiveBoxArchiver implements IArchiver {
+export default class ArchiveBoxArchiver extends EventEmitter implements IArchiver {
   private domainList: IDomainList
   private config: IConfig
 
   private urlQueue: string[] = [ ]
+  private totalQueuedUrls = 0
 
   constructor(domainList: IDomainList, config: IConfig) {
+    super()
     this.domainList = domainList
     this.config = config
   }
@@ -42,6 +45,11 @@ export default class ArchiveBoxArchiver implements IArchiver {
     await this.sendUrls([ url ])
   }
 
+  private addQueuedUrlCount(count: number) {
+    this.totalQueuedUrls += count
+    this.emit("queuedUrlsChanged", this.totalQueuedUrls)
+  }
+
   private hasPermissions(permissions: chrome.permissions.Permissions): Promise<boolean> {
     return new Promise((resolve, reject) => {
       chrome.permissions.contains(permissions, granted => {
@@ -68,6 +76,8 @@ export default class ArchiveBoxArchiver implements IArchiver {
   }
 
   private async sendUrls(urls: string[]): Promise<boolean> {
+    this.addQueuedUrlCount(urls.length)
+
     const baseUrl = await this.config.get(GlobalConfigKey.ArchiveBoxBaseUrl, "")
     const tags = await this.config.get(GlobalConfigKey.Tags, "")
 
@@ -82,11 +92,15 @@ export default class ArchiveBoxArchiver implements IArchiver {
     body.append("depth", "0")
     body.append("parser", "url_list")
 
-    await fetch(`${baseUrl}/add/`, {
-      method: "post",
-      credentials: "include",
-      body
-    })
+    try {
+      await fetch(`${baseUrl}/add/`, {
+        method: "post",
+        credentials: "include",
+        body
+      })
+    } finally {
+      this.addQueuedUrlCount(-urls.length)
+    }
 
     return true
   }

@@ -14,6 +14,28 @@ async function main() {
 
   const archiver: IArchiver = new ArchiveBoxArchiver(domainList, config)
 
+  const defaultTitle = "ArchiveBox"
+
+  archiver.on("queuedUrlsChanged", newCount => {
+    if (newCount > 0) {
+      chrome.browserAction.setBadgeText({
+        text: newCount.toString()
+      })
+  
+      chrome.browserAction.setTitle({
+        title: `${defaultTitle} - archiving ${newCount} page${newCount > 1 ? "s" : ""}`
+      })
+    } else {
+      chrome.browserAction.setBadgeText({
+        text: ""
+      })
+  
+      chrome.browserAction.setTitle({
+        title: defaultTitle
+      })
+    }
+  })
+
   chrome.history.onVisited.addListener(async historyItem => {
     const shouldArchive = await archiver.shouldArchive(historyItem.url)
     if (!shouldArchive) return

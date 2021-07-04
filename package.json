@@ -1,13 +1,13 @@
 {
   "name": "archivebox-exporter",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Automatically or manually send pages to your ArchiveBox for archival.",
   "scripts": {
     "build": "webpack",
     "dev": "NODE_ENV=development webpack --watch"
   },
-  "keywords": [ ],
+  "keywords": [],
   "author": "TJ Horner <me@tjhorner.dev>",
   "license": "MIT",
   "devDependencies": {
@@ -24,6 +24,8 @@
     "webpack-cli": "^4.7.2"
   },
   "dependencies": {
+    "@types/events": "^3.0.0",
+    "events": "^3.3.0",
     "uuid": "^8.3.2",
     "wildcard-domain-matcher": "^1.0.0"
   }
