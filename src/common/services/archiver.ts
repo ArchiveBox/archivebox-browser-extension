@@ -76,8 +76,6 @@ export default class ArchiveBoxArchiver extends EventEmitter implements IArchive
   }
 
   private async sendUrls(urls: string[]): Promise<boolean> {
-    this.addQueuedUrlCount(urls.length)
-
     const baseUrl = await this.config.get(GlobalConfigKey.ArchiveBoxBaseUrl, "")
     const tags = await this.config.get(GlobalConfigKey.Tags, "")
 
@@ -91,6 +89,8 @@ export default class ArchiveBoxArchiver extends EventEmitter implements IArchive
     body.append("tag", tags)
     body.append("depth", "0")
     body.append("parser", "url_list")
+
+    this.addQueuedUrlCount(urls.length)
 
     try {
       await fetch(`${baseUrl}/add/`, {
