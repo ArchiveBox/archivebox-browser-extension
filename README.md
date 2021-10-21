@@ -13,6 +13,8 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
 
 > **⚠️ Note:** At the moment, the changes required for this extension to work are not yet merged into the stable release of ArchiveBox, so you will need to run the `dev` branch by following the steps [outlined here](https://github.com/ArchiveBox/ArchiveBox#install-and-run-a-specific-github-branch).
 
+> **⚠️ Note for Firefox Users:** Firefoxs' default behaviour seems to block a permission request to access all pages, so you can not send pages to archivebox. You may have to manually enable it in `about:addons > ArchiveBox Exporter > Manage > Permissions` and enable the option `Access your data for all websites`.
+
 ## Features
 
 - Different archive modes
