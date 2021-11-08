@@ -2,6 +2,7 @@ const path = require('path')
 const CopyPlugin = require('copy-webpack-plugin')
 const { CleanWebpackPlugin: CleanPlugin } = require('clean-webpack-plugin')
 const package = require('./package.json')
+const targetManifest = require(`./src/manifest.${process.env.TARGET_BROWSER || "chrome"}.json`)
 
 module.exports = {
   devtool: false,
@@ -56,6 +57,8 @@ module.exports = {
             const manifest = JSON.parse(content.toString())
             manifest.version = package.version
             manifest.description = package.description
+            for(const key in targetManifest)
+              manifest[key] = targetManifest[key]
             return JSON.stringify(manifest)
           }
         },

@@ -4,26 +4,9 @@
   "version": "0.0.0",
   "manifest_version": 2,
 
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "archivebox@tjhorner.dev"
-    }
-  },
-
   "icons": {
     "128": "static/128.png"
   },
-
-  "permissions": [
-    "history",
-    "contextMenus",
-    "storage",
-    "alarms"
-  ],
-
-  "optional_permissions": [
-    "*://*/*"
-  ],
 
   "browser_action": {
     "default_title": "ArchiveBox",

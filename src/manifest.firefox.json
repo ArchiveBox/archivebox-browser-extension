@@ -1,0 +1,15 @@
+{
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "archivebox@tjhorner.dev"
+    }
+  },
+
+  "permissions": [
+    "history",
+    "contextMenus",
+    "storage",
+    "alarms",
+    "*://*/*"
+  ]
+}

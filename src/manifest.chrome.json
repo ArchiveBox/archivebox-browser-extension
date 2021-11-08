@@ -1,0 +1,12 @@
+{
+  "permissions": [
+    "history",
+    "contextMenus",
+    "storage",
+    "alarms"
+  ],
+
+  "optional_permissions": [
+    "*://*/*"
+  ]
+}
