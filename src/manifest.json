@@ -1,7 +1,7 @@
 {
   "name": "ArchiveBox Exporter",
-  "description": "",
-  "version": "0.0.0",
+  "description": "Browser extension to save selected pages or browsing history to an ArchiveBox instance",
+  "version": "0.0.1",
   "manifest_version": 2,
 
   "icons": {
