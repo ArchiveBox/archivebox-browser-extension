@@ -66,6 +66,22 @@ https://github.com/ArchiveBox/ArchiveBox/issues/577#issuecomment-872915877
 
 https://github.com/ArchiveBox/ArchiveBox/issues/577
 
+## Related Projects
+
+
+
+- https://github.com/layderv/archivefox (user-contributed extension for Firefox)
+- https://github.com/Gertje823/ArchiveboxTelegramBot (Telegram Bot to send URLs to ArchiveBox)
+- https://github.com/TheCakeIsNaOH/xbs-to-archivebox (Download your bookmarks from xBrowserSync, filter them, and save them into ArchiveBox)
+- https://github.com/emschu/archivebox-quick-add (golang utility to add links to ArchiveBox)
+- https://github.com/FracturedCode/archivebox-reddit (automatically back up saved Reddit comments, posts, etc. to ArchiveBox)
+- https://github.com/thomaspaulin/archive-box-bridge (simple Golang server that accepts URLs and passes them on to ArchiveBox)
+- https://github.com/dbeley/reddit_export_userdata (older Python utility to archive reddit content to ArchiveBox)
+- https://github.com/gildas-lormeau/SingleFile
+- https://github.com/ArchiveBox/ArchiveBox/issues/577
+
+---
+
 ## License
 
 MIT License
