@@ -1,4 +1,4 @@
-# 🗃 ArchiveBox Exporter Browser Extension
+# 🗃 ArchiveBox Browser Extension
 
 This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers) that lets you automatically send pages from domains you specify to your ArchiveBox instance. This has a couple of benefits:
 
@@ -6,12 +6,13 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
 - Prevent link rot for important information!
 - Access important information even if you're offline
 
+<img width="426" alt="Screenshot of extension config area" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/82d6ae08-6327-45ef-a536-cb775ec58b41">
+
 ## Download
 
 - [Chrome/Edge/Other Chromium](https://chrome.google.com/webstore/detail/habonpimjphpdnmcfkaockjnffodikoj)
 - [Firefox](https://addons.mozilla.org/en-US/firefox/addon/archivebox-exporter/)
 
-> **⚠️ Note:** At the moment, the changes required for this extension to work are not yet merged into the stable release of ArchiveBox, so you will need to run the `dev` branch by following the steps [outlined here](https://github.com/ArchiveBox/ArchiveBox#install-and-run-a-specific-github-branch).
 
 ## Features
 
