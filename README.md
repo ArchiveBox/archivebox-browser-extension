@@ -77,8 +77,7 @@ https://github.com/ArchiveBox/ArchiveBox/issues/577
 - https://github.com/FracturedCode/archivebox-reddit (automatically back up saved Reddit comments, posts, etc. to ArchiveBox)
 - https://github.com/thomaspaulin/archive-box-bridge (simple Golang server that accepts URLs and passes them on to ArchiveBox)
 - https://github.com/dbeley/reddit_export_userdata (older Python utility to archive reddit content to ArchiveBox)
-- https://github.com/gildas-lormeau/SingleFile
-- https://github.com/ArchiveBox/ArchiveBox/issues/577
+- https://github.com/gildas-lormeau/SingleFile (a great extension for saving pages into a single `.html` file, built-in to ArchiveBox already)
 
 ---
 
