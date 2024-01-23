@@ -50,7 +50,7 @@ Both commands will produce an output in the `dist` directory.
 
 ## Changelog
 
-#### 2024-01 Extension repo moved from `tjhorner/archivebox-exporter` to `Archivebox/archivebox-extension`
+#### 2024-01 Extension repo moved from `tjhorner/archivebox-exporter` to `Archivebox/archivebox-browser-extension`
 
 https://github.com/ArchiveBox/archivebox-extension
 
