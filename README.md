@@ -20,9 +20,9 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
     # (make sure to restart the server after to apply this change)
     ```
     <img width="400" alt="Screenshot 2024-01-23 at 11 11 32 AM" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/b0dc715c-4f88-49dd-a019-ffd65ebcc7c4">
-3. Configure the extension to point to your ArchiveBox server's base URL (e.g. `http://localhost:8000`, `https://archivebox.example.com`, etc.)
+3. Configure the extension to point to your ArchiveBox server's base URL (e.g. `http://localhost:8000`, `https://archivebox.example.com`, etc.)  
     <img width="400" alt="Screenshot of extension config area" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/82d6ae08-6327-45ef-a536-cb775ec58b41">
-4. ✅ *Test it out by right-clicking on any page and selecting `ArchiveBox Exporter > Archive Current Page`*
+4. ✅ *Test it out by right-clicking on any page and selecting `ArchiveBox Exporter > Archive Current Page`*  
     <img width="400" alt="Screenshot 2024-01-23 at 11 11 42 AM" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/6c0b8125-e1b9-4c64-b79a-c74a8d85c176">
 
 
