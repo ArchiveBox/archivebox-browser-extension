@@ -23,8 +23,7 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
 3. Configure the extension to point to your ArchiveBox server's base URL (e.g. `http://localhost:8000`, `https://archivebox.example.com`, etc.)  
     <img width="400" alt="Screenshot of extension config area: example with localhost" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/43673b8c-389d-45f7-9cda-f1ec72844a00" align="top"><img width="400" alt="Screenshot of extension config area: example with demo" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/82d6ae08-6327-45ef-a536-cb775ec58b41" align="top">
 5. ✅ *Test it out by right-clicking on any page and selecting `ArchiveBox Exporter > Archive Current Page`*  
-    <img width="400" alt="Screenshot of right-clicking to add a page to ArchiveBox using extension" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/6c0b8125-e1b9-4c64-b79a-c74a8d85c176"><br/>
-    <img width="500" alt="Screenshot of ArchiveBox server with added URL" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/ab2dc48a-e2cd-4bef-aea3-553a91bc70c9">
+    <img width="400" alt="Screenshot of right-clicking to add a page to ArchiveBox using extension" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/6c0b8125-e1b9-4c64-b79a-c74a8d85c176" align="top"><img width="500" alt="Screenshot of ArchiveBox server with added URL" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/ab2dc48a-e2cd-4bef-aea3-553a91bc70c9" align="top">
 
 
 ## Features
@@ -34,6 +33,8 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
   - Blocklist mode archives all visited pages by default, but lets you specify domains or regexes to not archive
 - Archive any arbitrary page with the "Archive Current Page" context menu item
 - Archive any link with the "Archive Link" context menu item
+
+---
 
 ## Development
 
@@ -47,6 +48,24 @@ If you plan on making changes often, you can use the command `npm run dev` to au
 
 Both commands will produce an output in the `dist` directory.
 
+## Changelog
+
+#### 2024-01 Extension repo moved from `tjhorner/archivebox-exporter` to `Archivebox/archivebox-extension`
+
+https://github.com/ArchiveBox/archivebox-extension
+
+#### 2021-09 Extension offically supported by ArchiveBox v0.6.2, no longer needed to run `:dev` branch
+
+https://github.com/tjhorner/ArchiveBox.git#temporary-add-api
+
+#### 2021-07 Initial extension published on Chrome and Mozilla web stores
+
+https://github.com/ArchiveBox/ArchiveBox/issues/577#issuecomment-872915877
+
+#### 2021-06 [@tjhorner](https://github.com/tjhorner) Created the initial `archivebox-exporter` extension
+
+https://github.com/ArchiveBox/ArchiveBox/issues/577
+
 ## License
 
-MIT
+MIT License
