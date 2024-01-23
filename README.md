@@ -21,9 +21,9 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
     ```
     <img width="400" alt="Screenshot of ArchiveBox CLI configuring PUBLIC_ADD_VIEW=True" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/b0dc715c-4f88-49dd-a019-ffd65ebcc7c4">
 3. Configure the extension to point to your ArchiveBox server's base URL (e.g. `http://localhost:8000`, `https://archivebox.example.com`, etc.)  
-    <img width="400" alt="Screenshot of extension config area: example with localhost" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/43673b8c-389d-45f7-9cda-f1ec72844a00" align="top"><img width="400" alt="Screenshot of extension config area: example with demo" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/82d6ae08-6327-45ef-a536-cb775ec58b41" align="top">
+    <img width="400" alt="Screenshot of extension config area: example with localhost" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/43673b8c-389d-45f7-9cda-f1ec72844a00" align="top"><img width="350" alt="Screenshot of extension config area: example with demo" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/82d6ae08-6327-45ef-a536-cb775ec58b41" align="top">
 5. ✅ *Test it out by right-clicking on any page and selecting `ArchiveBox Exporter > Archive Current Page`*  
-    <img width="400" alt="Screenshot of right-clicking to add a page to ArchiveBox using extension" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/6c0b8125-e1b9-4c64-b79a-c74a8d85c176" align="top"><img width="500" alt="Screenshot of ArchiveBox server with added URL" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/ab2dc48a-e2cd-4bef-aea3-553a91bc70c9" align="top">
+    <img width="400" alt="Screenshot of right-clicking to add a page to ArchiveBox using extension" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/6c0b8125-e1b9-4c64-b79a-c74a8d85c176" align="top"><img width="600" alt="Screenshot of ArchiveBox server with added URL" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/ab2dc48a-e2cd-4bef-aea3-553a91bc70c9" align="top">
 
 
 ## Features
