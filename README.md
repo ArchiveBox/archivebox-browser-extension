@@ -15,11 +15,11 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
 
 1. Set up an [ArchiveBox](https://github.com/ArchiveBox/ArchiveBox#quickstart) server and make sure it's accessible to the machine you're browsing on
 2. Configure your ArchiveBox server to allow URL submissions without requiring login
-```bash
-archivebox config --set PUBLIC_ADD_VIEW=True
-# (make sure to restart the server after to apply this change)
-```
-[More info here...](https://github.com/ArchiveBox/ArchiveBox/wiki/Configuration#public_index--public_snapshots--public_add_view)
+  ```bash
+  archivebox config --set PUBLIC_ADD_VIEW=True
+  # (make sure to restart the server after to apply this change)
+  ```
+  [More info here...](https://github.com/ArchiveBox/ArchiveBox/wiki/Configuration#public_index--public_snapshots--public_add_view)
 3. Configure the extension to point to your ArchiveBox server's base URL (e.g. `http://localhost:8000`, `https://archivebox.example.com`, etc.)
 4. ✅ *Test it out by right-clicking on any page and selecting `ArchiveBox Exporter > Archive Current Page`*
 
