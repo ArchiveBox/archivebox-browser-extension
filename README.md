@@ -66,18 +66,31 @@ https://github.com/ArchiveBox/ArchiveBox/issues/577#issuecomment-872915877
 
 https://github.com/ArchiveBox/ArchiveBox/issues/577
 
-## Related Projects
+---
 
+## Alternative Extensions for Archiving
 
+Other browser extensions that also do web archiving, may be a better fit if ArchiveBox doesn't suit your needs.
+
+- https://archiveweb.page/ + https://replayweb.page (super high fidelity archiving extension by the Webrecorder team)
+- https://github.com/gildas-lormeau/SingleFile (a great extension for saving pages into a single `.html` file, built-in to ArchiveBox already)
+- https://web.hypothes.is/start/ (extension focused on annotating, but also supports archiving)
+- https://memex.garden/ (another project focused on annotating that supports archiving)
+- https://addons.mozilla.org/en-US/firefox/addon/save-page-we/ (a Firefox extension that also saves webpages as a single HTML file)
+
+## Other ArchiveBox Helper Projects
+
+Other projects that help with ingest URLs into ArchiveBox from various sources.
 
 - https://github.com/layderv/archivefox (user-contributed extension for Firefox)
 - https://github.com/Gertje823/ArchiveboxTelegramBot (Telegram Bot to send URLs to ArchiveBox)
 - https://github.com/TheCakeIsNaOH/xbs-to-archivebox (Download your bookmarks from xBrowserSync, filter them, and save them into ArchiveBox)
 - https://github.com/emschu/archivebox-quick-add (golang utility to add links to ArchiveBox)
 - https://github.com/FracturedCode/archivebox-reddit (automatically back up saved Reddit comments, posts, etc. to ArchiveBox)
-- https://github.com/thomaspaulin/archive-box-bridge (simple Golang server that accepts URLs and passes them on to ArchiveBox)
 - https://github.com/dbeley/reddit_export_userdata (older Python utility to archive reddit content to ArchiveBox)
-- https://github.com/gildas-lormeau/SingleFile (a great extension for saving pages into a single `.html` file, built-in to ArchiveBox already)
+- https://github.com/jess-sol/reddit-exporter (export reddit data to ArchiveBox)
+- https://github.com/jonesd/archivebox-pinboard-tranformer (export links from pinboard to ArchiveBox)
+- https://github.com/agg23/archivebox-url-forwarder (older WebExtension to forward URLs to archivebox)
 
 ---
 
