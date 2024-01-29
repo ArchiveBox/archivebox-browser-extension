@@ -18,7 +18,7 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
     *Alternatively: if you stay signed in to your ArchiveBox instance in the same browser, it will share your login credentials.*
     ```bash
     archivebox config --set PUBLIC_ADD_VIEW=True
-    # (make sure to restart the server after to apply this change)
+    # (make sure to restart the server after if you apply this change)
     ```
     <img width="400" alt="Screenshot of ArchiveBox CLI configuring PUBLIC_ADD_VIEW=True" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/b0dc715c-4f88-49dd-a019-ffd65ebcc7c4">
 4. Configure the extension to point to your ArchiveBox server's base URL (e.g. `http://localhost:8000`, `https://archivebox.example.com`, etc.)  
