@@ -14,7 +14,7 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
 ## Setup
 
 1. Set up an [ArchiveBox](https://github.com/ArchiveBox/ArchiveBox#quickstart) server and make sure it's accessible to the machine you're browsing on
-2. Configure your ArchiveBox server to allow URL submissions without requiring login ([more info here...](https://github.com/ArchiveBox/ArchiveBox/wiki/Configuration#public_index--public_snapshots--public_add_view))
+2. Configure your ArchiveBox server to allow URL submissions without requiring login ([more info here...](https://github.com/ArchiveBox/ArchiveBox/wiki/Configuration#public_index--public_snapshots--public_add_view))  
     *Alternatively: if you stay signed in to your ArchiveBox instance in the same browser, it will share your login credentials and this step is not needed.*
     ```bash
     archivebox config --set PUBLIC_ADD_VIEW=True
