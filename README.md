@@ -9,7 +9,7 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
 ## Download
 
 - [Chrome/Edge/Other Chromium](https://chrome.google.com/webstore/detail/habonpimjphpdnmcfkaockjnffodikoj)
-- [Firefox](https://addons.mozilla.org/en-US/firefox/addon/archivebox-exporter/)
+- [Firefox](https://addons.mozilla.org/firefox/addon/archivebox-exporter/)
 
 ## Setup
 
