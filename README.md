@@ -6,6 +6,8 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
 - Prevent link rot for important information!
 - Access important information even if you're offline
 
+*✨ Contributed by [TJ Horner (@tjhorner)](https://github.com/tjhorner)*
+
 ## Download
 
 - [Chrome/Edge/Other Chromium](https://chrome.google.com/webstore/detail/habonpimjphpdnmcfkaockjnffodikoj)
