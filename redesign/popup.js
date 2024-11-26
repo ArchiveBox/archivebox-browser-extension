@@ -2,6 +2,42 @@
 window.popupElement = null;  // Global reference to popup element
 window.hideTimer = null;
 
+async function sendToArchiveBox(url, tags) {
+  const { archivebox_server_url, archivebox_api_key } = await chrome.storage.sync.get([
+    'archivebox_server_url',
+    'archivebox_api_key'
+  ]);
+
+  if (!archivebox_server_url || !archivebox_api_key) {
+    return { ok: false, status: 'Server not configured' };
+  }
+
+  try {
+    console.log('i Sending to ArchiveBox', { endpoint: `${archivebox_server_url}/api/v1/cli/add`, method: 'POST', url, tags });
+    const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
+      method: 'POST', 
+      mode: 'no-cors',
+      credentials: 'omit',
+      body: JSON.stringify({
+        api_key: archivebox_api_key,
+        urls: [url],
+        tag: tags.join(','),
+        depth: 0,
+        update: false,
+        update_all: false,
+      }),
+    });
+
+    // const data = await response.json();
+    return {
+      ok: response.ok,
+      status: `${response.status} ${response.statusText}`
+    };
+  } catch (err) {
+    return { ok: false, status: `Connection failed ${err}` };
+  }
+}
+
 window.getCurrentEntry = async function() {
   const { entries = [] } = await chrome.storage.sync.get('entries');
   let currentEntry = entries.find(entry => entry.url === window.location.href);
@@ -45,12 +81,22 @@ window.getSuggestedTags = async function() {
 window.updateCurrentTags = async function() {
   if (!popupElement) return;
   const currentTagsDiv = popupElement.querySelector('.ARCHIVEBOX__current-tags');
+  const statusDiv = popupElement.querySelector('small');
   const { currentEntry } = await getCurrentEntry();
+
+  // Update UI first
   currentTagsDiv.innerHTML = currentEntry.tags.length 
     ? `${currentEntry.tags
         .map(tag => `<span class="ARCHIVEBOX__tag-badge current" data-tag="${tag}">${tag}</span>`)
         .join(' ')}`
     : '';
+
+  // Send to server
+  const result = await sendToArchiveBox(currentEntry.url, currentEntry.tags);
+  statusDiv.innerHTML = `
+    <span class="status-indicator ${result.ok ? 'success' : 'error'}"></span>
+    ${result.status}
+  `;
 
   // Add click handlers for removing tags
   currentTagsDiv.querySelectorAll('.tag-badge.current').forEach(badge => {
@@ -91,7 +137,10 @@ window.createPopup = async function() {
     <br/>
     <div class="ARCHIVEBOX__current-tags"></div>
     <div class="ARCHIVEBOX__tag-suggestions"></div><br/>
-    <small>Saved</small>
+    <small>
+      <span class="status-indicator"></span>
+      Saved
+    </small>
   `;
   
   document.body.appendChild(popupElement);

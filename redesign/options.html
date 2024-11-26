@@ -77,6 +77,23 @@
       padding-top: 1rem;
       border-top: 1px solid #dee2e6;
     }
+
+    .sync-status {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    .sync-status.status-success {
+      background: #28a745;
+    }
+
+    .sync-status.status-error {
+      background: #dc3545;
+    }
   </style>
 </head>
 <body class="container-full py-4">
@@ -108,6 +125,9 @@
             </button>
             <button class="btn btn-outline-danger" id="deleteFiltered">
               DELETE
+            </button>
+            <button class="btn btn-outline-primary" id="syncFiltered">
+              SYNC
             </button>
           </div>
           <div id="entriesList" class="list-group"></div>
@@ -180,12 +200,19 @@
 
             <div class="mb-3" style="background-color: #dfebfd; padding: 5px; border-radius: 6px;">
               <label for="testUrl" class="form-label">🔍 Test URL Against Patterns</label>
-              <input type="url" class="form-control" id="testUrl" 
-                     value="https://example.com"
-                     placeholder="Enter a URL to test against patterns">
+              <div class="input-group">
+                <input type="url" class="form-control" id="testUrl" 
+                       value="https://example.com"
+                       placeholder="Enter a URL to test against patterns">
+                <button type="button" id="testAdding" class="btn btn-outline-secondary">
+                  TEST ADDING
+                  <span class="status-indicator" id="addingStatus"></span>
+                </button>
+              </div>
               <div class="form-text">
                 <span class="status-indicator mt-2" id="urlStatus"></span>
                 <span id="urlStatusText" class="ms-2"></span>
+                <span id="addingStatusText" class="ms-2"></span>
               </div>
             </div>
           </form>
