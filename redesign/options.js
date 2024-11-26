@@ -235,7 +235,7 @@ function testUrl() {
       statusText.textContent = 'URL would be excluded';
     } else if (isMatched) {
       statusIndicator.className = 'status-indicator status-success';
-      statusText.textContent = 'URL would be archived';
+      statusText.textContent = 'URL would be allowed to be archived';
     } else {
       statusIndicator.className = 'status-indicator status-error';
       statusText.textContent = 'URL would not be archived';
@@ -292,14 +292,150 @@ async function testApiKey() {
     //   "user_id": null
     // }
     const data = await response.json();
-    const successMsg = data.success ? 'valid' : 'invalid';
+    const successMsg = data.user_id ? 'valid' : 'invalid';
     const userMsg = data.user_id ? `user ${data.user_id}` : 'no user';
     statusText.textContent = `API key ${successMsg} (${userMsg}) (${endTime - startTime}ms)`;
     statusIndicator.className = 'status-indicator ' + 
-      (response.ok ? 'status-success' : 'status-error');
+      (data?.user_id ? 'status-success' : 'status-error');
+    if (!data?.user_id) {
+      statusText.style.color = '#dc3545';
+    }
   } catch (err) {
     statusIndicator.className = 'status-indicator status-error';
     statusText.textContent = 'Connection failed';
+  }
+}
+
+// Add this function near the other utility functions
+async function syncToArchiveBox(entry) {
+  const { archivebox_server_url, archivebox_api_key } = await chrome.storage.sync.get([
+    'archivebox_server_url',
+    'archivebox_api_key'
+  ]);
+
+  if (!archivebox_server_url || !archivebox_api_key) {
+    return { ok: false, status: 'Server not configured' };
+  }
+
+  try {
+    const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
+      method: 'POST',
+      mode: 'cors',
+      credentials: 'omit',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        api_key: archivebox_api_key,
+        urls: [entry.url],
+        tag: entry.tags.join(','),
+        depth: 0,
+        update: false,
+        update_all: false,
+      }),
+    });
+
+    return {
+      ok: response.ok,
+      status: `${response.status} ${response.statusText}`
+    };
+  } catch (err) {
+    return { ok: false, status: `Connection failed ${err}` };
+  }
+}
+
+// Add this function to handle the sync operation
+async function handleSync(filterText = '') {
+  const { entries = [] } = await chrome.storage.sync.get('entries');
+  const filteredEntries = filterEntries(entries, filterText);
+  
+  if (!filteredEntries.length) {
+    alert('No entries to sync');
+    return;
+  }
+
+  const syncBtn = document.getElementById('syncFiltered');
+  syncBtn.disabled = true;
+  syncBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Syncing...';
+
+  // Process entries one at a time
+  for (const entry of filteredEntries) {
+    const row = document.getElementById(entry.id);
+    if (!row) continue;
+
+    // Add status indicator if it doesn't exist
+    let statusIndicator = row.querySelector('.sync-status');
+    if (!statusIndicator) {
+      statusIndicator = document.createElement('span');
+      statusIndicator.className = 'sync-status status-indicator';
+      statusIndicator.style.marginLeft = '10px';
+      row.querySelector('code').appendChild(statusIndicator);
+    }
+
+    // Update status to "in progress"
+    statusIndicator.className = 'sync-status status-indicator';
+    statusIndicator.style.backgroundColor = '#ffc107'; // yellow
+
+    // Send to ArchiveBox
+    const result = await syncToArchiveBox(entry);
+    
+    // Update status indicator
+    statusIndicator.className = `sync-status status-indicator status-${result.ok ? 'success' : 'error'}`;
+    statusIndicator.title = result.status;
+
+    // Wait 1s before next request
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+
+  // Reset button state
+  syncBtn.disabled = false;
+  syncBtn.textContent = 'SYNC';
+}
+
+// Add this function near testServer() and testApiKey()
+async function testAdding() {
+  const serverUrl = document.getElementById('archivebox_server_url').value;
+  const apiKey = document.getElementById('archivebox_api_key').value;
+  const testUrl = document.getElementById('testUrl').value;
+  const statusIndicator = document.getElementById('addingStatus');
+  const statusText = document.getElementById('addingStatusText');
+  
+  if (!serverUrl || !apiKey || !testUrl) {
+    statusIndicator.className = 'status-indicator status-error';
+    statusText.textContent = 'Server URL, API key, and test URL required';
+    return;
+  }
+
+  try {
+    const startTime = Date.now();
+    const response = await fetch(`${serverUrl}/api/v1/cli/add`, {
+      method: 'POST',
+      mode: 'cors',
+      credentials: 'omit',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        api_key: apiKey,
+        urls: [testUrl],
+        tag: 'test',
+        depth: 0,
+        update: false,
+        update_all: false,
+      }),
+    });
+    const endTime = Date.now();
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(`Request failed ${response.status} ${response.statusText}`);
+    }
+    statusIndicator.className = 'status-indicator status-success';
+    statusText.textContent = `Request completed (${endTime - startTime}ms)`;
+  } catch (err) {
+    statusIndicator.className = 'status-indicator status-error';
+    statusText.textContent = `Adding failed: ${err}`;
   }
 }
 
@@ -447,6 +583,16 @@ async function loadOptions() {
 
   // Add to loadOptions() near the other event listeners
   document.getElementById('testApiKey').addEventListener('click', testApiKey);
+
+  // Add sync handler
+  const syncBtn = document.getElementById('syncFiltered');
+  syncBtn.addEventListener('click', async () => {
+    const filterInput = document.getElementById('filterInput');
+    await handleSync(filterInput.value);
+  });
+
+  // Add test adding button handler
+  document.getElementById('testAdding').addEventListener('click', testAdding);
 }
 
 document.addEventListener('DOMContentLoaded', loadOptions);
