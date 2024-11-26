@@ -138,7 +138,172 @@ async function handleDeleteFiltered(filterText = '') {
   await renderEntries(filterText);
 }
 
-// Modify the loadOptions function to add the download handler
+// Add these functions near the top
+async function loadConfig() {
+  const config = await chrome.storage.sync.get([
+    'archivebox_server_url', 
+    'archivebox_api_key',    // Added this
+    'match_urls', 
+    'exclude_urls'
+  ]);
+  
+  document.getElementById('archivebox_server_url').value = config.archivebox_server_url || '';
+  document.getElementById('archivebox_api_key').value = config.archivebox_api_key || '';  // Added this
+  document.getElementById('match_urls').value = config.match_urls || '';
+  document.getElementById('exclude_urls').value = config.exclude_urls || '';
+}
+
+function createAutosaveHandler() {
+  let saveTimeout;
+  const statusDiv = document.createElement('div');
+  statusDiv.style.display = 'none';
+  statusDiv.style.color = '#666';
+  statusDiv.style.fontSize = '0.9em';
+  statusDiv.style.marginTop = '5px';
+  document.querySelector('#config form').appendChild(statusDiv);
+
+  return async function handleAutosave(e) {
+    const input = e.target;
+    if (!input.checkValidity()) return;
+
+    clearTimeout(saveTimeout);
+    
+    // Show saving indicator after slight delay
+    saveTimeout = setTimeout(async () => {
+      statusDiv.style.display = 'block';
+      statusDiv.textContent = 'Saving...';
+
+      const config = {
+        archivebox_server_url: document.getElementById('archivebox_server_url').value,
+        archivebox_api_key: document.getElementById('archivebox_api_key').value,
+        match_urls: document.getElementById('match_urls').value || '',
+        exclude_urls: document.getElementById('exclude_urls').value || ''
+      };
+
+      await chrome.storage.sync.set(config);
+      
+      statusDiv.textContent = 'Saved.';
+      setTimeout(() => {
+        statusDiv.style.display = 'none';
+      }, 4000);
+    }, 500);
+  };
+}
+
+async function testServer() {
+  const serverUrl = document.getElementById('archivebox_server_url').value;
+  const statusIndicator = document.getElementById('serverStatus');
+  const statusText = document.getElementById('serverStatusText');
+  
+  try {
+    const startTime = Date.now();
+    const response = await fetch(`${serverUrl}/api/v1/docs`);
+    const endTime = Date.now();
+    
+    statusIndicator.className = 'status-indicator ' + 
+      (response.ok ? 'status-success' : 'status-error');
+    statusText.textContent = `${response.status} ${response.statusText} (${endTime - startTime}ms)`;
+  } catch (err) {
+    statusIndicator.className = 'status-indicator status-error';
+    statusText.textContent = 'Connection failed';
+  }
+}
+
+async function loginServer() {
+  // redirect the user to ${archivebox_server_url}/admin/login/ in a new tab
+  const archivebox_server_url = document.getElementById('archivebox_server_url').value;
+  window.open(`${archivebox_server_url}/admin/login/`, '_blank');
+}
+
+function testUrl() {
+  const url = document.getElementById('testUrl').value;
+  const matchPattern = document.getElementById('match_urls').value;
+  const excludePattern = document.getElementById('exclude_urls').value;
+  
+  const statusIndicator = document.getElementById('urlStatus');
+  const statusText = document.getElementById('urlStatusText');
+  
+  try {
+    const matchRegex = new RegExp(matchPattern);
+    const excludeRegex = new RegExp(excludePattern);
+    
+    const isMatched = matchRegex.test(url);
+    const isExcluded = excludeRegex.test(url);
+    
+    if (isExcluded) {
+      statusIndicator.className = 'status-indicator status-error';
+      statusText.textContent = 'URL would be excluded';
+    } else if (isMatched) {
+      statusIndicator.className = 'status-indicator status-success';
+      statusText.textContent = 'URL would be archived';
+    } else {
+      statusIndicator.className = 'status-indicator status-error';
+      statusText.textContent = 'URL would not be archived';
+    }
+  } catch (err) {
+    statusIndicator.className = 'status-indicator status-error';
+    statusText.textContent = 'Invalid regex pattern';
+  }
+}
+
+// Add new function for API key generation
+function generateApiKey() {
+  const serverUrl = document.getElementById('archivebox_server_url').value;
+  if (!serverUrl) {
+    alert('Please enter ArchiveBox Server URL first');
+    return;
+  }
+  window.open(`${serverUrl}/admin/api/apitoken/add/`, '_blank');
+}
+
+// Add new function near testServer()
+async function testApiKey() {
+  const serverUrl = document.getElementById('archivebox_server_url').value;
+  const apiKey = document.getElementById('archivebox_api_key').value;
+  const statusIndicator = document.getElementById('apiKeyStatus');
+  const statusText = document.getElementById('apiKeyStatusText');
+  
+  if (!serverUrl || !apiKey) {
+    statusIndicator.className = 'status-indicator status-error';
+    statusText.textContent = 'Server URL and API key required';
+    return;
+  }
+
+  try {
+    const startTime = Date.now();
+    const response = await fetch(
+      `${serverUrl}/api/v1/auth/check_api_token`,
+      {
+        method: 'POST', 
+        mode: 'cors',
+        credentials: 'omit',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          token: apiKey,
+        }),
+      },
+    );
+    const endTime = Date.now();
+    // response json: {
+    //   "success": false,
+    //   "user_id": null
+    // }
+    const data = await response.json();
+    const successMsg = data.success ? 'valid' : 'invalid';
+    const userMsg = data.user_id ? `user ${data.user_id}` : 'no user';
+    statusText.textContent = `API key ${successMsg} (${userMsg}) (${endTime - startTime}ms)`;
+    statusIndicator.className = 'status-indicator ' + 
+      (response.ok ? 'status-success' : 'status-error');
+  } catch (err) {
+    statusIndicator.className = 'status-indicator status-error';
+    statusText.textContent = 'Connection failed';
+  }
+}
+
+// Modify the loadOptions function to include config initialization
 async function loadOptions() {
   // Initial render
   // get search query from url
@@ -205,6 +370,83 @@ async function loadOptions() {
     const filterInput = document.getElementById('filterInput');
     await handleDeleteFiltered(filterInput.value);
   });
+
+  // Initialize config tab
+  await loadConfig();
+  
+  // Set up autosave for config inputs
+  const autosaveHandler = createAutosaveHandler();
+  ['archivebox_server_url', 'archivebox_api_key', 'match_urls', 'exclude_urls'].forEach(id => {
+    const input = document.getElementById(id);
+    input.addEventListener('input', autosaveHandler);
+  });
+
+  // Add config form handlers
+  document.getElementById('configForm').addEventListener('submit', autosaveHandler);
+  document.getElementById('loginServer').addEventListener('click', loginServer);
+  document.getElementById('testServer').addEventListener('click', testServer);
+  document.getElementById('testUrl').addEventListener('input', testUrl);
+
+  testUrl();
+  
+  // Add validation for regex inputs
+  ['match_urls', 'exclude_urls'].forEach(id => {
+    const input = document.getElementById(id);
+    input.addEventListener('input', () => {
+      try {
+        if (input.value) {
+          new RegExp(input.value);
+        }
+        input.setCustomValidity('');
+      } catch {
+        input.setCustomValidity('Invalid regex pattern');
+      }
+    });
+  });
+
+  // Add server url live validation
+  const serverUrlInput = document.getElementById('archivebox_server_url');
+  serverUrlInput.addEventListener('input', () => {
+    const value = serverUrlInput.value;
+    const isValid = /^https?:\/\//.test(value);
+    if (!isValid) {
+      serverUrlInput.setCustomValidity('Must be in the format https://hostname[:port] (just scheme + host + port, no path)');
+    } else {
+      serverUrlInput.setCustomValidity('');
+      // click the test server button
+      document.getElementById('testServer').click();
+    }
+  });
+
+  // Add API key validation
+  const apiKeyInput = document.getElementById('archivebox_api_key');
+  const apiKeyValidation = document.getElementById('apiKeyStatusText');
+  
+  apiKeyInput.addEventListener('input', () => {
+    const value = apiKeyInput.value;
+    const isValid = /^[a-f0-9]{32}$/.test(value);
+    
+    if (!value) {
+      apiKeyInput.setCustomValidity('');
+      apiKeyValidation.textContent = '';
+    } else if (!isValid) {
+      apiKeyInput.setCustomValidity('Must be a 32 character lowercase hex string');
+      apiKeyValidation.textContent = 'Invalid format';
+      apiKeyValidation.style.color = '#dc3545';
+    } else {
+      apiKeyInput.setCustomValidity('');
+      apiKeyValidation.textContent = 'Valid format';
+      apiKeyValidation.style.color = '#28a745';
+      // click the test key button
+      document.getElementById('testApiKey').click();
+    }
+  });
+
+  // Add generate button handler
+  document.getElementById('generateApiKey').addEventListener('click', generateApiKey);
+
+  // Add to loadOptions() near the other event listeners
+  document.getElementById('testApiKey').addEventListener('click', testApiKey);
 }
 
 document.addEventListener('DOMContentLoaded', loadOptions);
