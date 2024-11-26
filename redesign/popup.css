@@ -1,0 +1,168 @@
+
+.archive-box-popup {
+  /* contain: none; */
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  border-radius: 14px;
+  min-width: 300px;
+  max-width: 550px;
+  color: white;
+  background: #bf7070;
+  padding-left: 13px;
+  padding-right: 13px;
+  padding-bottom: 10px;
+  padding-top: 26px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  z-index: 2147483647;
+  font-family: system-ui, -apple-system, sans-serif;
+  /* fade out animation over 10sec, unless mouseover is triggered, no repeat just stay at end value */
+  /* like: animation but reset the fade-out timer each time a user interacts with the popup: fadeOut 15s ease-in-out forwards; */
+  animation: fadeOut 8s ease-in-out forwards;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  transition: display 0.3s ease-in-out;
+  animation: slideDown 0.3s ease-in-out forwards;
+}
+.archive-box-popup:hover {
+  animation: slideDown -0.3s ease-in-out forwards;
+  opacity: 1;
+
+}
+
+.archive-box-popup small {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin-top: 5px;
+  animation: fadeOut 2.5s ease-in-out forwards;
+  color: #fefefe;
+  overflow: hidden;
+  font-size: 11px;
+  opacity: 0.2;
+}
+
+.archive-box-popup img {
+  width: 15%;
+  max-width: 40px;
+  display: inline-block;
+  vertical-align: top;
+}
+
+.archive-box-popup a {
+  font-size: 24px;
+  line-height: 1.4;
+  display: block;
+  width: 20px;
+  float: right;
+  position: absolute;
+  z-index: 1000;
+  top: 2px;
+  right: 16px;
+  transition: text-shadow 0.1s ease-in-out;
+}
+.archive-box-popup a:hover {
+  text-shadow: 0 0 10px #a1a1a1;
+}
+
+
+
+
+.archive-box-popup .metadata {
+  display: inline-block;
+  max-width: 80%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.archive-box-popup input {
+  border: 3px solid #bf7070;
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  z-index: 999;
+  margin: 0px;
+  padding: 5px;
+  padding-left: 13px;
+  border-radius: 14px;
+  min-width: 100px;
+  width: 100%;
+  background-color: #fefefe;
+  color: #1a1a1a;
+  vertical-align: top;
+  display: inline-block;
+  line-height: 1.75 !important;
+}
+
+@keyframes fadeOut {
+  0% { opacity: 1; }
+  80% { opacity: 0.8;}
+  100% { opacity: 0; display: none; }
+}
+
+@keyframes slideDown {
+  0% { top: -500px; }
+  100% { top: 20px }
+}
+
+.ARCHIVEBOX__tag-suggestions {
+  margin-top: 20px;
+  display: inline;
+  min-height: 0;
+  background-color: rgba(0, 0, 0, 0);
+  border: 0;
+  box-shadow: 0 0 0 0;
+  /* border-top: 1px solid #eee; */
+}
+
+.current-tags {
+  margin-top: 20px;
+  /* border-top: 1px solid #eee; */
+  display: inline;
+}
+
+.ARCHIVEBOX__tag-badge {
+  display: inline-block;
+  background: #e9ecef;
+  padding: 3px 8px;
+  border-radius: 3px;
+  padding-left: 18px;
+  margin: 2px;
+  font-size: 15px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ARCHIVEBOX__tag-badge.suggestion {
+  background: #007bff;
+  color: white;
+  opacity: 0.2;
+}
+.ARCHIVEBOX__tag-badge.suggestion:hover {
+  opacity: 0.8;
+}
+.ARCHIVEBOX__tag-badge.suggestion:active {
+  opacity: 1;
+}
+
+.ARCHIVEBOX__tag-badge.suggestion:after {
+  content: ' +';
+}
+
+.ARCHIVEBOX__tag-badge.current {
+  background: grey;
+  color: #ddd;
+  position: relative;
+  padding-right: 20px;  /* Make room for the X */
+}
+
+.ARCHIVEBOX__tag-badge.current:hover::after {
+  content: '×';
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-weight: bold;
+  cursor: pointer;
+}
