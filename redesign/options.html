@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ArchiveBox Collector - Options</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .list-group-item code {
+      background-color: #fdfaff;
+      padding: 3px 10px;
+      font-size: 13px;
+      border-radius: 4px;
+      text-overflow: ellipsis;
+      width: 96%;
+      white-space: nowrap;
+      display: inline-block;
+      overflow: hidden;
+      padding-left: 26px;
+      border-radius: 10px 4px 4px 10px;
+      margin-left: -26px;
+      z-index: 200;
+      position: relative;
+    }
+    .list-group-item img.favicon {
+      vertical-align: 1px;
+      margin-right: 4px; 
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      position: relative;
+      z-index: 400;
+    }
+    .container-full {
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+    }
+    input[type=search]::-webkit-search-cancel-button {
+        -webkit-appearance: searchfield-cancel-button;
+    }
+    .col-lg-7 {
+      padding-bottom: 0px;
+      margin-bottom: 0px;
+    }
+  </style>
+</head>
+<body class="container-full py-4">
+  
+  <div class="row mt-4">
+    <div class="col-md-10">
+      <h2>ArchiveBox Saved URLs</h2>
+      <div class="d-flex gap-2 mb-3">
+        <input type="search" class="form-control" id="filterInput" placeholder="Filter entries...">
+        <button class="btn btn-outline-secondary" id="downloadCsv">
+          CSV
+        </button>
+        <button class="btn btn-outline-secondary" id="downloadJson">
+          JSON
+        </button>
+        <button class="btn btn-outline-danger" id="deleteFiltered">
+          DELETE
+        </button>
+      </div>
+      <div id="entriesList" class="list-group"></div>
+    </div>
+    
+    <div class="col-md-2">
+      <h2>All Tags</h2>
+      <div id="tagsList" class="list-group"></div>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
