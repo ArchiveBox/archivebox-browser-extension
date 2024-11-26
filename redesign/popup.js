@@ -1,6 +1,6 @@
 // popup.js
-window.popupElement = null;  // Global reference to popup element
-window.hideTimer = null;
+window.popup_element = null;  // Global reference to popup element
+window.hide_timer = null;
 
 async function sendToArchiveBox(url, tags) {
   const { archivebox_server_url, archivebox_api_key } = await chrome.storage.sync.get([
@@ -28,7 +28,6 @@ async function sendToArchiveBox(url, tags) {
       }),
     });
 
-    // const data = await response.json();
     return {
       ok: response.ok,
       status: `${response.status} ${response.statusText}`
@@ -40,10 +39,10 @@ async function sendToArchiveBox(url, tags) {
 
 window.getCurrentEntry = async function() {
   const { entries = [] } = await chrome.storage.sync.get('entries');
-  let currentEntry = entries.find(entry => entry.url === window.location.href);
+  let current_entry = entries.find(entry => entry.url === window.location.href);
   
-  if (!currentEntry) {
-    currentEntry = {
+  if (!current_entry) {
+    current_entry = {
       id: crypto.randomUUID(),
       url: String(window.location.href),
       timestamp: new Date().toISOString(),
@@ -51,60 +50,60 @@ window.getCurrentEntry = async function() {
       title: document.title,
       notes: '',
     };
-    entries.push(currentEntry);
+    entries.push(current_entry);
     await chrome.storage.sync.set({ entries });  // Save immediately
   }
-  currentEntry.id = currentEntry.id || crypto.randomUUID();
-  currentEntry.url = currentEntry.url || window.location.href;
-  currentEntry.timestamp = currentEntry.timestamp || new Date().toISOString();
-  currentEntry.tags = currentEntry.tags || [];
-  currentEntry.title = currentEntry.title || document.title;
-  currentEntry.notes = currentEntry.notes || '';
+  current_entry.id = current_entry.id || crypto.randomUUID();
+  current_entry.url = current_entry.url || window.location.href;
+  current_entry.timestamp = current_entry.timestamp || new Date().toISOString();
+  current_entry.tags = current_entry.tags || [];
+  current_entry.title = current_entry.title || document.title;
+  current_entry.notes = current_entry.notes || '';
 
-  console.log('i Loaded current ArchiveBox snapshot', currentEntry);
-  return { currentEntry, entries };  // Return both for atomic updates
+  console.log('i Loaded current ArchiveBox snapshot', current_entry);
+  return { current_entry, entries };  // Return both for atomic updates
 }
 
 window.getSuggestedTags = async function() {
-  const { currentEntry, entries } = await getCurrentEntry();
+  const { current_entry, entries } = await getCurrentEntry();
   // Get all unique tags sorted by recency, excluding current entry's tags
   return [...new Set(
     entries
-      .filter(entry => entry.url !== currentEntry.url)  // Better way to exclude current
+      .filter(entry => entry.url !== current_entry.url)  // Better way to exclude current
       .reverse()
       .flatMap(entry => entry.tags)
   )]
-  .filter(tag => !currentEntry.tags.includes(tag))
+  .filter(tag => !current_entry.tags.includes(tag))
   .slice(0, 3);
 }
 
 window.updateCurrentTags = async function() {
-  if (!popupElement) return;
-  const currentTagsDiv = popupElement.querySelector('.ARCHIVEBOX__current-tags');
-  const statusDiv = popupElement.querySelector('small');
-  const { currentEntry } = await getCurrentEntry();
+  if (!popup_element) return;
+  const current_tags_div = popup_element.querySelector('.ARCHIVEBOX__current-tags');
+  const status_div = popup_element.querySelector('small');
+  const { current_entry } = await getCurrentEntry();
 
   // Update UI first
-  currentTagsDiv.innerHTML = currentEntry.tags.length 
-    ? `${currentEntry.tags
+  current_tags_div.innerHTML = current_entry.tags.length 
+    ? `${current_entry.tags
         .map(tag => `<span class="ARCHIVEBOX__tag-badge current" data-tag="${tag}">${tag}</span>`)
         .join(' ')}`
     : '';
 
   // Send to server
-  const result = await sendToArchiveBox(currentEntry.url, currentEntry.tags);
-  statusDiv.innerHTML = `
+  const result = await sendToArchiveBox(current_entry.url, current_entry.tags);
+  status_div.innerHTML = `
     <span class="status-indicator ${result.ok ? 'success' : 'error'}"></span>
     ${result.status}
   `;
 
   // Add click handlers for removing tags
-  currentTagsDiv.querySelectorAll('.tag-badge.current').forEach(badge => {
+  current_tags_div.querySelectorAll('.tag-badge.current').forEach(badge => {
     badge.addEventListener('click', async (e) => {
       if (e.target.classList.contains('current')) {
-        const { currentEntry, entries } = await getCurrentEntry();
-        const tagToRemove = e.target.dataset.tag;
-        currentEntry.tags = currentEntry.tags.filter(tag => tag !== tagToRemove);
+        const { current_entry, entries } = await getCurrentEntry();
+        const tag_to_remove = e.target.dataset.tag;
+        current_entry.tags = current_entry.tags.filter(tag => tag !== tag_to_remove);
         await chrome.storage.sync.set({ entries });
         await updateCurrentTags();
         await updateSuggestions();
@@ -114,24 +113,24 @@ window.updateCurrentTags = async function() {
 }
 
 window.updateSuggestions = async function() {
-  if (!popupElement) return;
-  const suggestionsDiv = popupElement.querySelector('.ARCHIVEBOX__tag-suggestions');
-  const suggestedTags = await getSuggestedTags();
-  suggestionsDiv.innerHTML = suggestedTags.length 
-    ? `${suggestedTags
+  if (!popup_element) return;
+  const suggestions_div = popup_element.querySelector('.ARCHIVEBOX__tag-suggestions');
+  const suggested_tags = await getSuggestedTags();
+  suggestions_div.innerHTML = suggested_tags.length 
+    ? `${suggested_tags
         .map(tag => `<span class="ARCHIVEBOX__tag-badge suggestion">${tag}</span>`)
         .join(' ')}`
     : '';
 }
 
 window.createPopup = async function() {
-  const { currentEntry } = await getCurrentEntry();
+  const { current_entry } = await getCurrentEntry();
 
   // Create popup container
   document.querySelector('.archive-box-popup')?.remove();
-  popupElement = document.createElement('div');
-  popupElement.className = 'archive-box-popup';
-  popupElement.innerHTML = `
+  popup_element = document.createElement('div');
+  popup_element.className = 'archive-box-popup';
+  popup_element.innerHTML = `
     <a href="#" class="options-link">🏛️</a>
     <input type="text" placeholder="Add tags + press ⏎   |   ⎋ to close">
     <br/>
@@ -143,78 +142,76 @@ window.createPopup = async function() {
     </small>
   `;
   
-  document.body.appendChild(popupElement);
+  document.body.appendChild(popup_element);
   
   // Add click handler for options link
-  popupElement.querySelector('.options-link').addEventListener('click', (e) => {
+  popup_element.querySelector('.options-link').addEventListener('click', (e) => {
     console.log('i Clicked ArchiveBox popup options link');
     e.preventDefault();
-    chrome.runtime.sendMessage({ action: 'openOptionsPage', id: currentEntry.id });
+    chrome.runtime.sendMessage({ action: 'openOptionsPage', id: current_entry.id });
   });
   
-  const input = popupElement.querySelector('input');
-  const suggestionsDiv = popupElement.querySelector('.ARCHIVEBOX__tag-suggestions');
-  const currentTagsDiv = popupElement.querySelector('.ARCHIVEBOX__current-tags');
+  const input = popup_element.querySelector('input');
+  const suggestions_div = popup_element.querySelector('.ARCHIVEBOX__tag-suggestions');
+  const current_tags_div = popup_element.querySelector('.ARCHIVEBOX__current-tags');
   
   // Initial display of current tags and suggestions
   await updateCurrentTags();
   await updateSuggestions();
   
   // Add click handlers for suggestion badges
-  suggestionsDiv.addEventListener('click', async (e) => {
+  suggestions_div.addEventListener('click', async (e) => {
     if (e.target.classList.contains('suggestion')) {
-      const { currentEntry, entries } = await getCurrentEntry();
+      const { current_entry, entries } = await getCurrentEntry();
       const tag = e.target.textContent.replace(' +', '');
-      if (!currentEntry.tags.includes(tag)) {
-        currentEntry.tags.push(tag);
+      if (!current_entry.tags.includes(tag)) {
+        current_entry.tags.push(tag);
         await chrome.storage.sync.set({ entries });
       }
     }
     await updateCurrentTags();
     await updateSuggestions();
   });
-  currentTagsDiv.addEventListener('click', async (e) => {
-    // if existing tag is clicked, remove it
+  current_tags_div.addEventListener('click', async (e) => {
     if (e.target.classList.contains('current')) {
       const tag = e.target.dataset.tag;
       console.log('Removing tag', tag);
-      const { currentEntry, entries } = await getCurrentEntry();
-      currentEntry.tags = currentEntry.tags.filter(t => t !== tag);
+      const { current_entry, entries } = await getCurrentEntry();
+      current_entry.tags = current_entry.tags.filter(t => t !== tag);
       await chrome.storage.sync.set({ entries });
       await updateCurrentTags();
       await updateSuggestions();
     }
   });
 
-  
   // Handle input events
   input.addEventListener('keypress', async (e) => {
     if (e.key === 'Enter') {
-      const { currentEntry, entries } = await getCurrentEntry();
-      const newTags = input.value.split(',')
+      const { current_entry, entries } = await getCurrentEntry();
+      const new_tags = input.value.split(',')
         .map(tag => tag.trim())
-        .filter(tag => tag && !currentEntry.tags.includes(tag));
+        .filter(tag => tag && !current_entry.tags.includes(tag));
       
-      console.log('Adding newTags', newTags);
-      if (newTags.length > 0) {
-        currentEntry.tags.push(...newTags);
+      console.log('Adding new_tags', new_tags);
+      if (new_tags.length > 0) {
+        current_entry.tags.push(...new_tags);
         await chrome.storage.sync.set({ entries });
         input.value = '';
         console.log('√ Entries updated', entries);
         await updateSuggestions();
         await updateCurrentTags();
       } else if (input.value.trim() === '') {
-        popupElement.remove();
-        popupElement = null;
+        popup_element.remove();
+        popup_element = null;
       }
     }
   });
 
   // Add escape key handler
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && popupElement) {
-      popupElement.remove();
-      popupElement = null;
+    if (e.key === 'Escape' && popup_element) {
+      popup_element.remove();
+      popup_element = null;
     }
   });
   
