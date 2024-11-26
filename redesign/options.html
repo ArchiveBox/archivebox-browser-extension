@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <title>ArchiveBox Collector - Options</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <meta charset="UTF-8">
+  <link href="bootstrap.min.css" rel="stylesheet">
   <style>
     .list-group-item code {
       background-color: #fdfaff;
@@ -46,34 +47,164 @@
       padding-bottom: 0px;
       margin-bottom: 0px;
     }
+    .nav-tabs {
+      margin-bottom: 20px;
+    }
+
+    .form-text {
+      font-size: 0.85em;
+      color: #666;
+    }
+
+    .status-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-left: 8px;
+    }
+
+    .status-success {
+      background: #28a745;
+    }
+
+    .status-error {
+      background: #dc3545;
+    }
+
+    .test-section {
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid #dee2e6;
+    }
   </style>
 </head>
 <body class="container-full py-4">
-  
-  <div class="row mt-4">
-    <div class="col-md-10">
-      <h2>ArchiveBox Saved URLs</h2>
-      <div class="d-flex gap-2 mb-3">
-        <input type="search" class="form-control" id="filterInput" placeholder="Filter entries...">
-        <button class="btn btn-outline-secondary" id="downloadCsv">
-          CSV
-        </button>
-        <button class="btn btn-outline-secondary" id="downloadJson">
-          JSON
-        </button>
-        <button class="btn btn-outline-danger" id="deleteFiltered">
-          DELETE
-        </button>
+  <ul class="nav nav-tabs" id="optionsTabs" role="tablist">
+    <li class="nav-item">
+      <a class="nav-link active" id="urls-tab" data-bs-toggle="tab" href="#urls" role="tab">URLs</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" id="config-tab" data-bs-toggle="tab" href="#config" role="tab">Config</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" id="personas-tab" data-bs-toggle="tab" href="#personas" role="tab">Personas</a>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+    <!-- URLs Tab (existing content) -->
+    <div class="tab-pane fade show active" id="urls" role="tabpanel">
+      <div class="row mt-4">
+        <div class="col-md-10">
+          <h2>ArchiveBox Saved URLs</h2>
+          <div class="d-flex gap-2 mb-3">
+            <input type="search" class="form-control" id="filterInput" placeholder="Filter entries...">
+            <button class="btn btn-outline-secondary" id="downloadCsv">
+              CSV
+            </button>
+            <button class="btn btn-outline-secondary" id="downloadJson">
+              JSON
+            </button>
+            <button class="btn btn-outline-danger" id="deleteFiltered">
+              DELETE
+            </button>
+          </div>
+          <div id="entriesList" class="list-group"></div>
+        </div>
+        
+        <div class="col-md-2">
+          <h2>All Tags</h2>
+          <div id="tagsList" class="list-group"></div>
+        </div>
       </div>
-      <div id="entriesList" class="list-group"></div>
     </div>
-    
-    <div class="col-md-2">
-      <h2>All Tags</h2>
-      <div id="tagsList" class="list-group"></div>
+
+    <!-- Config Tab -->
+    <div class="tab-pane fade" id="config" role="tabpanel">
+      <div class="row mt-4">
+        <div class="col-md-8">
+          <form id="configForm" class="needs-validation" novalidate>
+            <div class="mb-3">
+              <label for="archivebox_server_url" class="form-label"><b>💾 ArchiveBox Server URL *</b></label>
+              <div class="input-group">
+                <input type="url" class="form-control" id="archivebox_server_url" 
+                       placeholder="https://archivebox.example.com">
+                <button type="button" id="loginServer" class="btn btn-outline-secondary">
+                  ⚙️ ADMIN
+                </button>
+                <button type="button" id="testServer" class="btn btn-outline-secondary">
+                  TEST SERVER
+                  <span class="status-indicator" id="serverStatus"></span>
+                </button>
+              </div>
+              <div class="form-text">
+                The base URL of your self-hosted archivebox server, e.g. http://localhost:8000
+                <span id="serverStatusText" class="ms-2"></span>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label for="archivebox_api_key" class="form-label"><b>🔐 ArchiveBox API Key</b></label>
+              <div class="input-group">
+                <input type="text" class="form-control" id="archivebox_api_key" 
+                       pattern="^[a-f0-9]{32}$"
+                       placeholder="11b90... etc some 32 char key ...c">
+                <button type="button" id="generateApiKey" class="btn btn-outline-secondary">
+                  ➕ GENERATE
+                </button>
+                <button type="button" id="testApiKey" class="btn btn-outline-secondary">
+                  TEST API KEY
+                  <span class="status-indicator" id="apiKeyStatus"></span>
+                </button>
+              </div>
+              <div class="form-text">
+                ArchiveBox API key generated on your server (32 character lowercase hex string)
+                <span id="apiKeyStatusText" class="ms-2"></span>
+              </div>
+            </div>
+            <hr/>
+            <div class="mb-3">
+              <label for="match_urls" class="form-label">🔍 Match URL Patterns</label>
+              <input type="text" class="form-control" id="match_urls" 
+                     placeholder=".:\/\/(*\.youtube\.com)|(wikipedia.org)|(.*.?reddit.com)">
+              <div class="form-text">Regex of URLs to archive automatically whenever they are visited</div>
+            </div>
+
+            <div class="mb-3">
+              <label for="exclude_urls" class="form-label">🚫 Exclude URL Patterns</label>
+              <input type="text" class="form-control" id="exclude_urls" 
+                     placeholder=":\/\/(mail.google.com)" value=":\/\/(mail.google.com)">
+              <div class="form-text">Regex of URLs to never archive automatically</div>
+            </div>
+
+            <div class="mb-3" style="background-color: #dfebfd; padding: 5px; border-radius: 6px;">
+              <label for="testUrl" class="form-label">🔍 Test URL Against Patterns</label>
+              <input type="url" class="form-control" id="testUrl" 
+                     value="https://example.com"
+                     placeholder="Enter a URL to test against patterns">
+              <div class="form-text">
+                <span class="status-indicator mt-2" id="urlStatus"></span>
+                <span id="urlStatusText" class="ms-2"></span>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Personas Tab -->
+    <div class="tab-pane fade" id="personas" role="tabpanel">
+      <div class="row mt-4">
+        <div class="col">
+          <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+          <p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+        </div>
+      </div>
     </div>
   </div>
 
+  <script src="bootstrap.bundle.min.js"></script>
   <script src="options.js"></script>
 </body>
 </html>
