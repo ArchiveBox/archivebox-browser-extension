@@ -1,10 +1,10 @@
 // background.js
 
 chrome.runtime.onMessage.addListener(async (message) => {
-    const optionsUrl = chrome.runtime.getURL('options.html') + `?search=${message.id}`;
-    console.log('i ArchiveBox Collector showing options.html', optionsUrl);
+    const options_url = chrome.runtime.getURL('options.html') + `?search=${message.id}`;
+    console.log('i ArchiveBox Collector showing options.html', options_url);
     if (message.action === 'openOptionsPage') {
-      await chrome.tabs.create({ url: optionsUrl });
+      await chrome.tabs.create({ url: options_url });
     }
   });
 
@@ -33,5 +33,4 @@ chrome.action.onClicked.addListener(async (tab) => {
     target: { tabId: tab.id },
     files: ['popup.js']
   });
-
 });
