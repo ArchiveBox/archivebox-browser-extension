@@ -133,7 +133,7 @@ window.createPopup = async function() {
   popupElement.className = 'archive-box-popup';
   popupElement.innerHTML = `
     <a href="#" class="options-link">🏛️</a>
-    <input type="text" placeholder="Add tags + press ⏎  |  ⎋ to close">
+    <input type="text" placeholder="Add tags + press ⏎   |   ⎋ to close">
     <br/>
     <div class="ARCHIVEBOX__current-tags"></div>
     <div class="ARCHIVEBOX__tag-suggestions"></div><br/>

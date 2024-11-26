@@ -154,24 +154,25 @@ async function loadConfig() {
 }
 
 function createAutosaveHandler() {
-  let saveTimeout;
-  const statusDiv = document.createElement('div');
-  statusDiv.style.display = 'none';
-  statusDiv.style.color = '#666';
-  statusDiv.style.fontSize = '0.9em';
-  statusDiv.style.marginTop = '5px';
-  document.querySelector('#config form').appendChild(statusDiv);
+  let save_timeout;
+  const status_div = document.createElement('div');
+  status_div.style.display = 'none';
+  status_div.style.color = '#666';
+  status_div.style.fontSize = '0.9em';
+  status_div.style.marginTop = '5px';
+  document.querySelector('#config form').appendChild(status_div);
 
   return async function handleAutosave(e) {
     const input = e.target;
+    testUrl();
     if (!input.checkValidity()) return;
 
-    clearTimeout(saveTimeout);
+    clearTimeout(save_timeout);
     
     // Show saving indicator after slight delay
-    saveTimeout = setTimeout(async () => {
-      statusDiv.style.display = 'block';
-      statusDiv.textContent = 'Saving...';
+    save_timeout = setTimeout(async () => {
+      status_div.style.display = 'block';
+      status_div.textContent = 'Saving...';
 
       const config = {
         archivebox_server_url: document.getElementById('archivebox_server_url').value,
@@ -182,9 +183,9 @@ function createAutosaveHandler() {
 
       await chrome.storage.sync.set(config);
       
-      statusDiv.textContent = 'Saved.';
+      status_div.textContent = 'Saved.';
       setTimeout(() => {
-        statusDiv.style.display = 'none';
+        status_div.style.display = 'none';
       }, 4000);
     }, 500);
   };
@@ -202,10 +203,12 @@ async function testServer() {
     
     statusIndicator.className = 'status-indicator ' + 
       (response.ok ? 'status-success' : 'status-error');
-    statusText.textContent = `${response.status} ${response.statusText} (${endTime - startTime}ms)`;
+    const icon = response.ok ? '✅' : '❌';
+    statusText.textContent = ` ${icon} ${response.status} ${response.statusText} (${endTime - startTime}ms)`;
+    statusText.style.color = '#28a745';
   } catch (err) {
     statusIndicator.className = 'status-indicator status-error';
-    statusText.textContent = 'Connection failed';
+    statusText.textContent = '❌ Connection failed';
   }
 }
 
@@ -232,17 +235,17 @@ function testUrl() {
     
     if (isExcluded) {
       statusIndicator.className = 'status-indicator status-error';
-      statusText.textContent = 'URL would be excluded';
+      statusText.textContent = '⛔️ URL would not be archived automatically because it matches an exclude pattern.';
     } else if (isMatched) {
       statusIndicator.className = 'status-indicator status-success';
-      statusText.textContent = 'URL would be allowed to be archived';
+      statusText.textContent = '✅ If visited in a tab, this URL would be archived automatically.';
     } else {
       statusIndicator.className = 'status-indicator status-error';
-      statusText.textContent = 'URL would not be archived';
+      statusText.textContent = '🟠 URL would not be archived automatically, but can by archived manually.';
     }
   } catch (err) {
     statusIndicator.className = 'status-indicator status-error';
-    statusText.textContent = 'Invalid regex pattern';
+    statusText.textContent = `❌ Error ${err}`;
   }
 }
 
@@ -292,9 +295,17 @@ async function testApiKey() {
     //   "user_id": null
     // }
     const data = await response.json();
-    const successMsg = data.user_id ? 'valid' : 'invalid';
-    const userMsg = data.user_id ? `user ${data.user_id}` : 'no user';
-    statusText.textContent = `API key ${successMsg} (${userMsg}) (${endTime - startTime}ms)`;
+    // const successMsg = data.user_id ? 'valid' : 'invalid';
+    // const userMsg = data.user_id ? `user ${data.user_id}` : 'no user';
+    // const icon = data.user_id ? '✅' : '❌';
+    // statusText.textContent = `${icon} API key ${successMsg} (${userMsg}) (${endTime - startTime}ms)`;
+    if (data?.user_id) {
+      statusText.textContent = `✅ API key valid (user ${data.user_id}) (${endTime - startTime}ms)`;
+      statusText.style.color = '#28a745';
+    } else {
+      statusText.textContent = `❌ API key invalid (auth failed) (${endTime - startTime}ms)`;
+      statusText.style.color = '#dc3545';
+    }
     statusIndicator.className = 'status-indicator ' + 
       (data?.user_id ? 'status-success' : 'status-error');
     if (!data?.user_id) {
@@ -302,7 +313,7 @@ async function testApiKey() {
     }
   } catch (err) {
     statusIndicator.className = 'status-indicator status-error';
-    statusText.textContent = 'Connection failed';
+    statusText.textContent = '❌ API Connection failed';
   }
 }
 
@@ -429,13 +440,13 @@ async function testAdding() {
     const endTime = Date.now();
     const data = await response.json();
     if (!data.success) {
-      throw new Error(`Request failed ${response.status} ${response.statusText}`);
+      throw new Error(`❌ Adding failed: /api/v1/cli/add POST got ${response.status} ${response.statusText} (${endTime - startTime}ms)`);
     }
     statusIndicator.className = 'status-indicator status-success';
-    statusText.textContent = `Request completed (${endTime - startTime}ms)`;
+    statusText.textContent = ` ✅ Adding succeeded (${endTime - startTime}ms) <a href="${archivebox_server_url}/archive/${testUrl}" target="_blank">${testUrl}</a>`;
   } catch (err) {
     statusIndicator.className = 'status-indicator status-error';
-    statusText.textContent = `Adding failed: ${err}`;
+    statusText.textContent = ` ${err}`;
   }
 }
 
@@ -517,13 +528,20 @@ async function loadOptions() {
     input.addEventListener('input', autosaveHandler);
   });
 
+  const filteredEntries = filterEntries(entries, window.location.search.split('=').at(-1));
+  const url = document.getElementById('testUrl').value || filteredEntries.at(-1)?.url || '';
+  document.getElementById('testUrl').value = url;
+
   // Add config form handlers
   document.getElementById('configForm').addEventListener('submit', autosaveHandler);
   document.getElementById('loginServer').addEventListener('click', loginServer);
   document.getElementById('testServer').addEventListener('click', testServer);
   document.getElementById('testUrl').addEventListener('input', testUrl);
 
+  testServer();
+  testApiKey();
   testUrl();
+  // testAdding();
   
   // Add validation for regex inputs
   ['match_urls', 'exclude_urls'].forEach(id => {
@@ -567,11 +585,11 @@ async function loadOptions() {
       apiKeyValidation.textContent = '';
     } else if (!isValid) {
       apiKeyInput.setCustomValidity('Must be a 32 character lowercase hex string');
-      apiKeyValidation.textContent = 'Invalid format';
+      apiKeyValidation.textContent = '❌ Invalid API token (expecting 32 char hex secret)';
       apiKeyValidation.style.color = '#dc3545';
     } else {
       apiKeyInput.setCustomValidity('');
-      apiKeyValidation.textContent = 'Valid format';
+      apiKeyValidation.textContent = '✅ Valid API token';
       apiKeyValidation.style.color = '#28a745';
       // click the test key button
       document.getElementById('testApiKey').click();
