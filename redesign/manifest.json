@@ -23,6 +23,11 @@
       "128": "icons/128.png"
     }
   },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content-script.js"],
+    "run_at": "document_idle"
+  }],
   "options_page": "options.html",
   "background": {
     "service_worker": "background.js"

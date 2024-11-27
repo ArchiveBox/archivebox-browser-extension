@@ -147,7 +147,7 @@ window.createPopup = async function() {
     right: '20px',
     zIndex: '2147483647',
     background: 'transparent',
-    borderRadius: '21px',
+    borderRadius: '6px',
     border: '0px',
     margin: '0px',
     padding: '0px',
@@ -182,17 +182,19 @@ window.createPopup = async function() {
       margin: 0;
       padding: 0;
       font-family: system-ui, -apple-system, sans-serif;
-      font-size: 14px;
+      font-size: 16px;
       width: 100%;
       height: auto;
       overflow: visible;
     }
     
     .archive-box-popup {
+      border-radius: 13px;
       min-height: 90px;
       background: #bf7070;
       margin: 0px;
       padding: 6px;
+      padding-top: 8px;
       color: white;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
       font-family: system-ui, -apple-system, sans-serif;
@@ -224,7 +226,15 @@ window.createPopup = async function() {
     }
     
     .archive-box-popup .options-link {
+      border: 1px solid #00000026;
+      border-right: 0px;
+      margin-right: -9px;
+      margin-top: -1px;
+      border-radius: 6px 0px 0px 6px;
+      padding-right: 7px;
+      padding-left: 3px;
       text-decoration: none;
+      text-align: center;
       font-size: 24px;
       line-height: 1.4;
       display: inline-block;
@@ -244,12 +254,12 @@ window.createPopup = async function() {
     }
     
     .archive-box-popup input {
-      width: calc(100% - 40px);
+      width: calc(100% - 42px);
       border: 0px;
       margin: 0px;
       padding: 5px;
       padding-left: 13px;
-      border-radius: 14px;
+      border-radius: 6px;
       min-width: 100px;
       background-color: #fefefe;
       color: #1a1a1a;
@@ -277,6 +287,9 @@ window.createPopup = async function() {
       background-color: rgba(0, 0, 0, 0);
       border: 0;
       box-shadow: 0 0 0 0;
+    }
+    .ARCHIVEBOX__current-tags {
+      display: inline;
     }
     
     .current-tags {
@@ -313,7 +326,7 @@ window.createPopup = async function() {
     }
     
     .ARCHIVEBOX__tag-badge.current {
-      background: grey;
+      background: #007bff;
       color: #ddd;
       position: relative;
       padding-right: 20px;
@@ -359,7 +372,7 @@ window.createPopup = async function() {
     .ARCHIVEBOX__autocomplete-dropdown {
       background: white;
       border: 1px solid #ddd;
-      border-radius: 0 0 14px 14px;
+      border-radius: 0 0 6px 6px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       max-height: 200px;
       overflow-y: auto;
@@ -385,8 +398,7 @@ window.createPopup = async function() {
   popup.innerHTML = `
     <a href="#" class="options-link" title="Open in ArchiveBox">🏛️</a> <input type="search" placeholder="Add tags + press ⏎   |   ⎋ to close">
     <br/>
-    <div class="ARCHIVEBOX__tag-suggestions"></div><br/>
-    <div class="ARCHIVEBOX__current-tags"></div>
+    <div class="ARCHIVEBOX__current-tags"></div><div class="ARCHIVEBOX__tag-suggestions"></div><br/>
     <small>
       <span class="status-indicator"></span>
       Saved
