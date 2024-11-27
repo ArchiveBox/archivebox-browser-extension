@@ -247,8 +247,11 @@
 
           <!-- Persona List -->
           <div class="card mb-4">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
               <h5 class="mb-0">Managed Personas</h5>
+              <button class="btn btn-sm btn-outline-secondary" id="detectCurrentSettings">
+                Detect Current Settings
+              </button>
             </div>
             <div class="card-body">
               <div class="table-responsive">
@@ -258,6 +261,7 @@
                       <th>Name</th>
                       <th>Domains</th>
                       <th>Last Used</th>
+                      <th style="width: 50%;">Settings</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
