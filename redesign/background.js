@@ -23,12 +23,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   entries.push(entry);
   await chrome.storage.sync.set({ entries });
   
-  // Inject the tag input popup
-  await chrome.scripting.insertCSS({
-    target: { tabId: tab.id },
-    files: ['popup.css']
-  });
-  
+  // Inject scripts - CSS now handled in popup.js
   await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     files: ['popup.js']
