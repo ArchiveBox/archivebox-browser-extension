@@ -226,9 +226,94 @@
     <!-- Personas Tab -->
     <div class="tab-pane fade" id="personas" role="tabpanel">
       <div class="row mt-4">
-        <div class="col">
-          <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
-          <p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+        <div class="col-md-12">
+          <!-- Active Persona Selection -->
+          <div class="card mb-4">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="d-flex align-items-center">
+                  <h5 class="mb-0 me-3">Active Persona:</h5>
+                  <select class="form-select" id="activePersona" style="width: auto;">
+                    <option value="">Select a persona...</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary" id="newPersona">
+                  Create New Persona
+                </button>
+              </div>
+              <div id="personaStats" class="text-muted small"></div>
+            </div>
+          </div>
+
+          <!-- Persona List -->
+          <div class="card mb-4">
+            <div class="card-header">
+              <h5 class="mb-0">Managed Personas</h5>
+            </div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="table" id="personaTable">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Domains</th>
+                      <th>Last Used</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cookie Import Section -->
+          <div class="card">
+            <div class="card-header">
+              <h5 class="mb-0">Import Browser Cookies</h5>
+            </div>
+            <div class="card-body">
+              <div class="alert alert-info">
+                Import cookies from domains you're currently logged into to the active persona.
+              </div>
+
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="input-group" style="max-width: 400px;">
+                  <span class="input-group-text">Filter</span>
+                  <input type="search" class="form-control" id="cookieFilter" placeholder="Filter domains...">
+                </div>
+                <div>
+                  <button class="btn btn-outline-secondary" id="selectAllCookies">Select All</button>
+                  <button class="btn btn-outline-secondary" id="deselectAllCookies">Deselect All</button>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table" id="cookieTable">
+                  <thead>
+                    <tr>
+                      <th style="width: 40px;"></th>
+                      <th>Domain</th>
+                      <th style="width: 100px;">Cookies</th>
+                      <th>Preview</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+
+              <div class="d-flex justify-content-between align-items-center mt-3">
+                <div>
+                  <span class="me-3">Selected: <span id="selectedCookieCount">0</span></span>
+                  <button class="btn btn-outline-secondary" id="selectAllCookiesBottom">Select All</button>
+                  <button class="btn btn-outline-secondary" id="deselectAllCookiesBottom">Deselect All</button>
+                </div>
+                <button class="btn btn-primary" id="importCookies" disabled>
+                  Import Cookies to Active Persona
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -813,3 +813,307 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 document.addEventListener('DOMContentLoaded', loadOptions);
+
+// Persona Management
+let currentPersonas = [];
+let availableCookies = [];
+let selectedCookieDomains = new Set();
+
+async function loadPersonas() {
+  const { personas = [], activePersona = '' } = await chrome.storage.local.get(['personas', 'activePersona']);
+  currentPersonas = personas;
+  
+  // Update persona selector
+  const select = document.getElementById('activePersona');
+  select.innerHTML = `
+    <option value="">Select a persona...</option>
+    ${personas.map(p => `
+      <option value="${p.id}" ${p.id === activePersona ? 'selected' : ''}>
+        ${p.name}
+      </option>
+    `).join('')}
+  `;
+  
+  // Update persona table
+  const tbody = document.getElementById('personaTable').querySelector('tbody');
+  tbody.innerHTML = personas.map(p => `
+    <tr>
+      <td>${p.name}</td>
+      <td>${Object.keys(p.cookies || {}).length} domains</td>
+      <td>${p.lastUsed ? new Date(p.lastUsed).toLocaleString() : 'Never'}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-secondary export-cookies" data-id="${p.id}">
+          Export Cookies
+        </button>
+        <button class="btn btn-sm btn-outline-danger delete-persona" data-id="${p.id}">
+          Delete
+        </button>
+      </td>
+    </tr>
+  `).join('');
+  
+  // Update stats for active persona
+  updatePersonaStats(activePersona);
+  
+  // Update import button state
+  document.getElementById('importCookies').disabled = !activePersona;
+}
+
+async function updatePersonaStats(personaId) {
+  const stats = document.getElementById('personaStats');
+  if (!personaId) {
+    stats.textContent = 'No active persona selected';
+    return;
+  }
+  
+  const persona = currentPersonas.find(p => p.id === personaId);
+  if (!persona) return;
+  
+  const domainCount = Object.keys(persona.cookies || {}).length;
+  const cookieCount = Object.values(persona.cookies || {}).reduce((sum, cookies) => sum + cookies.length, 0);
+  
+  stats.textContent = `${persona.name}: ${domainCount} domains, ${cookieCount} cookies total`;
+}
+
+async function createNewPersona() {
+  const name = prompt('Enter name for new persona:');
+  if (!name) return;
+  
+  const persona = {
+    id: crypto.randomUUID(),
+    name,
+    created: new Date().toISOString(),
+    lastUsed: null,
+    cookies: {}
+  };
+  
+  currentPersonas.push(persona);
+  await chrome.storage.local.set({ personas: currentPersonas });
+  await loadPersonas();
+}
+
+async function deletePersona(id) {
+  if (!confirm('Delete this persona? This cannot be undone.')) return;
+  
+  currentPersonas = currentPersonas.filter(p => p.id !== id);
+  const { activePersona } = await chrome.storage.local.get('activePersona');
+  
+  if (activePersona === id) {
+    await chrome.storage.local.set({ activePersona: '' });
+  }
+  
+  await chrome.storage.local.set({ personas: currentPersonas });
+  await loadPersonas();
+}
+
+async function setActivePersona(id) {
+  await chrome.storage.local.set({ activePersona: id });
+  document.getElementById('importCookies').disabled = !id;
+  await loadPersonas();
+}
+
+function formatCookiesForExport(cookies) {
+  return Object.entries(cookies).map(([domain, domainCookies]) => {
+    return `# ${domain}\n${domainCookies.map(cookie => 
+      `${cookie.name}=${cookie.value}; domain=${cookie.domain}; path=${cookie.path}`
+    ).join('\n')}`;
+  }).join('\n\n');
+}
+
+async function exportPersonaCookies(id) {
+  const persona = currentPersonas.find(p => p.id === id);
+  if (!persona) return;
+  
+  const text = formatCookiesForExport(persona.cookies);
+  await navigator.clipboard.writeText(text);
+  alert('Cookies copied to clipboard!');
+}
+
+// Cookie Management
+async function loadAvailableCookies() {
+  const allCookies = await chrome.cookies.getAll({});
+  
+  // Group cookies by domain
+  const cookiesByDomain = {};
+  for (const cookie of allCookies) {
+    const domain = cookie.domain.startsWith('.') ? cookie.domain.slice(1) : cookie.domain;
+    cookiesByDomain[domain] = cookiesByDomain[domain] || [];
+    cookiesByDomain[domain].push({
+      name: cookie.name,
+      value: cookie.value,
+      domain: cookie.domain,
+      path: cookie.path,
+      secure: cookie.secure,
+      httpOnly: cookie.httpOnly,
+      sameSite: cookie.sameSite,
+      expirationDate: cookie.expirationDate
+    });
+  }
+  
+  availableCookies = Object.entries(cookiesByDomain).map(([domain, cookies]) => ({
+    domain,
+    cookies,
+    selected: selectedCookieDomains.has(domain)
+  }));
+  
+  renderCookieTable();
+}
+
+function renderCookieTable(filterText = '') {
+  const tbody = document.getElementById('cookieTable').querySelector('tbody');
+  const filteredCookies = availableCookies.filter(item => 
+    item.domain.toLowerCase().includes(filterText.toLowerCase())
+  );
+  
+  tbody.innerHTML = filteredCookies.map(item => `
+    <tr>
+      <td>
+        <input type="checkbox" class="form-check-input cookie-select" 
+               data-domain="${item.domain}" ${item.selected ? 'checked' : ''}>
+      </td>
+      <td>${item.domain}</td>
+      <td>${item.cookies.length}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-secondary preview-cookies" 
+                data-domain="${item.domain}">
+          Preview
+        </button>
+      </td>
+    </tr>
+  `).join('');
+  
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  const count = selectedCookieDomains.size;
+  document.getElementById('selectedCookieCount').textContent = count;
+  document.getElementById('importCookies').disabled = count === 0 || !document.getElementById('activePersona').value;
+}
+
+function toggleAllCookieSelection(selected) {
+  const filterText = document.getElementById('cookieFilter').value.toLowerCase();
+  
+  availableCookies.forEach(item => {
+    // Only toggle selection if the item matches the current filter
+    if (item.domain.toLowerCase().includes(filterText)) {
+      if (selected) {
+        selectedCookieDomains.add(item.domain);
+        item.selected = true;
+      } else {
+        selectedCookieDomains.delete(item.domain);
+        item.selected = false;
+      }
+    }
+  });
+  
+  renderCookieTable(filterText);
+}
+
+async function previewCookies(domain) {
+  const cookies = availableCookies.find(item => item.domain === domain)?.cookies || [];
+  const text = formatCookiesForExport({ [domain]: cookies });
+  alert(text);
+}
+
+async function importSelectedCookies() {
+  const { activePersona } = await chrome.storage.local.get('activePersona');
+  if (!activePersona) {
+    alert('Please select an active persona first');
+    return;
+  }
+  
+  const persona = currentPersonas.find(p => p.id === activePersona);
+  if (!persona) {
+    alert('Selected persona not found');
+    return;
+  }
+  
+  // Initialize cookies object if it doesn't exist
+  persona.cookies = persona.cookies || {};
+  
+  // Import selected cookies
+  let importCount = 0;
+  for (const item of availableCookies) {
+    if (selectedCookieDomains.has(item.domain)) {
+      persona.cookies[item.domain] = item.cookies;
+      importCount++;
+    }
+  }
+  
+  persona.lastUsed = new Date().toISOString();
+  
+  // Save updated personas
+  await chrome.storage.local.set({ personas: currentPersonas });
+  
+  // Clear selection
+  selectedCookieDomains.clear();
+  availableCookies.forEach(item => item.selected = false);
+  
+  // Refresh UI
+  await loadPersonas();
+  renderCookieTable(document.getElementById('cookieFilter').value);
+  
+  alert(`Successfully imported cookies from ${importCount} domains to "${persona.name}"`);
+}
+
+// Initialize Personas tab
+document.addEventListener('DOMContentLoaded', () => {
+  // Persona management
+  document.getElementById('newPersona').addEventListener('click', createNewPersona);
+  document.getElementById('activePersona').addEventListener('change', e => setActivePersona(e.target.value));
+  
+  document.getElementById('personaTable').addEventListener('click', async e => {
+    const button = e.target.closest('button');
+    if (!button) return;
+    
+    const id = button.dataset.id;
+    if (button.classList.contains('export-cookies')) {
+      await exportPersonaCookies(id);
+    } else if (button.classList.contains('delete-persona')) {
+      await deletePersona(id);
+    }
+  });
+  
+  // Cookie management
+  document.getElementById('cookieFilter').addEventListener('input', e => 
+    renderCookieTable(e.target.value)
+  );
+  
+  ['selectAllCookies', 'selectAllCookiesBottom'].forEach(id => 
+    document.getElementById(id).addEventListener('click', () => toggleAllCookieSelection(true))
+  );
+  
+  ['deselectAllCookies', 'deselectAllCookiesBottom'].forEach(id => 
+    document.getElementById(id).addEventListener('click', () => toggleAllCookieSelection(false))
+  );
+  
+  document.getElementById('cookieTable').addEventListener('click', async e => {
+    const checkbox = e.target.closest('.cookie-select');
+    if (checkbox) {
+      const domain = checkbox.dataset.domain;
+      const item = availableCookies.find(i => i.domain === domain);
+      if (item) {
+        item.selected = checkbox.checked;
+        if (checkbox.checked) {
+          selectedCookieDomains.add(domain);
+        } else {
+          selectedCookieDomains.delete(domain);
+        }
+        updateSelectedCount();
+      }
+      return;
+    }
+    
+    const previewButton = e.target.closest('.preview-cookies');
+    if (previewButton) {
+      await previewCookies(previewButton.dataset.domain);
+    }
+  });
+  
+  document.getElementById('importCookies').addEventListener('click', importSelectedCookies);
+  
+  // Load initial data
+  loadPersonas();
+  loadAvailableCookies();
+});
