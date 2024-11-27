@@ -119,18 +119,24 @@
         <div class="col-md-10">
           <h2>ArchiveBox Saved URLs</h2>
           <div class="d-flex gap-2 mb-3">
-            <input type="search" class="form-control" id="filterInput" placeholder="Filter entries...">
-            <button class="btn btn-outline-secondary" id="downloadCsv">
-              CSV
-            </button>
-            <button class="btn btn-outline-secondary" id="downloadJson">
-              JSON
-            </button>
-            <button class="btn btn-outline-danger" id="deleteFiltered">
-              DELETE
-            </button>
-            <button class="btn btn-outline-primary" id="syncFiltered">
-              SYNC
+            <div class="input-group flex-grow-1">
+              <input type="search" class="form-control" id="filterInput" placeholder="Filter entries...">
+              <span class="input-group-text">
+                Selected: <span id="selectedUrlCount" class="ms-1">0</span>
+              </span>
+              <button class="btn btn-outline-secondary" id="selectAllUrls">Select All</button>
+              <button class="btn btn-outline-secondary" id="deselectAllUrls">Deselect All</button>
+            </div>
+          </div>
+          <div class="d-flex gap-2 mb-3">
+            <div class="btn-group">
+              <button class="btn btn-outline-secondary" id="downloadCsv">CSV</button>
+              <button class="btn btn-outline-secondary" id="downloadJson">JSON</button>
+            </div>
+            <button class="btn btn-outline-danger" id="deleteFiltered">DELETE</button>
+            <button class="btn btn-outline-primary" id="syncFiltered">SYNC</button>
+            <button class="btn btn-outline-secondary" id="editTags" data-bs-toggle="modal" data-bs-target="#editTagsModal">
+              TAGS
             </button>
           </div>
           <div id="entriesList" class="list-group"></div>
@@ -139,6 +145,38 @@
         <div class="col-md-2">
           <h2>All Tags</h2>
           <div id="tagsList" class="list-group"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Tags Modal -->
+    <div class="modal fade" id="editTagsModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Edit Tags</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">Current Tags</label>
+              <div id="currentTagsList" class="mb-2"></div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Add Tag</label>
+              <div class="position-relative">
+                <input type="text" class="form-control" id="addTagInput" placeholder="Type to add tag...">
+                <div id="tagAutocomplete" class="dropdown-menu w-100"></div>
+              </div>
+            </div>
+            <small class="text-muted">
+              Selected entries: <span id="selectedUrlCountModal">0</span>
+            </small>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-primary" id="saveTagChanges">Save Changes</button>
+          </div>
         </div>
       </div>
     </div>
