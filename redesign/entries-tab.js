@@ -485,18 +485,61 @@ export function initializeEntriesTab() {
       return searchableText.includes(filterText);
     });
 
+    // Add CSS for URL truncation if not already present
+    if (!document.getElementById('entriesListStyles')) {
+      const style = document.createElement('style');
+      style.id = 'entriesListStyles';
+      style.textContent = `
+        .entry-url {
+          max-width: 800px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          display: inline-block;
+        }
+        .entry-title {
+          font-size: 0.9em;
+          color: #666;
+          margin-bottom: 4px;
+        }
+        .entry-timestamp {
+          font-size: 0.8em;
+          color: #888;
+          margin-left: 8px;
+        }
+        .entry-content {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .entry-url-line {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
     // Render entries list
     entriesList.innerHTML = filteredEntries.map(entry => `
-      <div class="list-group-item d-flex align-items-center gap-2">
+      <div class="list-group-item d-flex align-items-start gap-2">
         <input type="checkbox" 
-               class="entry-checkbox form-check-input" 
+               class="entry-checkbox form-check-input mt-2" 
                value="${entry.id}"
                ${selectedEntries.has(entry.id) ? 'checked' : ''}>
-        <div class="flex-grow-1">
-          <img class="favicon" src="${entry.favicon || 'icons/128.png'}" 
-               onerror="this.src='icons/128.png'">
-          <code>${entry.url}</code>
-          <div class="small text-muted">
+        <div class="entry-content flex-grow-1">
+          <div class="entry-title">${entry.title || 'Untitled'}</div>
+          <div class="entry-url-line">
+            <img class="favicon" src="${entry.favicon || 'icons/128.png'}" 
+                 onerror="this.src='icons/128.png'"
+                 width="16" height="16">
+            <code class="entry-url">${entry.url}</code>
+            <span class="entry-timestamp">
+              ${new Date(entry.timestamp).toLocaleString()}
+            </span>
+          </div>
+          <div class="small text-muted mt-1">
             ${entry.tags.map(tag => 
               `<span class="badge bg-secondary me-1">${tag}</span>`
             ).join('')}
@@ -505,7 +548,7 @@ export function initializeEntriesTab() {
       </div>
     `).join('');
 
-    // Update selection count
+    // Update selection count and action buttons
     updateSelectionCount();
     updateActionButtonStates();
 
@@ -537,6 +580,78 @@ export function initializeEntriesTab() {
 
   // Initial render
   renderEntries();
+
+  // Export to CSV
+  document.getElementById('downloadCsv').addEventListener('click', async () => {
+    const { entries = [] } = await chrome.storage.local.get('entries');
+    const selectedItems = entries.filter(e => selectedEntries.has(e.id));
+    
+    if (!selectedItems.length) {
+      alert('No entries selected');
+      return;
+    }
+
+    // CSV Header
+    const csvRows = [
+      ['ID', 'Timestamp', 'URL', 'Title', 'Tags'].join(',')
+    ];
+
+    // CSV Data Rows
+    selectedItems.forEach(entry => {
+      const row = [
+        entry.id,
+        entry.timestamp,
+        `"${entry.url.replace(/"/g, '""')}"`, // Escape quotes in URL
+        `"${(entry.title || '').replace(/"/g, '""')}"`, // Escape quotes in title
+        `"${entry.tags.join(', ')}"` // Join tags with comma
+      ];
+      csvRows.push(row.join(','));
+    });
+
+    // Create and trigger download
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `archivebox-export-${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  });
+
+  // Export to JSON
+  document.getElementById('downloadJson').addEventListener('click', async () => {
+    const { entries = [] } = await chrome.storage.local.get('entries');
+    const selectedItems = entries.filter(e => selectedEntries.has(e.id));
+    
+    if (!selectedItems.length) {
+      alert('No entries selected');
+      return;
+    }
+
+    // Create formatted JSON with selected fields
+    const exportData = selectedItems.map(entry => ({
+      id: entry.id,
+      timestamp: entry.timestamp,
+      url: entry.url,
+      title: entry.title || '',
+      tags: entry.tags
+    }));
+
+    // Create and trigger download
+    const jsonContent = JSON.stringify(exportData, null, 2); // Pretty print with 2 spaces
+    const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `archivebox-export-${new Date().toISOString().slice(0,10)}.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  });
 }
 
 // // Helper function to sync a single entry to ArchiveBox
