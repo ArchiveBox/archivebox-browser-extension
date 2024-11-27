@@ -32,9 +32,9 @@
   "bugs": {
     "url": "https://github.com/ArchiveBox/archivebox-browser-extension/issues"
   },
-  "homepage": "https://github.com/ArchiveBox/archivebox-browser-extension"
+  "homepage": "https://github.com/ArchiveBox/archivebox-browser-extension",
   "repository": {
     "type": "git",
     "url": "https://github.com/ArchiveBox/archivebox-browser-extension.git"
-  },
+  }
 }
