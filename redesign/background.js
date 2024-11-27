@@ -19,9 +19,9 @@ chrome.action.onClicked.addListener(async (tab) => {
   };
   
   // Save the entry first
-  const { entries = [] } = await chrome.storage.sync.get('entries');
+  const { entries = [] } = await chrome.storage.local.get('entries');
   entries.push(entry);
-  await chrome.storage.sync.set({ entries });
+  await chrome.storage.local.set({ entries });
   
   // Inject scripts - CSS now handled in popup.js
   await chrome.scripting.executeScript({

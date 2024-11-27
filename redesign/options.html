@@ -107,6 +107,9 @@
     <li class="nav-item">
       <a class="nav-link" id="personas-tab" data-bs-toggle="tab" href="#personas" role="tab">Personas</a>
     </li>
+    <li class="nav-item">
+      <a class="nav-link" id="import-tab" data-bs-toggle="tab" href="#import" role="tab">Import</a>
+    </li>
   </ul>
 
   <div class="tab-content">
@@ -226,6 +229,90 @@
         <div class="col">
           <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
           <p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Tab -->
+    <div class="tab-pane fade" id="import" role="tabpanel">
+      <div class="row mt-4">
+        <div class="col-md-12">
+          <ul class="nav nav-pills mb-4" role="tablist">
+            <li class="nav-item">
+              <a class="nav-link active" id="history-tab" data-bs-toggle="pill" href="#history" role="tab">Chrome History</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" id="bookmarks-tab" data-bs-toggle="pill" href="#bookmarks" role="tab">Chrome Bookmarks</a>
+            </li>
+          </ul>
+
+          <div class="tab-content">
+            <!-- History Import -->
+            <div class="tab-pane fade show active" id="history" role="tabpanel">
+              <div class="row mb-4">
+                <div class="col-md-6">
+                  <div class="input-group">
+                    <span class="input-group-text">From</span>
+                    <input type="date" class="form-control" id="historyStartDate">
+                    <span class="input-group-text">To</span>
+                    <input type="date" class="form-control" id="historyEndDate">
+                    <button class="btn btn-primary" id="loadHistory">Load History</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bookmarks Import -->
+            <div class="tab-pane fade" id="bookmarks" role="tabpanel">
+              <div class="row mb-4">
+                <div class="col-md-6">
+                  <button class="btn btn-primary" id="loadBookmarks">Load Bookmarks</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Common Import UI -->
+          <div class="card">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="input-group" style="max-width: 400px;">
+                  <input type="search" class="form-control" id="importFilter" placeholder="Filter URLs and titles...">
+                  <div class="input-group-text">
+                    <input class="form-check-input mt-0" type="checkbox" id="showNewOnly">
+                    <label class="form-check-label ms-2" for="showNewOnly">Show new only</label>
+                  </div>
+                </div>
+                <div>
+                  <span class="me-3">Selected: <span id="selectedCount">0</span></span>
+                  <button class="btn btn-outline-secondary" id="selectAll">Select All</button>
+                  <button class="btn btn-outline-secondary" id="deselectAll">Deselect All</button>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table" id="importTable">
+                  <thead>
+                    <tr>
+                      <th style="width: 40px;"><input type="checkbox" id="selectAllHeader"></th>
+                      <th>URL</th>
+                      <th>Title</th>
+                      <th>Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+
+              <div class="mt-3">
+                <div class="input-group" style="max-width: 400px;">
+                  <span class="input-group-text">Tags</span>
+                  <input type="text" class="form-control" id="importTags" placeholder="Add tags (comma separated)">
+                  <button class="btn btn-primary" id="importSelected">Import Selected</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -3,13 +3,13 @@ window.popup_element = null;  // Global reference to popup element
 window.hide_timer = null;
 
 async function getAllTags() {
-  const { entries = [] } = await chrome.storage.sync.get('entries');
+  const { entries = [] } = await chrome.storage.local.get('entries');
   return [...new Set(entries.flatMap(entry => entry.tags))]
     .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 }
 
 async function sendToArchiveBox(url, tags) {
-  const { archivebox_server_url, archivebox_api_key } = await chrome.storage.sync.get([
+  const { archivebox_server_url, archivebox_api_key } = await chrome.storage.local.get([
     'archivebox_server_url',
     'archivebox_api_key'
   ]);
@@ -44,7 +44,7 @@ async function sendToArchiveBox(url, tags) {
 }
 
 window.getCurrentEntry = async function() {
-  const { entries = [] } = await chrome.storage.sync.get('entries');
+  const { entries = [] } = await chrome.storage.local.get('entries');
   let current_entry = entries.find(entry => entry.url === window.location.href);
   
   if (!current_entry) {
@@ -57,7 +57,7 @@ window.getCurrentEntry = async function() {
       notes: '',
     };
     entries.push(current_entry);
-    await chrome.storage.sync.set({ entries });  // Save immediately
+    await chrome.storage.local.set({ entries });  // Save immediately
   }
   current_entry.id = current_entry.id || crypto.randomUUID();
   current_entry.url = current_entry.url || window.location.href;
@@ -74,13 +74,16 @@ window.getSuggestedTags = async function() {
   const { current_entry, entries } = await getCurrentEntry();
   // Get all unique tags sorted by recency, excluding current entry's tags
   return [...new Set(
-    entries
-      .filter(entry => entry.url !== current_entry.url)  // Better way to exclude current
-      .reverse()
-      .flatMap(entry => entry.tags)
+    [
+      window.location.hostname.replace('www.', '').replace('.com', ''),
+      ...entries
+          .filter(entry => entry.url !== current_entry.url)  // Better way to exclude current
+          .reverse()
+          .flatMap(entry => entry.tags),
+    ]
   )]
   .filter(tag => !current_entry.tags.includes(tag))
-  .slice(0, 3);
+  .slice(0, 4);
 }
 
 window.updateCurrentTags = async function() {
@@ -110,7 +113,7 @@ window.updateCurrentTags = async function() {
         const { current_entry, entries } = await getCurrentEntry();
         const tag_to_remove = e.target.dataset.tag;
         current_entry.tags = current_entry.tags.filter(tag => tag !== tag_to_remove);
-        await chrome.storage.sync.set({ entries });
+        await chrome.storage.local.set({ entries });
         await updateCurrentTags();
         await updateSuggestions();
       }
@@ -181,13 +184,11 @@ window.createPopup = async function() {
       margin: 0px;
       padding: 0px;
       color: white;
-      /* background: #bf7070; */
       padding: 26px 13px 10px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
       font-family: system-ui, -apple-system, sans-serif;
       transition: display 0.3s ease-in-out;
       animation: slideDown 0.3s ease-in-out forwards;
-      /*animation: fadeOut 8s ease-in-out forwards;*/
     }
     .archive-box-popup:hover {
       animation: slideDown -0.3s ease-in-out forwards;
@@ -224,9 +225,6 @@ window.createPopup = async function() {
     .archive-box-popup a.options-link:hover {
       text-shadow: 0 0 10px #a1a1a1;
     }
-    
-    
-    
     
     .archive-box-popup .metadata {
       display: inline-block;
@@ -270,12 +268,10 @@ window.createPopup = async function() {
       background-color: rgba(0, 0, 0, 0);
       border: 0;
       box-shadow: 0 0 0 0;
-      /* border-top: 1px solid #eee; */
     }
     
     .current-tags {
       margin-top: 20px;
-      /* border-top: 1px solid #eee; */
       display: inline;
     }
     
@@ -311,7 +307,7 @@ window.createPopup = async function() {
       background: grey;
       color: #ddd;
       position: relative;
-      padding-right: 20px;  /* Make room for the X */
+      padding-right: 20px;
     }
     
     .ARCHIVEBOX__tag-badge.current:hover::after {
@@ -348,14 +344,10 @@ window.createPopup = async function() {
       color: #fefefe;
       overflow: hidden;
       font-size: 11px;
-      opacity: 0.8;  /* Made more visible */
+      opacity: 0.8;
     }
     
     .ARCHIVEBOX__autocomplete-dropdown {
-      position: absolute;
-      top: 100%;
-      left: 0;
-      right: 0;
       background: white;
       border: 1px solid #ddd;
       border-radius: 0 0 4px 4px;
@@ -375,7 +367,6 @@ window.createPopup = async function() {
     .ARCHIVEBOX__autocomplete-item.selected {
       background: #f0f0f0;
     }
-    
   `;
   doc.head.appendChild(style);
 
@@ -417,7 +408,7 @@ window.createPopup = async function() {
       const tag = e.target.textContent.replace(' +', '');
       if (!current_entry.tags.includes(tag)) {
         current_entry.tags.push(tag);
-        await chrome.storage.sync.set({ entries });
+        await chrome.storage.local.set({ entries });
       }
       await updateCurrentTags();
       await updateSuggestions();
@@ -429,14 +420,14 @@ window.createPopup = async function() {
       console.log('Removing tag', tag);
       const { current_entry, entries } = await getCurrentEntry();
       current_entry.tags = current_entry.tags.filter(t => t !== tag);
-      await chrome.storage.sync.set({ entries });
+      await chrome.storage.local.set({ entries });
       await updateCurrentTags();
       await updateSuggestions();
     }
   });
 
-  // Add dropdown container to iframe document
-  const dropdownContainer = doc.createElement('div');
+  // Add dropdown container
+  const dropdownContainer = document.createElement('div');
   dropdownContainer.className = 'ARCHIVEBOX__autocomplete-dropdown';
   dropdownContainer.style.display = 'none';
   input.parentNode.insertBefore(dropdownContainer, input.nextSibling);
@@ -448,13 +439,19 @@ window.createPopup = async function() {
     const inputValue = input.value.toLowerCase();
     const allTags = await getAllTags();
     
-    // Filter tags that match input
+    // Filter tags that match input and aren't already used
+    const { current_entry } = await getCurrentEntry();
     filteredTags = allTags
-      .filter(tag => tag.toLowerCase().includes(inputValue) && inputValue)
+      .filter(tag => 
+        tag.toLowerCase().includes(inputValue) && 
+        !current_entry.tags.includes(tag) &&
+        inputValue
+      )
       .slice(0, 5);  // Limit to 5 suggestions
 
     if (filteredTags.length === 0) {
       dropdownContainer.style.display = 'none';
+      selectedIndex = -1;
       return;
     }
 
@@ -476,7 +473,27 @@ window.createPopup = async function() {
 
   // Handle keyboard navigation
   input.addEventListener('keydown', async (e) => {
-    if (!filteredTags.length) return;
+    if (e.key === 'Escape') {
+      dropdownContainer.style.display = 'none';
+      selectedIndex = -1;
+      return;
+    }
+
+    if (!filteredTags.length) {
+      if (e.key === 'Enter' && input.value.trim()) {
+        e.preventDefault();
+        const { current_entry, entries } = await getCurrentEntry();
+        const newTag = input.value.trim();
+        if (!current_entry.tags.includes(newTag)) {
+          current_entry.tags.push(newTag);
+          await chrome.storage.local.set({ entries });
+          input.value = '';
+          await updateCurrentTags();
+          await updateSuggestions();
+        }
+      }
+      return;
+    }
 
     switch (e.key) {
       case 'ArrowDown':
@@ -496,85 +513,56 @@ window.createPopup = async function() {
         if (selectedIndex >= 0) {
           const selectedTag = filteredTags[selectedIndex];
           const { current_entry, entries } = await getCurrentEntry();
-          
           if (!current_entry.tags.includes(selectedTag)) {
             current_entry.tags.push(selectedTag);
-            await chrome.storage.sync.set({ entries });
-            await updateCurrentTags();
-            await updateSuggestions();
+            await chrome.storage.local.set({ entries });
           }
-          
           input.value = '';
           dropdownContainer.style.display = 'none';
           selectedIndex = -1;
-          filteredTags = [];
-        } else {
-          // Handle regular tag input as before
-          const { current_entry, entries } = await getCurrentEntry();
-          const new_tags = input.value.split(',')
-            .map(tag => tag.trim())
-            .filter(tag => tag && !current_entry.tags.includes(tag));
-          
-          if (new_tags.length > 0) {
-            current_entry.tags.push(...new_tags);
-            await chrome.storage.sync.set({ entries });
-            input.value = '';
-            await updateSuggestions();
-            await updateCurrentTags();
-          } else if (input.value.trim() === '') {
-            popup.remove();
-            popup_element = null;
-          }
+          await updateCurrentTags();
+          await updateSuggestions();
         }
         break;
       
-      case 'Escape':
-        dropdownContainer.style.display = 'none';
-        selectedIndex = -1;
-        filteredTags = [];
+      case 'Tab':
+        if (selectedIndex >= 0) {
+          e.preventDefault();
+          input.value = filteredTags[selectedIndex];
+          dropdownContainer.style.display = 'none';
+          selectedIndex = -1;
+        }
         break;
     }
   });
 
-  // Handle clicks on dropdown items
+  // Handle click selection
   dropdownContainer.addEventListener('click', async (e) => {
     const item = e.target.closest('.ARCHIVEBOX__autocomplete-item');
-    if (!item) return;
-
-    const selectedTag = item.dataset.tag;
-    const { current_entry, entries } = await getCurrentEntry();
-    
-    if (!current_entry.tags.includes(selectedTag)) {
-      current_entry.tags.push(selectedTag);
-      await chrome.storage.sync.set({ entries });
+    if (item) {
+      const selectedTag = item.dataset.tag;
+      const { current_entry, entries } = await getCurrentEntry();
+      if (!current_entry.tags.includes(selectedTag)) {
+        current_entry.tags.push(selectedTag);
+        await chrome.storage.local.set({ entries });
+      }
+      input.value = '';
+      dropdownContainer.style.display = 'none';
+      selectedIndex = -1;
       await updateCurrentTags();
       await updateSuggestions();
     }
-    
-    input.value = '';
-    dropdownContainer.style.display = 'none';
-    selectedIndex = -1;
-    filteredTags = [];
-    input.focus();
   });
 
   // Hide dropdown when clicking outside
-  doc.addEventListener('click', (e) => {
-    if (!popup_element?.contains(e.target)) {
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.ARCHIVEBOX__autocomplete-dropdown') && 
+        !e.target.closest('input')) {
       dropdownContainer.style.display = 'none';
       selectedIndex = -1;
-      filteredTags = [];
     }
   });
 
-  // Add escape key handler
-  doc.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && popup_element) {
-      iframe.remove();  // Remove iframe instead of just popup
-      popup_element = null;
-    }
-  });
-  
   input.focus();
   console.log('+ Showed ArchiveBox popup in iframe');
 }
