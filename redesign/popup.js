@@ -146,7 +146,6 @@ window.createPopup = async function() {
     top: '20px',
     right: '20px',
     zIndex: '2147483647',
-    width: '550px',
     background: 'transparent',
     borderRadius: '21px',
     border: '0px',
@@ -154,18 +153,27 @@ window.createPopup = async function() {
     padding: '0px',
     transform: 'translateY(0px)',
     boxSizing: 'border-box',
+    width: '550px', // Initial width
+    height: '200px', // Initial height
+    transition: 'height 0.2s ease-out' // Smooth height transitions
   });
 
   document.body.appendChild(iframe);
 
+  // Function to resize iframe based on content
+  function resizeIframe() {
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    const content = doc.querySelector('.archive-box-popup');
+    if (content) {
+      const height = content.offsetHeight;
+      const dropdown = doc.querySelector('.ARCHIVEBOX__autocomplete-dropdown');
+      const dropdownHeight = dropdown && dropdown.style.display !== 'none' ? dropdown.offsetHeight : 0;
+      iframe.style.height = (height + dropdownHeight + 20) + 'px'; // Add padding
+    }
+  }
+
   // Create popup content inside iframe
   const doc = iframe.contentDocument || iframe.contentWindow.document;
-
-  // iframe.addEventListener('load', () => {
-  //   // resize iframe to fit content
-  //   iframe.style.width = doc.body.scrollWidth + 'px';
-  //   iframe.style.height = doc.body.scrollHeight + 'px';
-  // });
   
   // Add styles to iframe
   const style = doc.createElement('style');
@@ -176,20 +184,21 @@ window.createPopup = async function() {
       font-family: system-ui, -apple-system, sans-serif;
       font-size: 14px;
       width: 100%;
+      height: auto;
+      overflow: visible;
     }
     
     .archive-box-popup {
-      height: 65px;
-      background: linear-gradient(45deg, #bf7070, rgb(200 50 50));
+      min-height: 90px;
+      background: #bf7070;
       margin: 0px;
-      padding: 0px;
+      padding: 6px;
       color: white;
-      padding: 26px 13px 10px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
       font-family: system-ui, -apple-system, sans-serif;
-      transition: display 0.3s ease-in-out;
-      animation: slideDown 0.3s ease-in-out forwards;
+      transition: all 0.2s ease-out;
     }
+    
     .archive-box-popup:hover {
       animation: slideDown -0.3s ease-in-out forwards;
       opacity: 1;
@@ -350,11 +359,11 @@ window.createPopup = async function() {
     .ARCHIVEBOX__autocomplete-dropdown {
       background: white;
       border: 1px solid #ddd;
-      border-radius: 0 0 4px 4px;
+      border-radius: 0 0 14px 14px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       max-height: 200px;
       overflow-y: auto;
-      z-index: 2147483647;
+      transition: all 0.2s ease-out;
     }
     
     .ARCHIVEBOX__autocomplete-item {
@@ -376,8 +385,8 @@ window.createPopup = async function() {
   popup.innerHTML = `
     <a href="#" class="options-link" title="Open in ArchiveBox">🏛️</a> <input type="search" placeholder="Add tags + press ⏎   |   ⎋ to close">
     <br/>
-    <div class="ARCHIVEBOX__current-tags"></div>
     <div class="ARCHIVEBOX__tag-suggestions"></div><br/>
+    <div class="ARCHIVEBOX__current-tags"></div>
     <small>
       <span class="status-indicator"></span>
       Saved
@@ -452,20 +461,21 @@ window.createPopup = async function() {
     if (filteredTags.length === 0) {
       dropdownContainer.style.display = 'none';
       selectedIndex = -1;
-      return;
+    } else {
+      dropdownContainer.innerHTML = filteredTags
+        .map((tag, index) => `
+          <div class="ARCHIVEBOX__autocomplete-item ${index === selectedIndex ? 'selected' : ''}"
+               data-tag="${tag}">
+            ${tag}
+          </div>
+        `)
+        .join('');
+      
+      dropdownContainer.style.display = 'block';
     }
 
-    // Update dropdown content
-    dropdownContainer.innerHTML = filteredTags
-      .map((tag, index) => `
-        <div class="ARCHIVEBOX__autocomplete-item ${index === selectedIndex ? 'selected' : ''}"
-             data-tag="${tag}">
-          ${tag}
-        </div>
-      `)
-      .join('');
-    
-    dropdownContainer.style.display = 'block';
+    // Trigger resize after dropdown visibility changes
+    setTimeout(resizeIframe, 0);
   }
 
   // Handle input changes
@@ -565,6 +575,87 @@ window.createPopup = async function() {
 
   input.focus();
   console.log('+ Showed ArchiveBox popup in iframe');
+
+  // Add resize triggers
+  const resizeObserver = new ResizeObserver(() => {
+    resizeIframe();
+  });
+
+  // Observe the popup content for size changes
+  resizeObserver.observe(popup);
+
+  // Additional resize triggers for dynamic content
+  async function updateCurrentTags() {
+    if (!popup_element) return;
+    const current_tags_div = popup_element.querySelector('.ARCHIVEBOX__current-tags');
+    const status_div = popup_element.querySelector('small');
+    const { current_entry } = await getCurrentEntry();
+
+    current_tags_div.innerHTML = current_entry.tags.length 
+      ? `${current_entry.tags
+          .map(tag => `<span class="ARCHIVEBOX__tag-badge current" data-tag="${tag}">${tag}</span>`)
+          .join(' ')}`
+      : '';
+
+    const result = await sendToArchiveBox(current_entry.url, current_entry.tags);
+    status_div.innerHTML = `
+      <span class="status-indicator ${result.ok ? 'success' : 'error'}"></span>
+      ${result.status}
+    `;
+
+    // Add click handlers for removing tags
+    current_tags_div.querySelectorAll('.tag-badge.current').forEach(badge => {
+      badge.addEventListener('click', async (e) => {
+        if (e.target.classList.contains('current')) {
+          const { current_entry, entries } = await getCurrentEntry();
+          const tag_to_remove = e.target.dataset.tag;
+          current_entry.tags = current_entry.tags.filter(tag => tag !== tag_to_remove);
+          await chrome.storage.local.set({ entries });
+          await updateCurrentTags();
+          await updateSuggestions();
+        }
+      });
+    });
+
+    resizeIframe();
+  }
+
+  async function updateDropdown() {
+    const inputValue = input.value.toLowerCase();
+    const allTags = await getAllTags();
+    
+    // Filter tags that match input and aren't already used
+    const { current_entry } = await getCurrentEntry();
+    filteredTags = allTags
+      .filter(tag => 
+        tag.toLowerCase().includes(inputValue) && 
+        !current_entry.tags.includes(tag) &&
+        inputValue
+      )
+      .slice(0, 5);  // Limit to 5 suggestions
+
+    if (filteredTags.length === 0) {
+      dropdownContainer.style.display = 'none';
+      selectedIndex = -1;
+    } else {
+      dropdownContainer.innerHTML = filteredTags
+        .map((tag, index) => `
+          <div class="ARCHIVEBOX__autocomplete-item ${index === selectedIndex ? 'selected' : ''}"
+               data-tag="${tag}">
+            ${tag}
+          </div>
+        `)
+        .join('');
+      
+      dropdownContainer.style.display = 'block';
+    }
+
+    // Trigger resize after dropdown visibility changes
+    setTimeout(resizeIframe, 0);
+  }
+
+  // Initial resize
+  setTimeout(resizeIframe, 0);
 }
 
 window.createPopup();
