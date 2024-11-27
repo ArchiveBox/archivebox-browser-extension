@@ -102,4 +102,119 @@ export async function initializeConfigTab() {
       });
     });
   });
-} 
+
+  // Test URL functionality
+  const testUrlInput = document.getElementById('testUrl');
+  const testButton = document.getElementById('testAdding');
+  const testStatus = document.getElementById('testStatus');
+
+  testButton.addEventListener('click', async () => {
+    const url = testUrlInput.value.trim();
+    if (!url) {
+      testStatus.innerHTML = `
+        <span class="status-indicator status-error"></span>
+        Please enter a URL to test
+      `;
+      return;
+    }
+
+    // Show loading state
+    testButton.disabled = true;
+    testStatus.innerHTML = `
+      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+      Testing...
+    `;
+
+    try {
+      const testEntry = {
+        url,
+        title: 'Test Entry',
+        timestamp: new Date().toISOString(),
+        tags: ['test']
+      };
+
+      const result = await syncToArchiveBox(testEntry);
+
+      if (result.ok) {
+        testStatus.innerHTML = `
+          <span class="status-indicator status-success"></span>
+          Success! URL was added to ArchiveBox
+        `;
+        // Clear the input on success
+        testUrlInput.value = '';
+      } else {
+        testStatus.innerHTML = `
+          <span class="status-indicator status-error"></span>
+          Error: ${result.status}
+        `;
+      }
+    } catch (error) {
+      testStatus.innerHTML = `
+        <span class="status-indicator status-error"></span>
+        Error: ${error.message}
+      `;
+    } finally {
+      testButton.disabled = false;
+    }
+  });
+
+  // Add Enter key support for test URL input
+  testUrlInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      testButton.click();
+    }
+  });
+}
+
+async function syncToArchiveBox(entry) {
+  const { archivebox_server_url, archivebox_api_key } = await chrome.storage.local.get([
+    'archivebox_server_url',
+    'archivebox_api_key'
+  ]);
+
+  if (!archivebox_server_url || !archivebox_api_key) {
+    return { 
+      ok: false, 
+      status: 'Server URL and API key must be configured and saved first' 
+    };
+  }
+
+  try {
+    const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
+      method: 'POST',
+      mode: 'cors',
+      credentials: 'omit',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        api_key: archivebox_api_key,
+        urls: [entry.url],
+        tag: entry.tags.join(','),
+        depth: 0,
+        update: false,
+        update_all: false,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return { 
+        ok: false, 
+        status: `Server returned ${response.status}: ${text}`
+      };
+    }
+
+    return {
+      ok: true,
+      status: 'Success'
+    };
+  } catch (err) {
+    return { 
+      ok: false, 
+      status: `Connection failed: ${err.message}` 
+    };
+  }
+}
