@@ -132,13 +132,258 @@ window.updateSuggestions = async function() {
 window.createPopup = async function() {
   const { current_entry } = await getCurrentEntry();
 
-  // Create popup container
-  document.querySelector('.archive-box-popup')?.remove();
-  popup_element = document.createElement('div');
-  popup_element.className = 'archive-box-popup';
-  popup_element.innerHTML = `
-    <a href="#" class="options-link">🏛️</a>
-    <input type="text" placeholder="Add tags + press ⏎   |   ⎋ to close">
+  // Create iframe container
+  document.querySelector('.archive-box-iframe')?.remove();
+  const iframe = document.createElement('iframe');
+  iframe.className = 'archive-box-iframe';
+  
+  // Set iframe styles for positioning
+  Object.assign(iframe.style, {
+    position: 'fixed',
+    top: '20px',
+    right: '20px',
+    zIndex: '2147483647',
+    width: '550px',
+    background: 'transparent',
+    borderRadius: '21px',
+    border: '0px',
+    margin: '0px',
+    padding: '0px',
+    transform: 'translateY(0px)',
+    boxSizing: 'border-box',
+  });
+
+  document.body.appendChild(iframe);
+
+  // Create popup content inside iframe
+  const doc = iframe.contentDocument || iframe.contentWindow.document;
+
+  // iframe.addEventListener('load', () => {
+  //   // resize iframe to fit content
+  //   iframe.style.width = doc.body.scrollWidth + 'px';
+  //   iframe.style.height = doc.body.scrollHeight + 'px';
+  // });
+  
+  // Add styles to iframe
+  const style = doc.createElement('style');
+  style.textContent = `
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      width: 100%;
+    }
+    
+    .archive-box-popup {
+      height: 65px;
+      background: linear-gradient(45deg, #bf7070, rgb(200 50 50));
+      margin: 0px;
+      padding: 0px;
+      color: white;
+      /* background: #bf7070; */
+      padding: 26px 13px 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      font-family: system-ui, -apple-system, sans-serif;
+      transition: display 0.3s ease-in-out;
+      animation: slideDown 0.3s ease-in-out forwards;
+      /*animation: fadeOut 8s ease-in-out forwards;*/
+    }
+    .archive-box-popup:hover {
+      animation: slideDown -0.3s ease-in-out forwards;
+      opacity: 1;
+    }
+    
+    .archive-box-popup small {
+      display: block;
+      width: 100%;
+      text-align: center;
+      margin-top: 5px;
+      animation: fadeOut 2.5s ease-in-out forwards;
+      color: #fefefe;
+      overflow: hidden;
+      font-size: 11px;
+      opacity: 0.2;
+    }
+    
+    .archive-box-popup img {
+      width: 15%;
+      max-width: 40px;
+      display: inline-block;
+      vertical-align: top;
+    }
+    
+    .archive-box-popup .options-link {
+      text-decoration: none;
+      font-size: 24px;
+      line-height: 1.4;
+      display: inline-block;
+      width: 34px;
+      transition: text-shadow 0.1s ease-in-out;
+    }
+    .archive-box-popup a.options-link:hover {
+      text-shadow: 0 0 10px #a1a1a1;
+    }
+    
+    
+    
+    
+    .archive-box-popup .metadata {
+      display: inline-block;
+      max-width: 80%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
+    .archive-box-popup input {
+      width: calc(100% - 40px);
+      border: 0px;
+      margin: 0px;
+      padding: 5px;
+      padding-left: 13px;
+      border-radius: 14px;
+      min-width: 100px;
+      background-color: #fefefe;
+      color: #1a1a1a;
+      vertical-align: top;
+      display: inline-block;
+      line-height: 1.75 !important;
+      margin-bottom: 8px;
+    }
+    
+    @keyframes fadeOut {
+      0% { opacity: 1; }
+      80% { opacity: 0.8;}
+      100% { opacity: 0; display: none; }
+    }
+    
+    @keyframes slideDown {
+      0% { top: -500px; }
+      100% { top: 20px }
+    }
+    
+    .ARCHIVEBOX__tag-suggestions {
+      margin-top: 20px;
+      display: inline;
+      min-height: 0;
+      background-color: rgba(0, 0, 0, 0);
+      border: 0;
+      box-shadow: 0 0 0 0;
+      /* border-top: 1px solid #eee; */
+    }
+    
+    .current-tags {
+      margin-top: 20px;
+      /* border-top: 1px solid #eee; */
+      display: inline;
+    }
+    
+    .ARCHIVEBOX__tag-badge {
+      display: inline-block;
+      background: #e9ecef;
+      padding: 3px 8px;
+      border-radius: 3px;
+      padding-left: 18px;
+      margin: 2px;
+      font-size: 15px;
+      cursor: pointer;
+      user-select: none;
+    }
+    
+    .ARCHIVEBOX__tag-badge.suggestion {
+      background: #007bff;
+      color: white;
+      opacity: 0.2;
+    }
+    .ARCHIVEBOX__tag-badge.suggestion:hover {
+      opacity: 0.8;
+    }
+    .ARCHIVEBOX__tag-badge.suggestion:active {
+      opacity: 1;
+    }
+    
+    .ARCHIVEBOX__tag-badge.suggestion:after {
+      content: ' +';
+    }
+    
+    .ARCHIVEBOX__tag-badge.current {
+      background: grey;
+      color: #ddd;
+      position: relative;
+      padding-right: 20px;  /* Make room for the X */
+    }
+    
+    .ARCHIVEBOX__tag-badge.current:hover::after {
+      content: '×';
+      position: absolute;
+      right: 5px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-weight: bold;
+      cursor: pointer;
+    }
+    
+    .status-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+    
+    .status-indicator.success {
+      background: #28a745;
+    }
+    
+    .status-indicator.error {
+      background: #dc3545;
+    }
+    
+    .archive-box-popup small {
+      display: block;
+      width: 100%;
+      text-align: center;
+      margin-top: 5px;
+      color: #fefefe;
+      overflow: hidden;
+      font-size: 11px;
+      opacity: 0.8;  /* Made more visible */
+    }
+    
+    .ARCHIVEBOX__autocomplete-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 0 0 4px 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 2147483647;
+    }
+    
+    .ARCHIVEBOX__autocomplete-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      color: #333;
+    }
+    
+    .ARCHIVEBOX__autocomplete-item:hover,
+    .ARCHIVEBOX__autocomplete-item.selected {
+      background: #f0f0f0;
+    }
+    
+  `;
+  doc.head.appendChild(style);
+
+  // Create popup content
+  const popup = doc.createElement('div');
+  popup.className = 'archive-box-popup';
+  popup.innerHTML = `
+    <a href="#" class="options-link" title="Open in ArchiveBox">🏛️</a> <input type="search" placeholder="Add tags + press ⏎   |   ⎋ to close">
     <br/>
     <div class="ARCHIVEBOX__current-tags"></div>
     <div class="ARCHIVEBOX__tag-suggestions"></div><br/>
@@ -147,19 +392,19 @@ window.createPopup = async function() {
       Saved
     </small>
   `;
-  
-  document.body.appendChild(popup_element);
-  
-  // Add click handler for options link
-  popup_element.querySelector('.options-link').addEventListener('click', (e) => {
-    console.log('i Clicked ArchiveBox popup options link');
+
+  doc.body.appendChild(popup);
+  window.popup_element = popup;
+
+  // Add message passing for options link
+  popup.querySelector('.options-link').addEventListener('click', (e) => {
     e.preventDefault();
     chrome.runtime.sendMessage({ action: 'openOptionsPage', id: current_entry.id });
   });
-  
-  const input = popup_element.querySelector('input');
-  const suggestions_div = popup_element.querySelector('.ARCHIVEBOX__tag-suggestions');
-  const current_tags_div = popup_element.querySelector('.ARCHIVEBOX__current-tags');
+
+  const input = popup.querySelector('input');
+  const suggestions_div = popup.querySelector('.ARCHIVEBOX__tag-suggestions');
+  const current_tags_div = popup.querySelector('.ARCHIVEBOX__current-tags');
   
   // Initial display of current tags and suggestions
   await updateCurrentTags();
@@ -174,9 +419,9 @@ window.createPopup = async function() {
         current_entry.tags.push(tag);
         await chrome.storage.sync.set({ entries });
       }
+      await updateCurrentTags();
+      await updateSuggestions();
     }
-    await updateCurrentTags();
-    await updateSuggestions();
   });
   current_tags_div.addEventListener('click', async (e) => {
     if (e.target.classList.contains('current')) {
@@ -190,8 +435,8 @@ window.createPopup = async function() {
     }
   });
 
-  // Add dropdown container
-  const dropdownContainer = document.createElement('div');
+  // Add dropdown container to iframe document
+  const dropdownContainer = doc.createElement('div');
   dropdownContainer.className = 'ARCHIVEBOX__autocomplete-dropdown';
   dropdownContainer.style.display = 'none';
   input.parentNode.insertBefore(dropdownContainer, input.nextSibling);
@@ -277,7 +522,7 @@ window.createPopup = async function() {
             await updateSuggestions();
             await updateCurrentTags();
           } else if (input.value.trim() === '') {
-            popup_element.remove();
+            popup.remove();
             popup_element = null;
           }
         }
@@ -314,7 +559,7 @@ window.createPopup = async function() {
   });
 
   // Hide dropdown when clicking outside
-  document.addEventListener('click', (e) => {
+  doc.addEventListener('click', (e) => {
     if (!popup_element?.contains(e.target)) {
       dropdownContainer.style.display = 'none';
       selectedIndex = -1;
@@ -323,15 +568,15 @@ window.createPopup = async function() {
   });
 
   // Add escape key handler
-  document.addEventListener('keydown', (e) => {
+  doc.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && popup_element) {
-      popup_element.remove();
+      iframe.remove();  // Remove iframe instead of just popup
       popup_element = null;
     }
   });
   
   input.focus();
-  console.log('+ Showed ArchiveBox popup');
+  console.log('+ Showed ArchiveBox popup in iframe');
 }
 
 window.createPopup();
