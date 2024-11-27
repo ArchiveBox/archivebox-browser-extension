@@ -9,7 +9,8 @@
     "tabs",
     "activeTab",
     "history",
-    "bookmarks"
+    "bookmarks",
+    "cookies"
   ],
   "host_permissions": [
     "<all_urls>"
