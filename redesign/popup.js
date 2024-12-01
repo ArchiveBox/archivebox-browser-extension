@@ -34,9 +34,56 @@ async function sendToArchiveBox(url, tags) {
       }),
     });
 
+    // TODO: Replace
+    // const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
+    //   method: "POST",
+    //   mode: "no-cors",
+    //   credentials: "omit",
+    //   body: JSON.stringify({
+    //     api_key: archivebox_api_key,
+    //     urls: [url],
+    //     tag: tags.join(","),
+    //     depth: 0,
+    //     update: false,
+    //     update_all: false,
+    //   }),
+    // });
+
+  //   private async sendUrls(urls: string[]): Promise<boolean> {
+  //   const baseUrl = await this.config.get(GlobalConfigKey.ArchiveBoxBaseUrl, "")
+  //   const tags = await this.config.get(GlobalConfigKey.Tags, "")
+
+  //   if (baseUrl === "") return
+
+  //   const granted = await this.requestPermissionsForHost(baseUrl)
+  //   if (!granted) return false
+
+    const body = new FormData()
+    body.append("url", [url])
+    body.append("tag", tags.join(","))
+    body.append("depth", "0")
+    body.append("parser", "url_list")
+
+  //   this.addQueuedUrlCount(urls.length)
+
+    // const response = await fetch(`${archivebox_server_url}/add/`, {
+    //   method: "post",
+    //   credentials: "include",
+    //   body
+    // })
+  // Instead of direct fetch
+  chrome.runtime.sendMessage({
+    type: 'archivebox_add',
+    url: archivebox_server_url,
+    body: body
+  });
+  //   return true
+  // }
+
     return {
-      ok: response.ok,
-      status: `${response.status} ${response.statusText}`
+      ok: true,
+      // status: `${response.status} ${response.statusText}`,
+      status: "foo bar",
     };
   } catch (err) {
     return { ok: false, status: `Connection failed ${err}` };
@@ -494,9 +541,11 @@ window.createPopup = async function() {
   input.addEventListener('input', updateDropdown);
 
   // Handle keyboard navigation
-  input.addEventListener('keydown', async (e) => {
-    if (e.key === 'Escape') {
-      dropdownContainer.style.display = 'none';
+  input.addEventListener("keydown", async (e) => {
+    if (e.key === "Escape") {
+      dropdownContainer.style.display = "none";
+      closePopup();
+
       selectedIndex = -1;
       return;
     }
@@ -557,6 +606,12 @@ window.createPopup = async function() {
         break;
     }
   });
+
+  window.closePopup = function () {
+    document.querySelector(".archive-box-iframe")?.remove();
+    window.popup_element = null;
+    console.log("close popup");
+  };
 
   // Handle click selection
   dropdownContainer.addEventListener('click', async (e) => {
