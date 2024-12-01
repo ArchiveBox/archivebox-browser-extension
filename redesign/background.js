@@ -29,3 +29,16 @@ chrome.action.onClicked.addListener(async (tab) => {
     files: ['popup.js']
   });
 });
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'archivebox_add') {
+    fetch(`${message.url}/add/`, {
+      method: "post",
+      credentials: "include",
+      body: message.body
+    })
+    .then(response => sendResponse(response))
+    .catch(error => sendResponse({error: error.message}));
+    return true; // Required for async response
+  }
+});
