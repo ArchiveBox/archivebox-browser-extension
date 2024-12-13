@@ -9,17 +9,8 @@ async function getAllTags() {
 }
 
 async function sendToArchiveBox(url, tags) {
-  const { archivebox_server_url, archivebox_api_key } = await chrome.storage.local.get([
-    'archivebox_server_url',
-    'archivebox_api_key'
-  ]);
-
-  if (!archivebox_server_url || !archivebox_api_key) {
-    return { ok: false, status: 'Server not configured' };
-  }
-
   try {
-    console.log('i Sending to ArchiveBox', { endpoint: `${archivebox_server_url}/api/v1/cli/add`, method: 'POST', url, tags });
+    console.log('i Sending to ArchiveBox', { method: 'POST', url, tags });
 
     const body = JSON.stringify({
       "urls": [url],
