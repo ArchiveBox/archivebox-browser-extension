@@ -36,8 +36,6 @@ async function sendToArchiveBox(url, tags) {
 
     const response = chrome.runtime.sendMessage({
       type: 'archivebox_add',
-      url: archivebox_server_url,
-      apiKey: archivebox_api_key,
       body: body
     });
 
