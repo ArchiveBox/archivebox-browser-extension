@@ -20,70 +20,31 @@ async function sendToArchiveBox(url, tags) {
 
   try {
     console.log('i Sending to ArchiveBox', { endpoint: `${archivebox_server_url}/api/v1/cli/add`, method: 'POST', url, tags });
-    const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
-      method: 'POST', 
-      mode: 'no-cors',
-      credentials: 'omit',
-      body: JSON.stringify({
-        api_key: archivebox_api_key,
-        urls: [url],
-        tag: tags.join(','),
-        depth: 0,
-        update: false,
-        update_all: false,
-      }),
+
+    const body = JSON.stringify({
+      "urls": [url],
+      "tag": tags.join(","),
+      "depth": 0,
+      "update": false,
+      "update_all": false,
+      "index_only": false,
+      "overwrite": false,
+      "init": false,
+      "extractors": "",
+      "parser": "auto"
+    })
+
+    const response = chrome.runtime.sendMessage({
+      type: 'archivebox_add',
+      url: archivebox_server_url,
+      apiKey: archivebox_api_key,
+      body: body
     });
 
-    // TODO: Replace
-    // const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
-    //   method: "POST",
-    //   mode: "no-cors",
-    //   credentials: "omit",
-    //   body: JSON.stringify({
-    //     api_key: archivebox_api_key,
-    //     urls: [url],
-    //     tag: tags.join(","),
-    //     depth: 0,
-    //     update: false,
-    //     update_all: false,
-    //   }),
-    // });
-
-  //   private async sendUrls(urls: string[]): Promise<boolean> {
-  //   const baseUrl = await this.config.get(GlobalConfigKey.ArchiveBoxBaseUrl, "")
-  //   const tags = await this.config.get(GlobalConfigKey.Tags, "")
-
-  //   if (baseUrl === "") return
-
-  //   const granted = await this.requestPermissionsForHost(baseUrl)
-  //   if (!granted) return false
-
-    const body = new FormData()
-    body.append("url", [url])
-    body.append("tag", tags.join(","))
-    body.append("depth", "0")
-    body.append("parser", "url_list")
-
-  //   this.addQueuedUrlCount(urls.length)
-
-    // const response = await fetch(`${archivebox_server_url}/add/`, {
-    //   method: "post",
-    //   credentials: "include",
-    //   body
-    // })
-  // Instead of direct fetch
-  chrome.runtime.sendMessage({
-    type: 'archivebox_add',
-    url: archivebox_server_url,
-    body: body
-  });
-  //   return true
-  // }
-
+    // NOTE: should we wait for snapshot completion before updating the popup?
     return {
       ok: true,
-      // status: `${response.status} ${response.statusText}`,
-      status: "foo bar",
+      status: "queued"
     };
   } catch (err) {
     return { ok: false, status: `Connection failed ${err}` };
