@@ -32,7 +32,10 @@ chrome.action.onClicked.addListener(async (tab) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'archivebox_add') {
-    fetch(`${message.url}/add/`, {
+    const response = fetch(`${message.url}/api/v1/cli/add`, {
+      headers: new Headers({
+        "x-archivebox-api-key": `${message.apiKey}`
+      }),
       method: "post",
       credentials: "include",
       body: message.body
