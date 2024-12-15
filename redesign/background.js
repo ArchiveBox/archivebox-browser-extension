@@ -29,3 +29,23 @@ chrome.action.onClicked.addListener(async (tab) => {
     files: ['popup.js']
   });
 });
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'archivebox_add') {
+    const { archivebox_server_url, archivebox_api_key } = await chrome.storage.local.get([
+        'archivebox_server_url',
+        'archivebox_api_key'
+    ]);
+    const response = fetch(`${archivebox_server_url}/api/v1/cli/add`, {
+      headers: new Headers({
+        "x-archivebox-api-key": `${archivebox_api_key}`
+      }),
+      method: "post",
+      credentials: "include",
+      body: message.body
+    })
+    .then(response => sendResponse(response))
+    .catch(error => sendResponse({error: error.message}));
+    return true; // Required for async response
+  }
+});

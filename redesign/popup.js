@@ -20,23 +20,29 @@ async function sendToArchiveBox(url, tags) {
 
   try {
     console.log('i Sending to ArchiveBox', { endpoint: `${archivebox_server_url}/api/v1/cli/add`, method: 'POST', url, tags });
-    const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
-      method: 'POST', 
-      mode: 'no-cors',
-      credentials: 'omit',
-      body: JSON.stringify({
-        api_key: archivebox_api_key,
-        urls: [url],
-        tag: tags.join(','),
-        depth: 0,
-        update: false,
-        update_all: false,
-      }),
+
+    const body = JSON.stringify({
+      "urls": [url],
+      "tag": tags.join(","),
+      "depth": 0,
+      "update": false,
+      "update_all": false,
+      "index_only": false,
+      "overwrite": false,
+      "init": false,
+      "extractors": "",
+      "parser": "auto"
+    })
+
+    const response = chrome.runtime.sendMessage({
+      type: 'archivebox_add',
+      body: body
     });
 
+    // NOTE: should we wait for snapshot completion before updating the popup?
     return {
-      ok: response.ok,
-      status: `${response.status} ${response.statusText}`
+      ok: true,
+      status: "queued"
     };
   } catch (err) {
     return { ok: false, status: `Connection failed ${err}` };
@@ -494,9 +500,11 @@ window.createPopup = async function() {
   input.addEventListener('input', updateDropdown);
 
   // Handle keyboard navigation
-  input.addEventListener('keydown', async (e) => {
-    if (e.key === 'Escape') {
-      dropdownContainer.style.display = 'none';
+  input.addEventListener("keydown", async (e) => {
+    if (e.key === "Escape") {
+      dropdownContainer.style.display = "none";
+      closePopup();
+
       selectedIndex = -1;
       return;
     }
@@ -557,6 +565,12 @@ window.createPopup = async function() {
         break;
     }
   });
+
+  window.closePopup = function () {
+    document.querySelector(".archive-box-iframe")?.remove();
+    window.popup_element = null;
+    console.log("close popup");
+  };
 
   // Handle click selection
   dropdownContainer.addEventListener('click', async (e) => {
