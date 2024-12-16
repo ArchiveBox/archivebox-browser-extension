@@ -34,7 +34,7 @@ async function sendToArchiveBox(url, tags) {
       console.log(`ArchiveBox request failed: ${response.errorMessage}`);
       return {
         ok: false,
-        status: response.error
+        status: response.errorMessage
       };
     }
 

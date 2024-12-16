@@ -38,7 +38,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       ], ({ archivebox_server_url, archivebox_api_key }) => {
 
         if (!archivebox_server_url || !archivebox_api_key) {
-          sendResponse({ success: false, error: "Server not configured"});
+          sendResponse({ success: false, errorMessage: "Server not configured"});
           return true;
         }
 
