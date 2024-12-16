@@ -32,20 +32,33 @@ chrome.action.onClicked.addListener(async (tab) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'archivebox_add') {
-    const { archivebox_server_url, archivebox_api_key } = await chrome.storage.local.get([
-        'archivebox_server_url',
-        'archivebox_api_key'
-    ]);
-    const response = fetch(`${archivebox_server_url}/api/v1/cli/add`, {
-      headers: new Headers({
-        "x-archivebox-api-key": `${archivebox_api_key}`
-      }),
-      method: "post",
-      credentials: "include",
-      body: message.body
-    })
-    .then(response => sendResponse(response))
-    .catch(error => sendResponse({error: error.message}));
-    return true; // Required for async response
+      chrome.storage.local.get([
+          'archivebox_server_url',
+          'archivebox_api_key'
+      ], ({ archivebox_server_url, archivebox_api_key }) => {
+
+        if (!archivebox_server_url || !archivebox_api_key) {
+          sendResponse({ success: false, errorMessage: "Server not configured"});
+          return true;
+        }
+
+        fetch(`${archivebox_server_url}/api/v1/cli/add`, {
+          headers: {
+            'x-archivebox-api-key': `${archivebox_api_key}`
+          },
+          method: 'post',
+          credentials: 'include',
+          body: message.body
+        })
+        .then(response => response.json())
+        .then(data => {
+          sendResponse({ success: true, data: data });
+        })
+        .catch(error => {
+          sendResponse({ success: false, errorMessage: error.message });
+        });
+      }
+    );
   }
+  return true;
 });

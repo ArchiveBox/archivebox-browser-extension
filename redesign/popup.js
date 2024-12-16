@@ -9,43 +9,42 @@ async function getAllTags() {
 }
 
 async function sendToArchiveBox(url, tags) {
-  const { archivebox_server_url, archivebox_api_key } = await chrome.storage.local.get([
-    'archivebox_server_url',
-    'archivebox_api_key'
-  ]);
-
-  if (!archivebox_server_url || !archivebox_api_key) {
-    return { ok: false, status: 'Server not configured' };
-  }
-
   try {
-    console.log('i Sending to ArchiveBox', { endpoint: `${archivebox_server_url}/api/v1/cli/add`, method: 'POST', url, tags });
+    console.log('i Sending to ArchiveBox', { method: 'POST', url, tags });
 
     const body = JSON.stringify({
-      "urls": [url],
-      "tag": tags.join(","),
-      "depth": 0,
-      "update": false,
-      "update_all": false,
-      "index_only": false,
-      "overwrite": false,
-      "init": false,
-      "extractors": "",
-      "parser": "auto"
-    })
-
-    const response = chrome.runtime.sendMessage({
-      type: 'archivebox_add',
-      body: body
+      urls: [url],
+      tag: tags.join(','),
+      depth: 0,
+      update: false,
+      update_all: false,
+      index_only: false,
+      overwrite: false,
+      init: false,
+      extractors: '',
+      parser: 'auto'
     });
 
-    // NOTE: should we wait for snapshot completion before updating the popup?
+    const response = await chrome.runtime.sendMessage({
+        type: 'archivebox_add',
+        body: body
+    });
+
+    if (!response.success) {
+      console.log(`ArchiveBox request failed: ${response.errorMessage}`);
+      return {
+        ok: false,
+        status: response.errorMessage
+      };
+    }
+
     return {
       ok: true,
-      status: "queued"
+      status: `${response.data.status} ${response.data.statusText}`
     };
-  } catch (err) {
-    return { ok: false, status: `Connection failed ${err}` };
+  } catch (error) {
+    console.log(`ArchiveBox request failed: ${error.message}`);
+    return { ok: false, status: `Failed to archive: ${error.message}` };
   }
 }
 
