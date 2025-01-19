@@ -30,8 +30,6 @@ chrome.action.onClicked.addListener(async (tab) => {
   });
 });
 
-
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'archivebox_add') {
       (async () => {
@@ -50,10 +48,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             });
 
             if (!archivebox_server_url || !archivebox_api_key) {
-              sendResponse({ success: false, errorMessage: 'Server not configured'});
-              return;
+              throw new Error('Server not configured.');
             }
 
+            // try ArchiveBox v0.8.0+ API endpoint first
             let response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
               headers: {
                 'x-archivebox-api-key': `${archivebox_api_key}`
@@ -63,9 +61,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               body: message.body
             })
 
+            // fall back to pre-v0.8.0 endpoint for backwards compatibility
             if (response.status === 404) {
               const parsedBody = JSON.parse(message.body);
-              const body = new FormData()
+              const body = new FormData();
 
               body.append("url", parsedBody.urls.join("\n"));
               body.append("tag", parsedBody.tags);
@@ -77,13 +76,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 method: "post",
                 credentials: "include",
                 body: body
-              })
+              });
 
               if (!response.ok) {
-                  throw new Error(`Request failed with status ${response.status}`)
+                  throw new Error(`Request failed with status ${response.status}`);
               }
             }
-            sendResponse({success: true, data: response.json()})
+            sendResponse({ success: true, data: await response.json() });
           }
           catch (error) {
             sendResponse({ success: false, errorMessage: error.message });
