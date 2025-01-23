@@ -47,22 +47,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               }
             });
 
-            if (!archivebox_server_url || !archivebox_api_key) {
+            if (!archivebox_server_url) {
               throw new Error('Server not configured.');
             }
 
+            let response = undefined;
             // try ArchiveBox v0.8.0+ API endpoint first
-            let response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
-              headers: {
-                'x-archivebox-api-key': `${archivebox_api_key}`
-              },
-              method: 'post',
-              credentials: 'include',
-              body: message.body
-            })
+            if (archivebox_api_key) {
+              response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
+                headers: {
+                  'x-archivebox-api-key': `${archivebox_api_key}`
+                },
+                method: 'post',
+                credentials: 'include',
+                body: message.body
+              })
+            }
 
             // fall back to pre-v0.8.0 endpoint for backwards compatibility
-            if (response.status === 404) {
+            if (response === undefined || response.status === 404) {
               const parsedBody = JSON.parse(message.body);
               const body = new FormData();
 
