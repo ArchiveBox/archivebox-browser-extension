@@ -85,7 +85,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                   throw new Error(`Request failed with status ${response.status}`);
               }
             }
-            sendResponse({ success: true, data: await response.json() });
+            sendResponse({ success: true, status: response.status, statusText: response.statusText });
           }
           catch (error) {
             sendResponse({ success: false, errorMessage: error.message });
