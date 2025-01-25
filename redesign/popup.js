@@ -25,26 +25,27 @@ async function sendToArchiveBox(url, tags) {
       parser: 'auto'
     });
 
-    const response = await chrome.runtime.sendMessage({
-        type: 'archivebox_add',
-        body: body
-    });
+    const response = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({
+          type: 'archivebox_add',
+          body: body
+      }, (response) => {
+          if (!response.success) {
+            console.log(`ArchiveBox request failed: ${response.errorMessage}`);
+            reject(`${response.errorMessage}`);
+          }
 
-    if (!response.success) {
-      console.log(`ArchiveBox request failed: ${response.errorMessage}`);
-      return {
-        ok: false,
-        status: response.errorMessage
-      };
-    }
+          resolve({
+            ok: true,
+            status: `${response.status} ${response.statusText}`
+          });
+        });
+    })
 
-    return {
-      ok: true,
-      status: `${response.status} ${response.statusText}`
-    };
+    return response;
   } catch (error) {
-    console.log(`ArchiveBox request failed: ${error.message}`);
-    return { ok: false, status: `Failed to archive: ${error.message}` };
+    console.log(`ArchiveBox request failed: ${error.message || error}`);
+    return { ok: false, status: `Failed to archive: ${error.message || error}` };
   }
 }
 
