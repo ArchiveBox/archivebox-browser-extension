@@ -80,10 +80,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 credentials: "include",
                 body: body
               });
-
-              if (!response.ok) {
-                  throw new Error(`Request failed with status ${response.status}`);
-              }
+            }
+            if (!response.ok) {
+                throw new Error(`Request failed with status ${response.status}`);
             }
             sendResponse({ success: true, status: response.status, statusText: response.statusText });
           }
