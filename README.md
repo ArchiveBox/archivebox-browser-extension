@@ -6,7 +6,7 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
 - Prevent link rot for important information!
 - Access important information even if you're offline
 
-*✨ Contributed by [TJ Horner (@tjhorner)](https://github.com/tjhorner)*
+*✨ Originally contributed by [TJ Horner (@tjhorner)](https://github.com/tjhorner), now maintained by the [ArchiveBox](https://github.com/ArchiveBox) team.*
 
 ## Download
 
