@@ -46,31 +46,28 @@ This is a browser extension that lets you send individual browser tabs or all UR
 
 If you wish to contribute to (or just build for yourself) this extension, you will need to download and install [Node.js](https://nodejs.org/en/).
 
-Once that's installed, navigate to this project's root and run `npm install` to install dependencies.
+```bash
+git clone https://github.com/ArchiveBox/archivebox-browser-extension
+cd archivebox-browser-extension/
 
-To build a production version (minified, optimized, etc.), run `npm run build`.
+npm install
+npm run build
 
-If you plan on making changes often, you can use the command `npm run dev` to automatically rebuild the extension as you modify files.
+# or for hot-reloading during development:
+npm run dev
+```
 
-Both commands will produce an output in the `dist` directory.
+Both commands will produce an output in the `dist/` directory, load that folder into Chrome or Firefox using their [Load Unpacked Extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) UI.
+
+Please open an issue to discuss any proposed changes *before* starting work on any PRs.
 
 ## Changelog
 
-#### 2024-01 Extension repo moved from `tjhorner/archivebox-exporter` to `Archivebox/archivebox-browser-extension`
-
-https://github.com/ArchiveBox/archivebox-extension
-
-#### 2021-09 Extension offically supported by ArchiveBox v0.6.2, no longer needed to run `:dev` branch
-
-https://github.com/tjhorner/ArchiveBox.git#temporary-add-api
-
-#### 2021-07 Initial extension published on Chrome and Mozilla web stores
-
-https://github.com/ArchiveBox/ArchiveBox/issues/577#issuecomment-872915877
-
-#### 2021-06 [@tjhorner](https://github.com/tjhorner) Created the initial `archivebox-exporter` extension
-
-https://github.com/ArchiveBox/ArchiveBox/issues/577
+- 2024-11 Development [started](https://github.com/ArchiveBox/archivebox-browser-extension/pull/31) on v2 extension with more advanced UI and tagging options
+- 2024-01 Extension repo moved from `tjhorner/archivebox-exporter` to `Archivebox/archivebox-browser-extension`
+- 2021-09 Extension offically supported by ArchiveBox v0.6.2, no longer needed to run `:dev` branch
+- 2021-07 Initial extension [published](https://github.com/ArchiveBox/ArchiveBox/issues/577#issuecomment-872915877) on Chrome and Mozilla web stores
+- 2021-06 [@tjhorner](https://github.com/tjhorner) [Created](https://github.com/ArchiveBox/ArchiveBox/issues/577) the initial `archivebox-exporter` extension
 
 ---
 
