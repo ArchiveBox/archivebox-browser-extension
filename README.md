@@ -1,19 +1,20 @@
 # 🗃 ArchiveBox Browser Extension
 
-This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers) that lets you automatically send pages from domains you specify to your ArchiveBox instance. This has a couple of benefits:
+This is a browser extension that lets you send individual browser tabs or all URLs matching certain patterns to your [ArchiveBox](https://github.com/ArchiveBox/ArchiveBox) instance for offline preservation. This has a couple of benefits:
 
-- You have a fulltext search of your browsing history ready at your fingertips
-- Prevent link rot for important information!
-- Access important information even if you're offline
+- Own your data: save the web content that matters to you most, protect against link rot
+- Protect your data: save offline copies of pages in common, durable formats that will last for generations
+- Use your data: collect and tag important bookmarks, full-text search through your browsing history, automatically push captured data into other systems using ArchiveBox's APIs
 
 *✨ Originally contributed by [TJ Horner (@tjhorner)](https://github.com/tjhorner), now maintained by the [ArchiveBox](https://github.com/ArchiveBox) team.*
 
 ## Download
 
 
-- <a href="https://chrome.google.com/webstore/detail/habonpimjphpdnmcfkaockjnffodikoj"><img src="https://github.com/user-attachments/assets/4ee7d4fb-e676-4a75-973d-ac029f265b86" height="30px"/> Chrome/Edge/Other Chromium</a>
-- <a href="https://addons.mozilla.org/firefox/addon/archivebox-exporter/"><img src="https://github.com/user-attachments/assets/8e2a969d-68d6-4bd6-8b10-d8b5a36757ec" height="30px"/> Firefox</a>
-- Safari *(not yet supported by this extension, use [Shortcuts](https://www.icloud.com/shortcuts/0d3a526e7d524447aa8c1bd63ac49014) instead)*
+- <a href="https://chrome.google.com/webstore/detail/habonpimjphpdnmcfkaockjnffodikoj"><img src="https://github.com/user-attachments/assets/4ee7d4fb-e676-4a75-973d-ac029f265b86" height="30px" align="top"/> Chrome / Brave / Edge / Other Chromium-based browsers</a>
+- <a href="https://addons.mozilla.org/firefox/addon/archivebox-exporter/"><img src="https://github.com/user-attachments/assets/8e2a969d-68d6-4bd6-8b10-d8b5a36757ec" height="30px" align="top"/> Firefox / Waterfox / Tor Browser / Other Firefox-based browsers</a>
+- <img src="https://github.com/user-attachments/assets/c20f8f8a-01f2-427b-ac75-ffddcb62953f" height="30px" align="top"/> Safari *(not yet supported, use [Save-to-ArchiveBox Shortcut](https://www.icloud.com/shortcuts/0d3a526e7d524447aa8c1bd63ac49014) instead)*
+
 
 ## Setup
 
