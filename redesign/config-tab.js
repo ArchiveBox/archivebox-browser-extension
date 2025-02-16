@@ -21,27 +21,36 @@ export async function initializeConfigTab() {
   document.getElementById('testServer').addEventListener('click', async () => {
     const statusIndicator = document.getElementById('serverStatus');
     const statusText = document.getElementById('serverStatusText');
-    
+
+    const updateStatus = (success, message) => {
+      statusIndicator.className = success ? 'status-indicator status-success' : 'status-indicator status-error';
+      statusText.textContent = message;
+      statusText.className = success ? 'text-success' : 'text-danger';
+    };
+
     try {
-      const response = await fetch(`${serverUrl.value}/api/`, {
+      let response = await fetch(`${serverUrl.value}/api/`, {
         method: 'GET',
         mode: 'cors',
         credentials: 'omit'
       });
       
+      // fall back to pre-v0.8.0 endpoint for backwards compatibility
+      if (response.status === 404) {
+        response = await fetch(`${serverUrl.value}`, {
+          method: 'GET',
+          mode: 'cors',
+          credentials: 'omit'
+        });
+      }
+
       if (response.ok) {
-        statusIndicator.className = 'status-indicator status-success';
-        statusText.textContent = '✓ Server is reachable';
-        statusText.className = 'text-success';
+        updateStatus(true, '✓ Server is reachable');
       } else {
-        statusIndicator.className = 'status-indicator status-error';
-        statusText.textContent = `✗ Server error: ${response.status} ${response.statusText}`;
-        statusText.className = 'text-danger';
+        updateStatus(false, `✗ Server error: ${response.status} ${response.statusText}`);
       }
     } catch (err) {
-      statusIndicator.className = 'status-indicator status-error';
-      statusText.textContent = `✗ Connection failed: ${err.message}`;
-      statusText.className = 'text-danger';
+      updateStatus(false, `✗ Connection failed: ${err.message}`);
     }
   });
 

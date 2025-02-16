@@ -32,33 +32,64 @@ chrome.action.onClicked.addListener(async (tab) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'archivebox_add') {
-      chrome.storage.local.get([
-          'archivebox_server_url',
-          'archivebox_api_key'
-      ], ({ archivebox_server_url, archivebox_api_key }) => {
+      (async () => {
+          try {
+            const { archivebox_server_url, archivebox_api_key } = await new Promise((resolve, reject) => {
+              const vals = chrome.storage.local.get([
+                'archivebox_server_url',
+                'archivebox_api_key'
+              ]);
 
-        if (!archivebox_server_url || !archivebox_api_key) {
-          sendResponse({ success: false, errorMessage: "Server not configured"});
-          return true;
-        }
+              if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+              } else {
+                resolve(vals);
+              }
+            });
 
-        fetch(`${archivebox_server_url}/api/v1/cli/add`, {
-          headers: {
-            'x-archivebox-api-key': `${archivebox_api_key}`
-          },
-          method: 'post',
-          credentials: 'include',
-          body: message.body
-        })
-        .then(response => response.json())
-        .then(data => {
-          sendResponse({ success: true, data: data });
-        })
-        .catch(error => {
-          sendResponse({ success: false, errorMessage: error.message });
-        });
-      }
-    );
+            if (!archivebox_server_url) {
+              throw new Error('Server not configured.');
+            }
+
+            let response = undefined;
+            // try ArchiveBox v0.8.0+ API endpoint first
+            if (archivebox_api_key) {
+              response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
+                headers: {
+                  'x-archivebox-api-key': `${archivebox_api_key}`
+                },
+                method: 'post',
+                credentials: 'include',
+                body: message.body
+              })
+            }
+
+            // fall back to pre-v0.8.0 endpoint for backwards compatibility
+            if (response === undefined || response.status === 404) {
+              const parsedBody = JSON.parse(message.body);
+              const body = new FormData();
+
+              body.append("url", parsedBody.urls.join("\n"));
+              body.append("tag", parsedBody.tags);
+              body.append("depth", parsedBody.depth);
+              body.append("parser", "url_list");
+              body.append("parser", parsedBody.parser);
+
+              response = await fetch(`${archivebox_server_url}/add/`, {
+                method: "post",
+                credentials: "include",
+                body: body
+              });
+            }
+            if (!response.ok) {
+                throw new Error(`Request failed with status ${response.status}`);
+            }
+            sendResponse({ success: true, status: response.status, statusText: response.statusText });
+          }
+          catch (error) {
+            sendResponse({ success: false, errorMessage: error.message });
+          }
+      })();
   }
   return true;
 });

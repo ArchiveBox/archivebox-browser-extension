@@ -25,26 +25,27 @@ async function sendToArchiveBox(url, tags) {
       parser: 'auto'
     });
 
-    const response = await chrome.runtime.sendMessage({
-        type: 'archivebox_add',
-        body: body
-    });
+    const response = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({
+          type: 'archivebox_add',
+          body: body
+      }, (response) => {
+          if (!response.success) {
+            console.log(`ArchiveBox request failed: ${response.errorMessage}`);
+            reject(`${response.errorMessage}`);
+          }
 
-    if (!response.success) {
-      console.log(`ArchiveBox request failed: ${response.errorMessage}`);
-      return {
-        ok: false,
-        status: response.errorMessage
-      };
-    }
+          resolve({
+            ok: true,
+            status: `${response.status} ${response.statusText}`
+          });
+        });
+    })
 
-    return {
-      ok: true,
-      status: `${response.data.status} ${response.data.statusText}`
-    };
+    return response;
   } catch (error) {
-    console.log(`ArchiveBox request failed: ${error.message}`);
-    return { ok: false, status: `Failed to archive: ${error.message}` };
+    console.log(`ArchiveBox request failed: ${error.message || error}`);
+    return { ok: false, status: `Failed to archive: ${error.message || error}` };
   }
 }
 
@@ -216,11 +217,14 @@ window.createPopup = async function() {
       width: 100%;
       text-align: center;
       margin-top: 5px;
-      animation: fadeOut 2.5s ease-in-out forwards;
       color: #fefefe;
       overflow: hidden;
       font-size: 11px;
-      opacity: 0.2;
+      opacity: 1.0;
+    }
+
+    .archive-box-popup small.fade-out {
+      animation: fadeOut 2.5s ease-in-out forwards;
     }
     
     .archive-box-popup img {
@@ -362,18 +366,7 @@ window.createPopup = async function() {
     .status-indicator.error {
       background: #dc3545;
     }
-    
-    .archive-box-popup small {
-      display: block;
-      width: 100%;
-      text-align: center;
-      margin-top: 5px;
-      color: #fefefe;
-      overflow: hidden;
-      font-size: 11px;
-      opacity: 0.8;
-    }
-    
+
     .ARCHIVEBOX__autocomplete-dropdown {
       background: white;
       border: 1px solid #ddd;
@@ -404,7 +397,7 @@ window.createPopup = async function() {
     <a href="#" class="options-link" title="Open in ArchiveBox">🏛️</a> <input type="search" placeholder="Add tags + press ⏎   |   ⎋ to close">
     <br/>
     <div class="ARCHIVEBOX__current-tags"></div><div class="ARCHIVEBOX__tag-suggestions"></div><br/>
-    <small>
+    <small class="fade-out">
       <span class="status-indicator"></span>
       Saved
     </small>
@@ -627,6 +620,11 @@ window.createPopup = async function() {
       <span class="status-indicator ${result.ok ? 'success' : 'error'}"></span>
       ${result.status}
     `;
+
+    // Reset animation
+    status_div.classList.remove('fade-out');
+    void status_div.offsetWidth; // Trigger reflow
+    status_div.classList.add('fade-out');
 
     // Add click handlers for removing tags
     current_tags_div.querySelectorAll('.tag-badge.current').forEach(badge => {
