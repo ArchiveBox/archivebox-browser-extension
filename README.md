@@ -10,8 +10,10 @@ This is a browser extension (works in Chrome, Firefox, and Chrome-like browsers)
 
 ## Download
 
-- [Chrome/Edge/Other Chromium](https://chrome.google.com/webstore/detail/habonpimjphpdnmcfkaockjnffodikoj)
-- [Firefox](https://addons.mozilla.org/firefox/addon/archivebox-exporter/)
+
+- <a href="https://chrome.google.com/webstore/detail/habonpimjphpdnmcfkaockjnffodikoj"><img src="https://github.com/user-attachments/assets/4ee7d4fb-e676-4a75-973d-ac029f265b86" height="30px"/> Chrome/Edge/Other Chromium</a>
+- <a href="https://addons.mozilla.org/firefox/addon/archivebox-exporter/"><img src="https://github.com/user-attachments/assets/8e2a969d-68d6-4bd6-8b10-d8b5a36757ec" height="30px"/> Firefox</a>
+- Safari *(not yet supported by this extension, use [Shortcuts](https://www.icloud.com/shortcuts/0d3a526e7d524447aa8c1bd63ac49014) instead)*
 
 ## Setup
 
