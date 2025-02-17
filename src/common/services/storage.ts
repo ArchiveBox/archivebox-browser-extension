@@ -3,7 +3,7 @@ import IStorage from "../interfaces/storage"
 export default class ChromeSyncStorage implements IStorage {
   async get<T>(key: string, defaultValue: T): Promise<T> {
     return new Promise((resolve, reject) => {
-      chrome.storage.sync.get(key, items => {
+      chrome.storage.local.get(key, items => {
         if (chrome.runtime.lastError) return reject(chrome.runtime.lastError)
         resolve(items[key] || defaultValue)
       })
@@ -12,7 +12,7 @@ export default class ChromeSyncStorage implements IStorage {
 
   async set<T>(key: string, value: T): Promise<void> {
     return new Promise((resolve, reject) => {
-      chrome.storage.sync.set({
+      chrome.storage.local.set({
         [key]: value
       }, () => {
         if (chrome.runtime.lastError) return reject(chrome.runtime.lastError)
@@ -23,7 +23,7 @@ export default class ChromeSyncStorage implements IStorage {
 
   async remove(key: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      chrome.storage.sync.remove(key, () => {
+      chrome.storage.local.remove(key, () => {
         if (chrome.runtime.lastError) return reject(chrome.runtime.lastError)
         resolve()
       })

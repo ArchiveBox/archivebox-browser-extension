@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "version": "0.1.2",
+  "name": "ArchiveBox Collector",
+  "description": "Collect URLs with timestamps and tags for ArchiveBox",
+  "permissions": [
+    "storage",
+    "scripting",
+    "tabs",
+    "activeTab",
+    "history",
+    "bookmarks",
+    "cookies"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_title": "Save to ArchiveBox",
+    "default_icon": {
+      "16": "icons/128.png",
+      "48": "icons/128.png",
+      "128": "icons/128.png"
+    }
+  },
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "web_accessible_resources": [{
+    "resources": ["popup.css", "popup.js"],
+    "matches": ["<all_urls>"]
+  }],
+  "commands": {
+    "save-to-archivebox-action": {
+      "description": "Save URL to ArchiveBox Collector",
+      "suggested_key": {
+        "default": "Ctrl+Shift+X",
+        "mac": "Command+Shift+X"
+      }
+    }
+  }
+}
