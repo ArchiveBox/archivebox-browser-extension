@@ -652,6 +652,12 @@ export function initializeEntriesTab() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   });
+
+  // Delete entry
+  document.getElementById('deleteFiltered').addEventListener('click', async () => {
+    const filterText = document.getElementById('filterInput').value.toLowerCase();
+    await handleDeleteFiltered(filterText);
+  });
 }
 
 // // Helper function to sync a single entry to ArchiveBox
