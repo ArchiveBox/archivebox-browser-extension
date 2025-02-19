@@ -2,6 +2,19 @@
 window.popup_element = null;  // Global reference to popup element
 window.hide_timer = null;
 
+window.closePopup = function () {
+  document.querySelector(".archive-box-iframe")?.remove();
+  window.popup_element = null;
+  console.log("close popup");
+};
+
+// handle escape key when popup doesn't have focus
+document.addEventListener('keydown', (e)=>{
+  if (e.key == 'Escape') {
+    closePopup();
+  }
+});
+
 async function getAllTags() {
   const { entries = [] } = await chrome.storage.local.get('entries');
   return [...new Set(entries.flatMap(entry => entry.tags))]
@@ -492,12 +505,14 @@ window.createPopup = async function() {
   input.addEventListener('input', updateDropdown);
 
   // Handle keyboard navigation
+
+  // handle escape key when popup has focus
   input.addEventListener("keydown", async (e) => {
     if (e.key === "Escape") {
+      e.stopPropagation();
       dropdownContainer.style.display = "none";
-      closePopup();
-
       selectedIndex = -1;
+      closePopup();
       return;
     }
 
@@ -558,11 +573,6 @@ window.createPopup = async function() {
     }
   });
 
-  window.closePopup = function () {
-    document.querySelector(".archive-box-iframe")?.remove();
-    window.popup_element = null;
-    console.log("close popup");
-  };
 
   // Handle click selection
   dropdownContainer.addEventListener('click', async (e) => {
