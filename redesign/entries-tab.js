@@ -391,7 +391,8 @@ export function initializeEntriesTab() {
 
   // Modify existing renderEntries function
   async function renderEntries() {
-    const { entries = [] } = await chrome.storage.local.get('entries');
+    const { entries = [], archivebox_server_url } = await chrome.storage.local.get(['entries', 'archivebox_server_url']);
+
     const filterText = document.getElementById('filterInput').value.toLowerCase();
     const entriesList = document.getElementById('entriesList');
     
@@ -422,10 +423,21 @@ export function initializeEntriesTab() {
           text-overflow: ellipsis;
           display: inline-block;
         }
+        .entry-title-line {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
         .entry-title {
           font-size: 0.9em;
           color: #666;
           margin-bottom: 4px;
+        }
+        .entry-link-to-archivebox {
+          font-size: 0.7em;
+          color: #888;
+          padding-right: 20px;
         }
         .entry-timestamp {
           font-size: 0.8em;
@@ -454,7 +466,12 @@ export function initializeEntriesTab() {
                value="${entry.id}"
                ${selectedEntries.has(entry.id) ? 'checked' : ''}>
         <div class="entry-content flex-grow-1">
-          <div class="entry-title">${entry.title || 'Untitled'}</div>
+          <div class="entry-title-line">
+            <div class="entry-title">${entry.title || 'Untitled'}</div>
+            <div class="entry-link-to-archivebox">
+              <a href=${archivebox_server_url}/archive/${entry.url}>View entry</a>
+            </div>
+          </div>
           <div class="entry-url-line">
             <img class="favicon" src="${entry.favicon || 'icons/128.png'}" 
                  onerror="this.src='icons/128.png'"
