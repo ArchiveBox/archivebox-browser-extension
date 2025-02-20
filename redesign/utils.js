@@ -17,41 +17,59 @@ export function filterEntries(entries, filterText) {
   });
 }
 
-export async function syncToArchiveBox(entry) {
-  const { archivebox_server_url, archivebox_api_key } = await chrome.storage.local.get([
-    'archivebox_server_url',
-    'archivebox_api_key'
-  ]);
-
-  if (!archivebox_server_url || !archivebox_api_key) {
-    return { ok: false, status: 'Server not configured' };
-  }
-
+export async function addToArchiveBox(addCommandArgs) {
   try {
-    const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
-      method: 'POST',
-      mode: 'cors',
-      credentials: 'omit',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        api_key: archivebox_api_key,
-        urls: [entry.url],
-        tag: entry.tags.join(','),
-        depth: 0,
-        update: false,
-        update_all: false,
-      }),
+    const { archivebox_server_url, archivebox_api_key } = await new Promise((resolve, reject) => {
+      const vals = chrome.storage.local.get([
+        'archivebox_server_url',
+        'archivebox_api_key'
+      ]);
+
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+      } else {
+        resolve(vals);
+      }
     });
 
-    return {
-      ok: response.ok,
-      status: `${response.status} ${response.statusText}`
-    };
-  } catch (err) {
-    return { ok: false, status: `Connection failed ${err}` };
+    if (!archivebox_server_url) {
+      throw new Error('Server not configured.');
+    }
+
+    let response = undefined;
+    // try ArchiveBox v0.8.0+ API endpoint first
+    if (archivebox_api_key) {
+      response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
+        headers: {
+          'x-archivebox-api-key': `${archivebox_api_key}`
+        },
+        method: 'post',
+        credentials: 'include',
+        body: addCommandArgs
+      });
+    }
+
+    // fall back to pre-v0.8.0 endpoint for backwards compatibility
+    if (response === undefined || response.status === 404) {
+      const parsedBody = JSON.parse(message.body);
+      const body = new FormData();
+
+      body.append("url", parsedBody.urls.join("\n"));
+      body.append("tag", parsedBody.tags);
+
+      response = await fetch(`${archivebox_server_url}/add/`, {
+        method: "post",
+        credentials: "include",
+        body: body
+      });
+    }
+
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+    return {ok: response.ok, status: response.status, statusText: response.statusText};
+  } catch (e) {
+    return {ok: false, errorMessage: e.message};
   }
 }
 
