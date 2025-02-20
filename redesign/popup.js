@@ -25,40 +25,28 @@ async function sendToArchiveBox(url, tags) {
   try {
     console.log('i Sending to ArchiveBox', { method: 'POST', url, tags });
 
-    const body = JSON.stringify({
+    const addCommandArgs = JSON.stringify({
       urls: [url],
       tag: tags.join(','),
-      depth: 0,
-      update: false,
-      update_all: false,
-      index_only: false,
-      overwrite: false,
-      init: false,
-      extractors: '',
-      parser: 'auto'
     });
 
     const response = await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
-          type: 'archivebox_add',
-          body: body
-      }, (response) => {
-          if (!response.success) {
-            console.log(`ArchiveBox request failed: ${response.errorMessage}`);
-            reject(`${response.errorMessage}`);
-          }
+        type: 'archivebox_add',
+        body: addCommandArgs
+      }, (result) => {
+        if (!result.ok) {
+          console.log(`ArchiveBox request failed: ${result.errorMessage}`);
+          reject(`${result.errorMessage}`);
+        }
 
-          resolve({
-            ok: true,
-            status: `${response.status} ${response.statusText}`
-          });
-        });
+        resolve(result);
+      });
     })
-
-    return response;
+    return { ok: response.ok, status: `${response.status} ${response.statusText}`};
   } catch (error) {
-    console.log(`ArchiveBox request failed: ${error.message || error}`);
-    return { ok: false, status: `Failed to archive: ${error.message || error}` };
+    console.log(`ArchiveBox request failed: ${error}`);
+    return { ok: false, status: `Failed to archive: ${error}` };
   }
 }
 
