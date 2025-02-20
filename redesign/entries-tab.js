@@ -468,9 +468,15 @@ export function initializeEntriesTab() {
         <div class="entry-content flex-grow-1">
           <div class="entry-title-line">
             <div class="entry-title">${entry.title || 'Untitled'}</div>
-            <div class="entry-link-to-archivebox">
-              <a href=${archivebox_server_url}/archive/${entry.url}>View entry</a>
-            </div>
+            ${(()=>{
+              return archivebox_server_url ?
+                `<div class="entry-link-to-archivebox">
+                   <a href=${archivebox_server_url}/archive/${entry.url}>
+                     View entry
+                   </a>
+                 </div>`
+                : '' })()
+            }
           </div>
           <div class="entry-url-line">
             <img class="favicon" src="${entry.favicon || 'icons/128.png'}" 
