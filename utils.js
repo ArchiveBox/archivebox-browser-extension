@@ -51,11 +51,14 @@ export async function addToArchiveBox(addCommandArgs) {
 
     // fall back to pre-v0.8.0 endpoint for backwards compatibility
     if (response === undefined || response.status === 404) {
-      const parsedBody = JSON.parse(message.body);
       const body = new FormData();
 
-      body.append("url", parsedBody.urls.join("\n"));
-      body.append("tag", parsedBody.tags);
+      const urls = addCommandArgs && addCommandArgs.urls ? addCommandArgs.urls.join("\n") : "";
+      const tags = addCommandArgs && addCommandArgs.tags ? addCommandArgs.tags : "";
+
+      body.append("url", urls);
+      body.append("tag", tags);
+
 
       response = await fetch(`${archivebox_server_url}/add/`, {
         method: "post",
