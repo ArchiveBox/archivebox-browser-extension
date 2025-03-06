@@ -197,9 +197,9 @@ async function syncToArchiveBox(entry) {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
+        'x-archivebox-api-key': archivebox_api_key,
       },
       body: JSON.stringify({
-        api_key: archivebox_api_key,
         urls: [entry.url],
         tag: entry.tags.join(','),
         depth: 0,
