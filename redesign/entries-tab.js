@@ -1,4 +1,4 @@
-import { filterEntries, syncToArchiveBox, downloadCsv, downloadJson } from './utils.js';
+import { filterEntries, addToArchiveBox, downloadCsv, downloadJson } from './utils.js';
 
 export async function renderEntries(filterText = '', tagFilter = '') {
   const { entries = [] } = await chrome.storage.local.get('entries');
@@ -47,81 +47,6 @@ export async function renderEntries(filterText = '', tagFilter = '') {
       renderEntries(tagText);
     });
   });
-}
-
-export async function handleDeleteFiltered(filterText = '') {
-  const { entries = [] } = await chrome.storage.local.get('entries');
-  const filteredEntries = filterEntries(entries, filterText);
-  
-  if (!filteredEntries.length) {
-    alert('No entries to delete');
-    return;
-  }
-
-  const message = filterText 
-    ? `Delete ${filteredEntries.length} filtered entries?` 
-    : `Delete all ${entries.length} entries?`;
-
-  if (!confirm(message)) return;
-
-  // Get IDs of entries to delete
-  const idsToDelete = new Set(filteredEntries.map(e => e.id));
-  
-  // Keep only entries not in the filtered set
-  const remainingEntries = entries.filter(e => !idsToDelete.has(e.id));
-  
-  // Save remaining entries
-  await chrome.storage.local.set({ entries: remainingEntries });
-  
-  // Refresh the view
-  await renderEntries(filterText);
-}
-
-export async function handleSync(filterText = '') {
-  const { entries = [] } = await chrome.storage.local.get('entries');
-  const filteredEntries = filterEntries(entries, filterText);
-  
-  if (!filteredEntries.length) {
-    alert('No entries to sync');
-    return;
-  }
-
-  const syncBtn = document.getElementById('syncFiltered');
-  syncBtn.disabled = true;
-  syncBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Syncing...';
-
-  // Process entries one at a time
-  for (const entry of filteredEntries) {
-    const row = document.getElementById(entry.id);
-    if (!row) continue;
-
-    // Add status indicator if it doesn't exist
-    let statusIndicator = row.querySelector('.sync-status');
-    if (!statusIndicator) {
-      statusIndicator = document.createElement('span');
-      statusIndicator.className = 'sync-status status-indicator';
-      statusIndicator.style.marginLeft = '10px';
-      row.querySelector('code').appendChild(statusIndicator);
-    }
-
-    // Update status to "in progress"
-    statusIndicator.className = 'sync-status status-indicator';
-    statusIndicator.style.backgroundColor = '#ffc107'; // yellow
-
-    // Send to ArchiveBox
-    const result = await syncToArchiveBox(entry);
-    
-    // Update status indicator
-    statusIndicator.className = `sync-status status-indicator status-${result.ok ? 'success' : 'error'}`;
-    statusIndicator.title = result.status;
-
-    // Wait 1s before next request
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
-
-  // Reset button state
-  syncBtn.disabled = false;
-  syncBtn.textContent = 'SYNC';
 }
 
 export function initializeEntriesTab() {
@@ -466,7 +391,8 @@ export function initializeEntriesTab() {
 
   // Modify existing renderEntries function
   async function renderEntries() {
-    const { entries = [] } = await chrome.storage.local.get('entries');
+    const { entries = [], archivebox_server_url } = await chrome.storage.local.get(['entries', 'archivebox_server_url']);
+
     const filterText = document.getElementById('filterInput').value.toLowerCase();
     const entriesList = document.getElementById('entriesList');
     
@@ -497,10 +423,21 @@ export function initializeEntriesTab() {
           text-overflow: ellipsis;
           display: inline-block;
         }
+        .entry-title-line {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
         .entry-title {
           font-size: 0.9em;
           color: #666;
           margin-bottom: 4px;
+        }
+        .entry-link-to-archivebox {
+          font-size: 0.7em;
+          color: #888;
+          padding-right: 20px;
         }
         .entry-timestamp {
           font-size: 0.8em;
@@ -529,7 +466,18 @@ export function initializeEntriesTab() {
                value="${entry.id}"
                ${selectedEntries.has(entry.id) ? 'checked' : ''}>
         <div class="entry-content flex-grow-1">
-          <div class="entry-title">${entry.title || 'Untitled'}</div>
+          <div class="entry-title-line">
+            <div class="entry-title">${entry.title || 'Untitled'}</div>
+            ${(()=>{
+              return archivebox_server_url ?
+                `<div class="entry-link-to-archivebox">
+                   <a href=${archivebox_server_url}/archive/${entry.url}>
+                     View entry
+                   </a>
+                 </div>`
+                : '' })()
+            }
+          </div>
           <div class="entry-url-line">
             <img class="favicon" src="${entry.favicon || 'icons/128.png'}" 
                  onerror="this.src='icons/128.png'"
@@ -652,6 +600,78 @@ export function initializeEntriesTab() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   });
+
+  // Delete entries
+  document.getElementById('deleteFiltered').addEventListener('click', async () => {
+    const { entries = [] } = await chrome.storage.local.get('entries');
+    const selectedItems = entries.filter(e => selectedEntries.has(e.id));
+    console.log(`deleting ${selectedItems.length} items from local storage`)
+
+    if (!selectedItems.length) {
+      alert('No entries to delete');
+      return;
+    }
+
+    const message = `Delete ${selectedItems.length} entries?`
+
+    if (!confirm(message)) return;
+
+    const idsToDelete = new Set(selectedItems.map(e => e.id));
+    const remainingEntries = entries.filter(e => !idsToDelete.has(e.id));
+    await chrome.storage.local.set({ entries: remainingEntries });
+
+    // Refresh the view
+    await renderEntries('');
+  });
+
+  // Sync entries
+  document.getElementById('syncFiltered').addEventListener('click', async () => {
+    const { entries = [] } = await chrome.storage.local.get('entries');
+    const selectedItems = entries.filter(e => selectedEntries.has(e.id));
+    console.log(`syncing ${selectedItems.length} items to ArchiveBox server`)
+
+    if (!selectedItems.length) {
+      alert('No selectedItems to sync');
+      return;
+    }
+
+    const syncBtn = document.getElementById('syncFiltered');
+    syncBtn.disabled = true;
+    syncBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Syncing...';
+
+    // Process selectedItems one at a time
+    for (const item of selectedItems) {
+      const row = document.querySelector(`input[value="${item.id}"]`);
+      if (!row) continue;
+
+      // Add status indicator if it doesn't exist
+      let statusIndicator = row.querySelector('.sync-status');
+      if (!statusIndicator) {
+        statusIndicator = document.createElement('span');
+        statusIndicator.className = 'sync-status status-indicator';
+        statusIndicator.style.marginLeft = '10px';
+        row.parentElement.querySelector('.entry-title').appendChild(statusIndicator);
+      }
+
+      // Update status to "in progress"
+      statusIndicator.className = 'sync-status status-indicator';
+      statusIndicator.style.backgroundColor = '#ffc107'; // yellow
+
+      // Send to ArchiveBox
+      const addCommandArgs = JSON.stringify({urls: [item.url], tag: item.tags.join(',')});
+      const response = await addToArchiveBox(addCommandArgs);
+
+      // Update status indicator
+      statusIndicator.className = `sync-status status-indicator status-${response.ok ? 'success' : 'error'}`;
+      statusIndicator.title = response.status;
+
+      // Wait 1s before next request
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    // Reset button state
+    syncBtn.disabled = false;
+    syncBtn.textContent = 'SYNC';  });
 }
 
 // // Helper function to sync a single entry to ArchiveBox

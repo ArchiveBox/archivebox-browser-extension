@@ -2,6 +2,19 @@
 window.popup_element = null;  // Global reference to popup element
 window.hide_timer = null;
 
+window.closePopup = function () {
+  document.querySelector(".archive-box-iframe")?.remove();
+  window.popup_element = null;
+  console.log("close popup");
+};
+
+// handle escape key when popup doesn't have focus
+document.addEventListener('keydown', (e)=>{
+  if (e.key == 'Escape') {
+    closePopup();
+  }
+});
+
 async function getAllTags() {
   const { entries = [] } = await chrome.storage.local.get('entries');
   return [...new Set(entries.flatMap(entry => entry.tags))]
@@ -12,40 +25,28 @@ async function sendToArchiveBox(url, tags) {
   try {
     console.log('i Sending to ArchiveBox', { method: 'POST', url, tags });
 
-    const body = JSON.stringify({
+    const addCommandArgs = JSON.stringify({
       urls: [url],
       tag: tags.join(','),
-      depth: 0,
-      update: false,
-      update_all: false,
-      index_only: false,
-      overwrite: false,
-      init: false,
-      extractors: '',
-      parser: 'auto'
     });
 
     const response = await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
-          type: 'archivebox_add',
-          body: body
-      }, (response) => {
-          if (!response.success) {
-            console.log(`ArchiveBox request failed: ${response.errorMessage}`);
-            reject(`${response.errorMessage}`);
-          }
+        type: 'archivebox_add',
+        body: addCommandArgs
+      }, (result) => {
+        if (!result.ok) {
+          console.log(`ArchiveBox request failed: ${result.errorMessage}`);
+          reject(`${result.errorMessage}`);
+        }
 
-          resolve({
-            ok: true,
-            status: `${response.status} ${response.statusText}`
-          });
-        });
+        resolve(result);
+      });
     })
-
-    return response;
+    return { ok: response.ok, status: `${response.status} ${response.statusText}`};
   } catch (error) {
-    console.log(`ArchiveBox request failed: ${error.message || error}`);
-    return { ok: false, status: `Failed to archive: ${error.message || error}` };
+    console.log(`ArchiveBox request failed: ${error}`);
+    return { ok: false, status: `Failed to archive: ${error}` };
   }
 }
 
@@ -492,12 +493,14 @@ window.createPopup = async function() {
   input.addEventListener('input', updateDropdown);
 
   // Handle keyboard navigation
+
+  // handle escape key when popup has focus
   input.addEventListener("keydown", async (e) => {
     if (e.key === "Escape") {
+      e.stopPropagation();
       dropdownContainer.style.display = "none";
-      closePopup();
-
       selectedIndex = -1;
+      closePopup();
       return;
     }
 
@@ -558,11 +561,6 @@ window.createPopup = async function() {
     }
   });
 
-  window.closePopup = function () {
-    document.querySelector(".archive-box-iframe")?.remove();
-    window.popup_element = null;
-    console.log("close popup");
-  };
 
   // Handle click selection
   dropdownContainer.addEventListener('click', async (e) => {
