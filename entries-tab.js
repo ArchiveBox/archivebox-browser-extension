@@ -479,8 +479,8 @@ export function initializeEntriesTab() {
             }
           </div>
           <div class="entry-url-line">
-            <img class="favicon" src="${entry.favicon || 'icons/128.png'}" 
-                 onerror="this.src='icons/128.png'"
+            <img class="favicon" src="${entry.favicon || 'static/icon128.png'}"
+                 onerror="this.src='static/icon128.png'"
                  width="16" height="16">
             <code class="entry-url">${entry.url}</code>
             <span class="entry-timestamp">
