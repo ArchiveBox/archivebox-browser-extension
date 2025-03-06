@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "version": "0.1.2",
-  "name": "ArchiveBox Collector",
+  "version": "2.1.1",
+  "name": "ArchiveBox",
   "description": "Collect URLs with timestamps and tags for ArchiveBox",
   "permissions": [
     "storage",
@@ -34,7 +34,7 @@
   }],
   "commands": {
     "save-to-archivebox-action": {
-      "description": "Save URL to ArchiveBox Collector",
+      "description": "Save URL to ArchiveBox",
       "suggested_key": {
         "default": "Ctrl+Shift+X",
         "mac": "Command+Shift+X"
