@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>ArchiveBox Collector - Options</title>
+  <meta charset="UTF-8">
+  <link href="bootstrap.min.css" rel="stylesheet">
+  <style>
+    .list-group-item code {
+      background-color: #fdfaff;
+      padding: 3px 10px;
+      font-size: 13px;
+      border-radius: 4px;
+      text-overflow: ellipsis;
+      width: 96%;
+      white-space: nowrap;
+      display: inline-block;
+      overflow: hidden;
+      padding-left: 26px;
+      border-radius: 10px 4px 4px 10px;
+      margin-left: -26px;
+      z-index: 200;
+      position: relative;
+    }
+    .list-group-item img.favicon {
+      vertical-align: 1px;
+      margin-right: 4px; 
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      position: relative;
+      z-index: 400;
+    }
+    .container-full {
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+    }
+    input[type=search]::-webkit-search-cancel-button {
+        -webkit-appearance: searchfield-cancel-button;
+    }
+    .col-lg-7 {
+      padding-bottom: 0px;
+      margin-bottom: 0px;
+    }
+    .nav-tabs {
+      margin-bottom: 20px;
+    }
+
+    .form-text {
+      font-size: 0.85em;
+      color: #666;
+    }
+
+    .status-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-left: 8px;
+    }
+
+    .status-success {
+      background: #28a745;
+    }
+
+    .status-error {
+      background: #dc3545;
+    }
+
+    .test-section {
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid #dee2e6;
+    }
+
+    .sync-status {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    .sync-status.status-success {
+      background: #28a745;
+    }
+
+    .sync-status.status-error {
+      background: #dc3545;
+    }
+  </style>
+</head>
+<body class="container-full py-4">
+  <ul class="nav nav-tabs" id="optionsTabs" role="tablist">
+    <li class="nav-item">
+      <a class="nav-link active" id="urls-tab" data-bs-toggle="tab" href="#urls" role="tab">URLs</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" id="config-tab" data-bs-toggle="tab" href="#config" role="tab">Config</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" id="personas-tab" data-bs-toggle="tab" href="#personas" role="tab">Personas</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" id="import-tab" data-bs-toggle="tab" href="#import" role="tab">Import</a>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+    <!-- URLs Tab (existing content) -->
+    <div class="tab-pane fade show active" id="urls" role="tabpanel">
+      <div class="row mt-4">
+        <div class="col-md-10">
+          <h2>ArchiveBox Saved URLs</h2>
+          <div class="d-flex gap-2 mb-3">
+            <div class="input-group flex-grow-1">
+              <input type="search" class="form-control" id="filterInput" placeholder="Filter entries...">
+              <span class="input-group-text">
+                Selected: <span id="selectedUrlCount" class="ms-1">0</span>
+              </span>
+              <button class="btn btn-outline-secondary" id="selectAllUrls">Select All</button>
+              <button class="btn btn-outline-secondary" id="deselectAllUrls">Deselect All</button>
+            </div>
+          </div>
+          <div class="d-flex gap-2 mb-3">
+            <div class="btn-group">
+              <button class="btn btn-outline-secondary" id="downloadCsv">CSV</button>
+              <button class="btn btn-outline-secondary" id="downloadJson">JSON</button>
+            </div>
+            <button class="btn btn-outline-danger" id="deleteFiltered">DELETE</button>
+            <button class="btn btn-outline-primary" id="syncFiltered">SYNC</button>
+            <button class="btn btn-outline-secondary" id="editTags" data-bs-toggle="modal" data-bs-target="#editTagsModal">
+              TAGS
+            </button>
+          </div>
+          <div id="entriesList" class="list-group"></div>
+        </div>
+        
+        <div class="col-md-2">
+          <h2>All Tags</h2>
+          <div id="tagsList" class="list-group"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Tags Modal -->
+    <div class="modal fade" id="editTagsModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Edit Tags</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">Current Tags</label>
+              <div id="currentTagsList" class="mb-2"></div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Add Tag</label>
+              <div class="position-relative">
+                <input type="text" class="form-control" id="addTagInput" placeholder="Type to add tag...">
+                <div id="tagAutocomplete" class="dropdown-menu w-100"></div>
+              </div>
+            </div>
+            <small class="text-muted">
+              Selected entries: <span id="selectedUrlCountModal">0</span>
+            </small>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-primary" id="saveTagChanges">Save Changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Config Tab -->
+    <div class="tab-pane fade" id="config" role="tabpanel">
+      <div class="row mt-4">
+        <div class="col-md-8">
+          <form id="configForm" class="needs-validation" novalidate>
+            <div class="mb-3">
+              <label for="archivebox_server_url" class="form-label"><b>💾 ArchiveBox Server URL *</b></label>
+              <div class="input-group">
+                <input type="url" class="form-control" id="archivebox_server_url" 
+                       placeholder="https://archivebox.example.com">
+                <button type="button" id="loginServer" class="btn btn-outline-secondary">
+                  ⚙️ ADMIN
+                </button>
+                <button type="button" id="testServer" class="btn btn-outline-secondary">
+                  TEST SERVER
+                  <span class="status-indicator" id="serverStatus"></span>
+                </button>
+              </div>
+              <div class="form-text">
+                The base URL of your self-hosted archivebox server, e.g. http://localhost:8000
+                <span id="serverStatusText" class="ms-2"></span>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label for="archivebox_api_key" class="form-label"><b>🔐 ArchiveBox API Key</b></label>
+              <div class="input-group">
+                <input type="text" class="form-control" id="archivebox_api_key" 
+                       pattern="^[a-f0-9]{32}$"
+                       placeholder="... abcexamplekey1234 ...">
+                <button type="button" id="generateApiKey" class="btn btn-outline-secondary">
+                  ➕ GENERATE
+                </button>
+                <button type="button" id="testApiKey" class="btn btn-outline-secondary">
+                  TEST API KEY
+                  <span class="status-indicator" id="apiKeyStatus"></span>
+                </button>
+              </div>
+              <div class="form-text">
+                ArchiveBox API key generated on your server (32 character lowercase hex string)
+                <span id="apiKeyStatusText" class="ms-2"></span>
+              </div>
+            </div>
+            <br/><br/>
+            <hr/>
+            <br/><br/>
+            <div class="mb-3">
+              <label for="match_urls" class="form-label">🔍 Match URL Patterns</label>
+              <input type="text" class="form-control" id="match_urls" value=".*"
+                     placeholder="(youtube.com)|(wikipedia.org)|(reddit.com)|(news.ycombinator.com)|(x.com)|(github.com)">
+              <div class="form-text">Regex of URLs to archive automatically whenever they are visited</div>
+            </div>
+
+            <div class="mb-3">
+              <label for="exclude_urls" class="form-label">🚫 Exclude URL Patterns</label>
+              <input type="text" class="form-control" id="exclude_urls" 
+                     placeholder=":\/\/(mail.google.com)" value=":\/\/(mail.google.com)">
+              <div class="form-text">Regex of URLs to never archive automatically</div>
+            </div>
+            <br/><br/>
+            <div class="mb-3" style="background-color: #dfebfd; padding: 5px; border-radius: 6px;">
+              <label for="testUrl" class="form-label">🔍 Test the patterns and try adding a URL</label><span class="status-indicator mt-2" id="urlStatus" style="display:none;"></span>
+              <div class="input-group">
+                <input type="url" class="form-control" id="testUrl" 
+                       placeholder="Enter a URL to test against patterns">
+                <button type="button" id="testAdding" class="btn btn-outline-secondary" style="background-color: #dfebfd;">
+                  TEST ADDING
+                  <span class="status-indicator" id="addingStatus"></span>
+                </button>
+              </div>
+              <div class="form-text">
+                <span id="urlStatusText" class="ms-2"></span>
+                <span id="addingStatusText" class="ms-2"></span>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Personas Tab -->
+    <div class="tab-pane fade" id="personas" role="tabpanel">
+      <div class="row mt-4">
+        <div class="col-md-12">
+          <!-- Active Persona Selection -->
+          <div class="card mb-4">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="d-flex align-items-center">
+                  <h5 class="mb-0 me-3">Active Persona:</h5>
+                  <select class="form-select" id="activePersona" style="width: auto;">
+                    <option value="">Select a persona...</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary" id="newPersona">
+                  Create New Persona
+                </button>
+              </div>
+              <div id="personaStats" class="text-muted small"></div>
+            </div>
+          </div>
+
+          <!-- Persona List -->
+          <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h5 class="mb-0">Managed Personas</h5>
+              <button class="btn btn-sm btn-outline-secondary" id="detectCurrentSettings">
+                Detect Current Settings
+              </button>
+            </div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="table" id="personaTable">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Domains</th>
+                      <th>Last Used</th>
+                      <th style="width: 50%;">Settings</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cookie Import Section -->
+          <div class="card">
+            <div class="card-header">
+              <h5 class="mb-0">Import Browser Cookies</h5>
+            </div>
+            <div class="card-body">
+              <div class="alert alert-info">
+                Import cookies from domains you're currently logged into to the active persona.
+              </div>
+
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="input-group" style="max-width: 400px;">
+                  <span class="input-group-text">Filter</span>
+                  <input type="search" class="form-control" id="cookieFilter" placeholder="Filter domains...">
+                </div>
+                <div>
+                  <button class="btn btn-outline-secondary" id="selectAllCookies">Select All</button>
+                  <button class="btn btn-outline-secondary" id="deselectAllCookies">Deselect All</button>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table" id="cookieTable">
+                  <thead>
+                    <tr>
+                      <th style="width: 40px;"></th>
+                      <th>Domain</th>
+                      <th style="width: 100px;">Cookies</th>
+                      <th>Preview</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+
+              <div class="d-flex justify-content-between align-items-center mt-3">
+                <div>
+                  <span class="me-3">Selected: <span id="selectedCookieCount">0</span></span>
+                  <button class="btn btn-outline-secondary" id="selectAllCookiesBottom">Select All</button>
+                  <button class="btn btn-outline-secondary" id="deselectAllCookiesBottom">Deselect All</button>
+                </div>
+                <button class="btn btn-primary" id="importCookies" disabled>
+                  Import Cookies to Active Persona
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Tab -->
+    <div class="tab-pane fade" id="import" role="tabpanel">
+      <div class="row mt-4">
+        <div class="col-md-12">
+          <ul class="nav nav-pills mb-4" role="tablist">
+            <li class="nav-item">
+              <a class="nav-link active" id="history-tab" data-bs-toggle="pill" href="#history" role="tab">Chrome History</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" id="bookmarks-tab" data-bs-toggle="pill" href="#bookmarks" role="tab">Chrome Bookmarks</a>
+            </li>
+          </ul>
+
+          <div class="tab-content">
+            <!-- History Import -->
+            <div class="tab-pane fade show active" id="history" role="tabpanel">
+              <div class="row mb-4">
+                <div class="col-md-6">
+                  <div class="input-group">
+                    <span class="input-group-text">From</span>
+                    <input type="date" class="form-control" id="historyStartDate">
+                    <span class="input-group-text">To</span>
+                    <input type="date" class="form-control" id="historyEndDate">
+                    <button class="btn btn-primary" id="loadHistory">Load History</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bookmarks Import -->
+            <div class="tab-pane fade" id="bookmarks" role="tabpanel">
+              <div class="row mb-4">
+                <div class="col-md-6">
+                  <button class="btn btn-primary" id="loadBookmarks">Load Bookmarks</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Common Import UI -->
+          <div class="card">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="input-group" style="max-width: 400px;">
+                  <input type="search" class="form-control" id="importFilter" placeholder="Filter URLs and titles...">
+                  <div class="input-group-text">
+                    <input class="form-check-input mt-0" type="checkbox" id="showNewOnly">
+                    <label class="form-check-label ms-2" for="showNewOnly">Show new only</label>
+                  </div>
+                </div>
+                <div>
+                  <span class="me-3">Selected: <span id="selectedCount">0</span></span>
+                  <button class="btn btn-outline-secondary" id="selectAll">Select All</button>
+                  <button class="btn btn-outline-secondary" id="deselectAll">Deselect All</button>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table" id="importTable">
+                  <thead>
+                    <tr>
+                      <th style="width: 40px;"><input type="checkbox" id="selectAllHeader"></th>
+                      <th>URL</th>
+                      <th>Title</th>
+                      <th>Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+
+              <div class="mt-3">
+                <div class="input-group" style="max-width: 400px;">
+                  <span class="input-group-text">Tags</span>
+                  <input type="text" class="form-control" id="importTags" placeholder="Add tags (comma separated)">
+                  <button class="btn btn-primary" id="importSelected">Import Selected</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="bootstrap.bundle.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+  <!-- <script type="module" src="options.js"></script> -->
+  <!-- <script type="module" src="entries-tab.js"></script>
+  <script type="module" src="import-tab.js"></script>
+  <script type="module" src="personas-tab.js"></script>
+  <script type="module" src="cookies-tab.js"></script> -->
+  <script type="module" src="options.js"></script>
+</body>
+</html>
