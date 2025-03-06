@@ -115,7 +115,7 @@ export async function initializeConfigTab() {
   // Test URL functionality
   const testUrlInput = document.getElementById('testUrl');
   const testButton = document.getElementById('testAdding');
-  const testStatus = document.getElementById('testStatus');
+  const testStatus = document.getElementById('urlStatusText');
 
   testButton.addEventListener('click', async () => {
     const url = testUrlInput.value.trim();
