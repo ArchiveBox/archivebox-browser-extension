@@ -18,9 +18,10 @@
   "action": {
     "default_title": "Save to ArchiveBox",
     "default_icon": {
-      "16": "icons/128.png",
-      "48": "icons/128.png",
-      "128": "icons/128.png"
+      "16": "static/icon16.png",
+      "32": "static/icon32.png",
+      "48": "static/icon48.png",
+      "128": "static/icon128.png"
     }
   },
   "options_page": "options.html",

@@ -105,7 +105,7 @@ export async function initializeConfigTab() {
   [serverUrl, apiKey, matchUrls].forEach(input => {
     input.addEventListener('change', async () => {
       await chrome.storage.local.set({
-        archivebox_server_url: serverUrl.value,
+        archivebox_server_url: serverUrl.value.replace(/\/$/, ''),
         archivebox_api_key: apiKey.value,
         match_urls: matchUrls.value
       });

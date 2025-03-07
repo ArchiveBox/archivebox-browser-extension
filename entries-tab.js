@@ -479,8 +479,8 @@ export function initializeEntriesTab() {
             }
           </div>
           <div class="entry-url-line">
-            <img class="favicon" src="${entry.favicon || 'icons/128.png'}" 
-                 onerror="this.src='icons/128.png'"
+            <img class="favicon" src="${entry.favicon || 'static/icon128.png'}"
+                 onerror="this.src='static/icon128.png'"
                  width="16" height="16">
             <code class="entry-url">${entry.url}</code>
             <span class="entry-timestamp">
@@ -643,14 +643,15 @@ export function initializeEntriesTab() {
     for (const item of selectedItems) {
       const row = document.querySelector(`input[value="${item.id}"]`);
       if (!row) continue;
+      const entryTitle = row.parentElement.querySelector('.entry-title');
 
       // Add status indicator if it doesn't exist
-      let statusIndicator = row.querySelector('.sync-status');
+      let statusIndicator = entryTitle.querySelector('.sync-status');
       if (!statusIndicator) {
         statusIndicator = document.createElement('span');
         statusIndicator.className = 'sync-status status-indicator';
         statusIndicator.style.marginLeft = '10px';
-        row.parentElement.querySelector('.entry-title').appendChild(statusIndicator);
+        entryTitle.appendChild(statusIndicator);
       }
 
       // Update status to "in progress"
@@ -663,6 +664,7 @@ export function initializeEntriesTab() {
 
       // Update status indicator
       statusIndicator.className = `sync-status status-indicator status-${response.ok ? 'success' : 'error'}`;
+      statusIndicator.style.backgroundColor = response.ok ? '#28a745' : '#dc3545';
       statusIndicator.title = response.status;
 
       // Wait 1s before next request
