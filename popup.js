@@ -99,22 +99,21 @@ window.updateCurrentTags = async function() {
   const status_div = popup_element.querySelector('small');
   const { current_entry } = await getCurrentEntry();
 
-  // Update UI first
+  const result = await sendToArchiveBox(current_entry.url, current_entry.tags);
+
   current_tags_div.innerHTML = current_entry.tags.length 
     ? `${current_entry.tags
         .map(tag => `<span class="ARCHIVEBOX__tag-badge current" data-tag="${tag}">${tag}</span>`)
         .join(' ')}`
     : '';
 
-  // Send to server
-  const result = await sendToArchiveBox(current_entry.url, current_entry.tags);
   status_div.innerHTML = `
     <span class="status-indicator ${result.ok ? 'success' : 'error'}"></span>
     ${result.status}
   `;
 
   // Add click handlers for removing tags
-  current_tags_div.querySelectorAll('.tag-badge.current').forEach(badge => {
+  current_tags_div.querySelectorAll('.ARCHIVEBOX__tag-badge.current').forEach(badge => {
     badge.addEventListener('click', async (e) => {
       if (e.target.classList.contains('current')) {
         const { current_entry, entries } = await getCurrentEntry();
@@ -429,9 +428,9 @@ window.createPopup = async function() {
       if (!current_entry.tags.includes(tag)) {
         current_entry.tags.push(tag);
         await chrome.storage.local.set({ entries });
+        await updateCurrentTags();
+        await updateSuggestions();
       }
-      await updateCurrentTags();
-      await updateSuggestions();
     }
   });
   current_tags_div.addEventListener('click', async (e) => {
@@ -600,44 +599,9 @@ window.createPopup = async function() {
   // Observe the popup content for size changes
   resizeObserver.observe(popup);
 
-  // Additional resize triggers for dynamic content
-  async function updateCurrentTags() {
-    if (!popup_element) return;
-    const current_tags_div = popup_element.querySelector('.ARCHIVEBOX__current-tags');
-    const status_div = popup_element.querySelector('small');
-    const { current_entry } = await getCurrentEntry();
-
-    current_tags_div.innerHTML = current_entry.tags.length 
-      ? `${current_entry.tags
-          .map(tag => `<span class="ARCHIVEBOX__tag-badge current" data-tag="${tag}">${tag}</span>`)
-          .join(' ')}`
-      : '';
-
-    const result = await sendToArchiveBox(current_entry.url, current_entry.tags);
-    status_div.innerHTML = `
-      <span class="status-indicator ${result.ok ? 'success' : 'error'}"></span>
-      ${result.status}
-    `;
-
-    // Reset animation
-    status_div.classList.remove('fade-out');
-    void status_div.offsetWidth; // Trigger reflow
-    status_div.classList.add('fade-out');
-
-    // Add click handlers for removing tags
-    current_tags_div.querySelectorAll('.tag-badge.current').forEach(badge => {
-      badge.addEventListener('click', async (e) => {
-        if (e.target.classList.contains('current')) {
-          const { current_entry, entries } = await getCurrentEntry();
-          const tag_to_remove = e.target.dataset.tag;
-          current_entry.tags = current_entry.tags.filter(tag => tag !== tag_to_remove);
-          await chrome.storage.local.set({ entries });
-          await updateCurrentTags();
-          await updateSuggestions();
-        }
-      });
-    });
-
+  const originalUpdateCurrentTags = window.updateCurrentTags;
+  window.updateCurrentTags = async function() {
+    await originalUpdateCurrentTags();
     resizeIframe();
   }
 
