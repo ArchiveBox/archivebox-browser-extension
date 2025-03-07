@@ -6,9 +6,27 @@ This is a browser extension that lets you send individual browser tabs or all UR
 - Protect your data: save offline copies of pages in common, durable formats that will last for generations
 - Use your data: collect and tag important bookmarks, full-text search through your browsing history, automatically push captured data into other systems using ArchiveBox's APIs
 
-*✨ Originally contributed by [TJ Horner (@tjhorner)](https://github.com/tjhorner), now maintained by the [ArchiveBox](https://github.com/ArchiveBox) team.*
+![configuring-server](https://github.com/user-attachments/assets/308c4462-ca09-434f-89a6-3f6bac404be2)
+![url-submission](https://github.com/user-attachments/assets/cfc8f670-562a-4c17-a533-4b1b0560c5c8)
+![admin-ui](https://github.com/user-attachments/assets/97d90d4c-d0f3-4bc1-b7ef-1c9e410c576f)
 
-## Download
+<img width="1367" alt="image" src="https://github.com/user-attachments/assets/393da1fa-c75a-4ab8-ae98-5745dca4683c">
+<img width="2056" alt="image" src="https://github.com/user-attachments/assets/4290f090-3e33-4a12-82b8-65bafd86a2ee">
+
+![image](https://github.com/user-attachments/assets/2977d572-9086-4ea7-a4a2-2726e762a125)
+![image](https://github.com/user-attachments/assets/bb2f2bde-5c40-48e4-9499-1fada83425cf)
+<img width="1402" alt="image" src="https://github.com/user-attachments/assets/aeb7ed60-d9b0-4393-8c71-2aa42921f7a2">
+
+#### Recent Changes
+
+- [x] update to manifest v3 to re-submit to Chrome web store
+- [x] added an admin view where you can see a list of all the URLs you've collected so far
+- [x] added ability to search admin view by url, timestamp, uuid, tags
+- [x] added the ability to export filtered URLs list from history as CSV and JSON 
+- [x] added the ability to import URLs from chrome history / bookmarks by daterange or filter query
+- [x] add the ability to edit extension config options, allowlist/denylist, etc. from options.html
+- [x] add the ability to test connection to ArchiveBox server
+
 
 
 - <a href="https://chrome.google.com/webstore/detail/habonpimjphpdnmcfkaockjnffodikoj"><img src="https://github.com/user-attachments/assets/4ee7d4fb-e676-4a75-973d-ac029f265b86" height="30px" align="top"/> Chrome / Brave / Edge / Other Chromium-based browsers</a>
@@ -43,6 +61,8 @@ This is a browser extension that lets you send individual browser tabs or all UR
 ---
 
 ## Development
+
+*✨ Originally contributed by [TJ Horner (@tjhorner)](https://github.com/tjhorner), now maintained by [@benmuth](https://github.com/benmuth) and the [ArchiveBox](https://github.com/ArchiveBox) team.*
 
 If you wish to contribute to (or just build for yourself) this extension, you will need to download and install [Node.js](https://nodejs.org/en/).
 
