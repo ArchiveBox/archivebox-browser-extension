@@ -6,6 +6,12 @@ This is a browser extension that lets you send individual browser tabs or all UR
 - Protect your data: save offline copies of pages in common, durable formats that will last for generations
 - Use your data: collect and tag important bookmarks, full-text search through your browsing history, automatically push captured data into other systems using ArchiveBox's APIs
 
+## Get the Extension
+
+- <a href="https://chrome.google.com/webstore/detail/habonpimjphpdnmcfkaockjnffodikoj"><img src="https://github.com/user-attachments/assets/4ee7d4fb-e676-4a75-973d-ac029f265b86" height="30px" align="top"/> Chrome / Brave / Edge / Other Chromium-based browsers</a>
+- <a href="https://addons.mozilla.org/firefox/addon/archivebox-exporter/"><img src="https://github.com/user-attachments/assets/8e2a969d-68d6-4bd6-8b10-d8b5a36757ec" height="30px" align="top"/> Firefox / Waterfox / Tor Browser / Other Firefox-based browsers</a>
+- <img src="https://github.com/user-attachments/assets/c20f8f8a-01f2-427b-ac75-ffddcb62953f" height="30px" align="top"/> Safari *(not yet supported, use [Save-to-ArchiveBox Shortcut](https://www.icloud.com/shortcuts/0d3a526e7d524447aa8c1bd63ac49014) instead)*
+
 ![configuring-server](https://github.com/user-attachments/assets/308c4462-ca09-434f-89a6-3f6bac404be2)
 ![url-submission](https://github.com/user-attachments/assets/cfc8f670-562a-4c17-a533-4b1b0560c5c8)
 ![admin-ui](https://github.com/user-attachments/assets/97d90d4c-d0f3-4bc1-b7ef-1c9e410c576f)
@@ -28,10 +34,6 @@ This is a browser extension that lets you send individual browser tabs or all UR
 - [x] add the ability to test connection to ArchiveBox server
 
 
-
-- <a href="https://chrome.google.com/webstore/detail/habonpimjphpdnmcfkaockjnffodikoj"><img src="https://github.com/user-attachments/assets/4ee7d4fb-e676-4a75-973d-ac029f265b86" height="30px" align="top"/> Chrome / Brave / Edge / Other Chromium-based browsers</a>
-- <a href="https://addons.mozilla.org/firefox/addon/archivebox-exporter/"><img src="https://github.com/user-attachments/assets/8e2a969d-68d6-4bd6-8b10-d8b5a36757ec" height="30px" align="top"/> Firefox / Waterfox / Tor Browser / Other Firefox-based browsers</a>
-- <img src="https://github.com/user-attachments/assets/c20f8f8a-01f2-427b-ac75-ffddcb62953f" height="30px" align="top"/> Safari *(not yet supported, use [Save-to-ArchiveBox Shortcut](https://www.icloud.com/shortcuts/0d3a526e7d524447aa8c1bd63ac49014) instead)*
 
 
 ## Setup
