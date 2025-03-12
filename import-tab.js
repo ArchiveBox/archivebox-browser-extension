@@ -27,6 +27,13 @@ export async function initializeImport() {
 }
 
 async function loadHistory() {
+  // request permission to access history
+  const permission = await chrome.permissions.request({permissions: ['history']});
+  if (!permission) {
+    alert('Permission denied.');
+    return;
+  }
+
   const startDate = new Date(document.getElementById('historyStartDate').value);
   const endDate = new Date(document.getElementById('historyEndDate').value);
   endDate.setHours(23, 59, 59, 999);
@@ -56,6 +63,13 @@ async function loadHistory() {
 }
 
 async function loadBookmarks() {
+  // request permission to access bookmarks
+  const permission = await chrome.permissions.request({permissions: ['bookmarks']});
+  if (!permission) {
+    alert('Permission denied.');
+    return;
+  }
+
   function processBookmarkTree(nodes) {
     let items = [];
     for (const node of nodes) {

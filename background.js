@@ -38,3 +38,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   return true;
 });
+
+
+chrome.contextMenus.onClicked.addListener(onClickContextMenuSave);
+
+// A generic onclick callback function.
+async function onClickContextMenuSave(item, tab) {
+  const entry = {
+    id: crypto.randomUUID(),
+    url: tab.url,
+    timestamp: new Date().toISOString(),
+    tags: [],
+    title: tab.title,
+    favicon: tab.favIconUrl
+  };
+  
+  // Save the entry first
+  const { entries = [] } = await chrome.storage.local.get('entries');
+  entries.push(entry);
+  await chrome.storage.local.set({ entries });
+  
+  // Inject scripts - CSS now handled in popup.js
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    files: ['popup.js']
+  });
+}
+chrome.runtime.onInstalled.addListener(function () {
+  chrome.contextMenus.create({
+    id: 'save_to_archivebox_ctxmenu',
+    title: 'Save to ArchiveBox',
+  });
+});

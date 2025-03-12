@@ -5,13 +5,15 @@
   "description": "Collect URLs and preserve them using a remote ArchiveBox server",
   "permissions": [
     "storage",
-    "unlimitedStorage",
     "scripting",
     "activeTab",
-    "history",
-    "bookmarks",
-    "cookies",
     "contextMenus"
+  ],
+  "optional_permissions": [
+    "unlimitedStorage",
+    "cookies",
+    "history",
+    "bookmarks"
   ],
   "optional_host_permissions": [
     "*://*\/*"
