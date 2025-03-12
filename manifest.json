@@ -2,26 +2,27 @@
   "manifest_version": 3,
   "version": "2.1.1",
   "name": "ArchiveBox",
-  "description": "Collect URLs with timestamps and tags for ArchiveBox",
+  "description": "Collect URLs and preserve them using a remote ArchiveBox server",
   "permissions": [
     "storage",
+    "unlimitedStorage",
     "scripting",
-    "tabs",
     "activeTab",
     "history",
     "bookmarks",
-    "cookies"
+    "cookies",
+    "contextMenus"
   ],
-  "host_permissions": [
-    "<all_urls>"
+  "optional_host_permissions": [
+    "*://*\/*"
   ],
   "action": {
     "default_title": "Save to ArchiveBox",
     "default_icon": {
-      "16": "static/icon16.png",
-      "32": "static/icon32.png",
-      "48": "static/icon48.png",
-      "128": "static/icon128.png"
+      "16": "16.png",
+      "32": "32.png",
+      "48": "48.png",
+      "128": "128.png"
     }
   },
   "options_page": "options.html",
@@ -31,7 +32,7 @@
   },
   "web_accessible_resources": [{
     "resources": ["popup.css", "popup.js"],
-    "matches": ["<all_urls>"]
+    "matches": ["*://*\/*"]
   }],
   "commands": {
     "save-to-archivebox-action": {
