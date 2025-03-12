@@ -34,20 +34,20 @@ async function sendToArchiveBox(url, tags) {
       chrome.runtime.sendMessage({
         type: 'archivebox_add',
         body: addCommandArgs
-      }, (result) => {
-        if (!result.ok) {
-          console.log(`ArchiveBox request failed: ${result.errorMessage}`);
-          reject(`${result.errorMessage}`);
+      }, (response) => {
+        if (!response.ok) {
+          console.log(`ArchiveBox request failed: ${response.errorMessage}`);
+          reject(`${response.errorMessage}`);
         }
 
-        resolve(result);
+        resolve(response);
       });
     })
 
     const status_div = popup_element.querySelector('small');
     status_div.innerHTML = `
-      <span class="status-indicator ${result.ok ? 'success' : 'error'}"></span>
-      ${result.status}
+      <span class="status-indicator ${response.ok ? 'success' : 'error'}"></span>
+      ${response.status}
     `;
     return { ok: response.ok, status: `${response.status} ${response.statusText}`};
   } catch (error) {
