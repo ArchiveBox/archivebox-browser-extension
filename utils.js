@@ -18,6 +18,7 @@ export function filterEntries(entries, filterText) {
 }
 
 export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
+  console.log('i addToArchiveBox', addCommandArgs);
   try {
     const { archivebox_server_url, archivebox_api_key } = await new Promise((resolve, reject) => {
       const vals = chrome.storage.local.get([
@@ -31,17 +32,12 @@ export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
         resolve(vals);
       }
     });
+    console.log('i addToArchiveBox', archivebox_server_url, addCommandArgs);
 
     if (!archivebox_server_url) {
       throw new Error('Server not configured.');
     }
 
-    // request permission to POST to the ArchiveBox server, upgrade optional_host_permissions
-    const permission = await chrome.permissions.request({origins: [`${archivebox_server_url}/*`]});
-    if (!permission) {
-      onError({ok: false, errorMessage: 'Permission denied.'});
-      return;
-    }
 
     let response = undefined;
     // try ArchiveBox v0.8.0+ API endpoint first
@@ -54,35 +50,38 @@ export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
         credentials: 'include',
         body: addCommandArgs
       }).then(response => {
+        console.log('i addToArchiveBox using v0.8.5 REST API succeeeded', response.status, response.statusText);
         onComplete({ok: response.ok, status: response.status, statusText: response.statusText});
       }).catch(error => {
+        console.warn('! addToArchiveBox using v0.8.5 REST API failed... falling back to old /add POST method')
         // fall back to pre-v0.8.0 endpoint for backwards compatibility
-        if (response === undefined || response.status === 404) {
-          const body = new FormData();
+        const body = new FormData();
+        const urls = addCommandArgs && addCommandArgs.urls ? addCommandArgs.urls.join("\n") : "";
+        const tags = addCommandArgs && addCommandArgs.tags ? addCommandArgs.tags : "";
 
-          const urls = addCommandArgs && addCommandArgs.urls ? addCommandArgs.urls.join("\n") : "";
-          const tags = addCommandArgs && addCommandArgs.tags ? addCommandArgs.tags : "";
+        body.append("url", urls);
+        body.append("tag", tags);
+        body.append("only_new", "1");
 
-          body.append("url", urls);
-          body.append("tag", tags);
-          body.append("only_new", "1");
-
-
-          response = fetch(`${archivebox_server_url}/add/`, {
-            method: "post",
-            credentials: "include",
-            body: body
-          }).then(response => {
-            onComplete({ok: response.ok, status: response.status, statusText: response.statusText});
-          }).catch(error => {
-            onError({ok: false, errorMessage: error.message});
-          });
-        }
+        response = fetch(`${archivebox_server_url}/add/`, {
+          method: "post",
+          credentials: "include",
+          body: body
+        }).then(response => {
+          console.log('i addToArchiveBox using old /add POST method succeeded', response.status, response.statusText);
+          onComplete({ok: response.ok, status: response.status, statusText: response.statusText});
+        }).catch(error => {
+          console.error('! addToArchiveBox using old /add POST method failed', error.message);
+          onError({ok: false, errorMessage: error.message});
+        });
       });
     }
   } catch (e) {
-    return {ok: false, errorMessage: e.message};
+    console.error('! addToArchiveBox failed', e.message);
+    onError({ok: false, errorMessage: e.message});
   }
+  // keep the message channel open
+  return true;
 }
 
 export function downloadCsv(entries) {
