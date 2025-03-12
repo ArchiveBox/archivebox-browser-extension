@@ -47,7 +47,7 @@ function renderCookieTable(filterText = '') {
       <td>
         <button class="btn btn-sm btn-outline-secondary preview-cookies" 
                 data-domain="${item.domain}">
-          Preview
+          📋 <code>cookies.txt</code>
         </button>
       </td>
     </tr>
@@ -84,7 +84,8 @@ function toggleAllCookieSelection(selected) {
 async function previewCookies(domain) {
   const cookies = availableCookies.find(item => item.domain === domain)?.cookies || [];
   const text = formatCookiesForExport({ [domain]: cookies });
-  alert(text);
+  await navigator.clipboard.writeText(text);
+  alert(`${cookies.length} cookies copied to clipboard for "${domain}"!  Save them into cookies.txt on your ArchiveBox server and run: archivebox config --set COOKIES_FILE=/path/to/cookies.txt`);
 }
 
 function formatCookiesForExport(cookies) {
@@ -133,7 +134,8 @@ async function importSelectedCookies() {
   // Refresh UI
   renderCookieTable(document.getElementById('cookieFilter').value);
   
-  alert(`Successfully imported cookies from ${importCount} domains to "${persona.name}"`);
+  alert(`Successfully imported ${importCount} domain cookies into the "${persona.name}" persona`);
+  await window.loadPersonas();
 }
 
 export function initializeCookiesTab() {
