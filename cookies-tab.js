@@ -2,6 +2,8 @@ let availableCookies = [];
 let selectedCookieDomains = new Set();
 
 export async function loadAvailableCookies() {
+  
+
   const allCookies = await chrome.cookies.getAll({});
   
   // Group cookies by domain
@@ -180,3 +182,14 @@ export function initializeCookiesTab() {
   // Load initial data
   loadAvailableCookies();
 } 
+
+document.getElementById('requestCookiesPermission').addEventListener('click', async () => {
+  // request permission to access cookies
+  const permission = await chrome.permissions.request({permissions: ['cookies'], origins: ['*://*\/*']});
+  if (!permission) {
+    alert('Permission denied.');
+    return;
+  } else {
+    window.location.reload();
+  }
+});

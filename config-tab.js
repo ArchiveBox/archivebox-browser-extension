@@ -22,6 +22,13 @@ export async function initializeConfigTab() {
     const statusIndicator = document.getElementById('serverStatus');
     const statusText = document.getElementById('serverStatusText');
 
+    // check if we have permission to access the server
+    const permission = await chrome.permissions.request({origins: [`${serverUrl.value}/*`]});
+    if (!permission) {
+      alert('Permission denied.');
+      return;
+    }
+
     const updateStatus = (success, message) => {
       statusIndicator.className = success ? 'status-indicator status-success' : 'status-indicator status-error';
       statusText.textContent = message;
