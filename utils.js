@@ -37,7 +37,6 @@ export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
     }
 
     // request permission to POST to the ArchiveBox server, upgrade optional_host_permissions
-    // const permission = await chrome.permissions.request({permissions: [archivebox_server_url, 'host_permissions']});
     const permission = await chrome.permissions.request({origins: [`${archivebox_server_url}/*`]});
     if (!permission) {
       onError({ok: false, errorMessage: 'Permission denied.'});

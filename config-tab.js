@@ -23,7 +23,7 @@ export async function initializeConfigTab() {
     const statusText = document.getElementById('serverStatusText');
 
     // check if we have permission to access the server
-    const permission = await chrome.permissions.request({permissions: ['host_permissions'], origins: [`${serverUrl.value}/*`]});
+    const permission = await chrome.permissions.request({permissions: ['cookies'], origins: [`${serverUrl.value}/*`]});
     if (!permission) {
       alert('Permission denied.');
       return;
