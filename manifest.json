@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "version": "2.1.1",
+  "version": "2.1.2",
   "name": "ArchiveBox",
   "description": "Collect URLs and preserve them using a remote ArchiveBox server",
   "permissions": [
