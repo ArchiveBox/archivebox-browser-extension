@@ -1,14 +1,24 @@
 let currentPersonas = [];
 
-async function detectCurrentSettings() {
+async function detectCurrentSettings(personaId) {
+  const {personas} = await chrome.storage.local.get('personas');
+  const persona = personas.find(p => p.id === personaId);
+
+  console.log('Updating settings for profile:', personaId, persona.settings);
+
   const settings = {
-    userAgent: navigator.userAgent,
-    language: navigator.language,
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    viewport: `${window.innerWidth}x${window.innerHeight}`,
-    operatingSystem: detectOS(),
-    geography: await detectGeography()
+    userAgent: persona.settings.userAgent || navigator.userAgent,
+    language: persona.settings.language || navigator.language,
+    timezone: persona.settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    viewport: persona.settings.viewport || `${window.innerWidth}x${window.innerHeight}`,
+    operatingSystem: persona.settings.operatingSystem || detectOS(),
+    geography: persona.settings.geography || await detectGeography()
   };
+
+  persona.settings = settings;
+
+  await chrome.storage.local.set({ personas });
+  await loadPersonas();
   return settings;
 }
 
@@ -33,15 +43,38 @@ async function detectGeography() {
   }
 }
 
+async function removePersonaDomain(personaId, domain) {
+  const persona = currentPersonas.find(p => p.id === personaId);
+  if (!persona) return;
+  delete persona.cookies[domain];
+  await chrome.storage.local.set({ personas: currentPersonas });
+  await loadPersonas();
+}
+
 async function loadPersonas() {
-  const { personas = [], activePersona = '' } = await chrome.storage.local.get(['personas', 'activePersona']);
+  let { personas = [], activePersona = '' } = await chrome.storage.local.get(['personas', 'activePersona']);
   currentPersonas = personas;
+
+  // if no personas exist, create a default one
+  if (!personas || personas.length === 0) {
+    createNewPersona('Private');
+    createNewPersona('Work');
+    createNewPersona('Anonymous');
+    ({ personas, activePersona } = await chrome.storage.local.get(['personas', 'activePersona']));
+  }
+
+  if (!activePersona) {
+    await chrome.storage.local.set({ activePersona: currentPersonas[0].id });
+    activePersona = currentPersonas[0].id;
+  }
+  window.activePersona = activePersona;
+  window.personas = personas;
   
   // Update persona selector
   const select = document.getElementById('activePersona');
   select.innerHTML = `
-    <option value="">Select a persona...</option>
-    ${personas.map(p => `
+    <option value="">Select a profile...</option>
+    ${(personas || []).map(p => `
       <option value="${p.id}" ${p.id === activePersona ? 'selected' : ''}>
         ${p.name}
       </option>
@@ -50,13 +83,16 @@ async function loadPersonas() {
   
   // Update persona table
   const tbody = document.getElementById('personaTable').querySelector('tbody');
-  tbody.innerHTML = personas.map(p => `
-    <tr data-id="${p.id}">
+  tbody.innerHTML = (personas || []).map(p => `
+    <tr data-id="${p.id}" class="${p.id === activePersona ? 'table-primary' : ''}">
       <td>
         <input type="text" class="form-control form-control-sm persona-name" 
                value="${p.name}" data-original="${p.name}">
       </td>
-      <td>${Object.keys(p.cookies || {}).length} domains</td>
+      <td>
+        ${Object.keys(p.cookies || {}).length} domains<br/>
+        ${Object.keys(p.cookies || {}).map(domain => `<button class="btn btn-sm btn-outline-danger remove-persona-domain" data-persona-id="${p.id}" data-persona-domain="${domain}">${domain} ❌</button>`).join(' ')}
+      </td>
       <td>${p.lastUsed ? new Date(p.lastUsed).toLocaleString() : 'Never'}</td>
       <td>
         <div class="settings-grid">
@@ -94,14 +130,17 @@ async function loadPersonas() {
       </td>
       <td>
         <div class="btn-group-vertical">
+          <button class="btn btn-sm btn-outline-secondary detect-settings mb-1" data-id="${p.id}">
+            ⚙️ Detect Browser Settings
+          </button>
           <button class="btn btn-sm btn-outline-secondary export-cookies mb-1" data-id="${p.id}">
-            Export Cookies
+            📋 Export <code>cookies.txt</code>
           </button>
           <button class="btn btn-sm btn-outline-primary save-settings mb-1" data-id="${p.id}" style="display: none;">
-            Save Changes
+            ✅ Save Changes
           </button>
           <button class="btn btn-sm btn-outline-danger delete-persona" data-id="${p.id}">
-            Delete
+            ❌ Delete Profile
           </button>
         </div>
       </td>
@@ -123,6 +162,20 @@ async function loadPersonas() {
       });
     });
   });
+
+  // add event listener for remove-persona-domain
+  document.querySelectorAll('.remove-persona-domain').forEach(button => {
+    button.addEventListener('click', () => {
+      removePersonaDomain(button.dataset.personaId, button.dataset.personaDomain);
+    });
+  });
+
+  // add event listener for detect-settings
+  document.querySelectorAll('.detect-settings').forEach(button => {
+    button.addEventListener('click', async () => {
+      await detectCurrentSettings(button.dataset.id);
+    });
+  });
   
   // Update stats for active persona
   updatePersonaStats(activePersona);
@@ -130,12 +183,11 @@ async function loadPersonas() {
   // Update import button state
   document.getElementById('importCookies').disabled = !activePersona;
 }
+window.loadPersonas = loadPersonas;
 
-async function createNewPersona() {
-  const name = prompt('Enter name for new persona:');
+async function createNewPersona(default_name) {
+  const name = default_name || prompt('Enter name for new profile:');
   if (!name) return;
-  
-  const settings = await detectCurrentSettings();
   
   const persona = {
     id: crypto.randomUUID(),
@@ -143,11 +195,14 @@ async function createNewPersona() {
     created: new Date().toISOString(),
     lastUsed: null,
     cookies: {},
-    settings
+    settings: {},
   };
-  
+
   currentPersonas.push(persona);
   await chrome.storage.local.set({ personas: currentPersonas });
+  await loadPersonas();
+  const settings = await detectCurrentSettings(persona.id);
+  persona.settings = settings;
   await loadPersonas();
 }
 
@@ -180,7 +235,7 @@ async function savePersonaSettings(id) {
 async function updatePersonaStats(personaId) {
   const stats = document.getElementById('personaStats');
   if (!personaId) {
-    stats.textContent = 'No active persona selected';
+    stats.textContent = 'No active profile selected';
     return;
   }
   
@@ -190,11 +245,11 @@ async function updatePersonaStats(personaId) {
   const domainCount = Object.keys(persona.cookies || {}).length;
   const cookieCount = Object.values(persona.cookies || {}).reduce((sum, cookies) => sum + cookies.length, 0);
   
-  stats.textContent = `${persona.name}: ${domainCount} domains, ${cookieCount} cookies total`;
+  stats.innerHTML = `${domainCount} domains <br/> ${cookieCount} cookies`;
 }
 
 async function deletePersona(id) {
-  if (!confirm('Delete this persona? This cannot be undone.')) return;
+  if (!confirm('Delete this profile? This cannot be undone.')) return;
   
   currentPersonas = currentPersonas.filter(p => p.id !== id);
   const { activePersona } = await chrome.storage.local.get('activePersona');
@@ -227,7 +282,7 @@ async function exportPersonaCookies(id) {
   
   const text = formatCookiesForExport(persona.cookies);
   await navigator.clipboard.writeText(text);
-  alert('Cookies copied to clipboard!');
+  alert(`${Object.keys(persona.cookies).length} domain logins (${Object.values(persona.cookies).reduce((sum, cookies) => sum + cookies.length, 0)} cookies) copied to clipboard for "${persona.name}"! Save them into cookies.txt on your ArchiveBox server and run: archivebox config --set COOKIES_FILE=/path/to/cookies.txt`);
 }
 
 export function initializePersonasTab() {
@@ -249,19 +304,6 @@ export function initializePersonasTab() {
     }
   });
 
-  // Add settings-related event listeners
-  document.getElementById('detectCurrentSettings').addEventListener('click', async () => {
-    const settings = await detectCurrentSettings();
-    document.querySelectorAll('tr[data-id]').forEach(row => {
-      Object.entries(settings).forEach(([key, value]) => {
-        const input = row.querySelector(`[data-setting="${key}"]`);
-        if (input) {
-          input.value = value;
-          input.dispatchEvent(new Event('input'));
-        }
-      });
-    });
-  });
 
   // Load initial data
   loadPersonas();

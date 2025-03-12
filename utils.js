@@ -17,7 +17,7 @@ export function filterEntries(entries, filterText) {
   });
 }
 
-export async function addToArchiveBox(addCommandArgs) {
+export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
   try {
     const { archivebox_server_url, archivebox_api_key } = await new Promise((resolve, reject) => {
       const vals = chrome.storage.local.get([
@@ -39,38 +39,40 @@ export async function addToArchiveBox(addCommandArgs) {
     let response = undefined;
     // try ArchiveBox v0.8.0+ API endpoint first
     if (archivebox_api_key) {
-      response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
+      response = fetch(`${archivebox_server_url}/api/v1/cli/add`, {
         headers: {
           'x-archivebox-api-key': `${archivebox_api_key}`
         },
         method: 'post',
         credentials: 'include',
         body: addCommandArgs
+      }).then(response => {
+        onComplete({ok: response.ok, status: response.status, statusText: response.statusText});
+      }).catch(error => {
+        // fall back to pre-v0.8.0 endpoint for backwards compatibility
+        if (response === undefined || response.status === 404) {
+          const body = new FormData();
+
+          const urls = addCommandArgs && addCommandArgs.urls ? addCommandArgs.urls.join("\n") : "";
+          const tags = addCommandArgs && addCommandArgs.tags ? addCommandArgs.tags : "";
+
+          body.append("url", urls);
+          body.append("tag", tags);
+          body.append("only_new", "1");
+
+
+          response = fetch(`${archivebox_server_url}/add/`, {
+            method: "post",
+            credentials: "include",
+            body: body
+          }).then(response => {
+            onComplete({ok: response.ok, status: response.status, statusText: response.statusText});
+          }).catch(error => {
+            onError({ok: false, errorMessage: error.message});
+          });
+        }
       });
     }
-
-    // fall back to pre-v0.8.0 endpoint for backwards compatibility
-    if (response === undefined || response.status === 404) {
-      const body = new FormData();
-
-      const urls = addCommandArgs && addCommandArgs.urls ? addCommandArgs.urls.join("\n") : "";
-      const tags = addCommandArgs && addCommandArgs.tags ? addCommandArgs.tags : "";
-
-      body.append("url", urls);
-      body.append("tag", tags);
-
-
-      response = await fetch(`${archivebox_server_url}/add/`, {
-        method: "post",
-        credentials: "include",
-        body: body
-      });
-    }
-
-    if (!response.ok) {
-      throw new Error(`Request failed with status ${response.status}`);
-    }
-    return {ok: response.ok, status: response.status, statusText: response.statusText};
   } catch (e) {
     return {ok: false, errorMessage: e.message};
   }

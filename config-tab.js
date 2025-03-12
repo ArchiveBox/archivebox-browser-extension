@@ -15,7 +15,7 @@ export async function initializeConfigTab() {
   
   serverUrl.value = savedConfig.archivebox_server_url || '';
   apiKey.value = savedConfig.archivebox_api_key || '';
-  matchUrls.value = savedConfig.match_urls || '.*';
+  matchUrls.value = savedConfig.match_urls || '';
 
   // Server test button handler
   document.getElementById('testServer').addEventListener('click', async () => {
@@ -88,16 +88,27 @@ export async function initializeConfigTab() {
 
   // Generate API key button handler
   document.getElementById('generateApiKey').addEventListener('click', () => {
-    const key = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-    apiKey.value = key;
+    if (serverUrl.value) {
+      window.open(`${serverUrl.value}/admin/api/apitoken/add/`, '_blank');
+    } else {
+      alert('Please enter a server URL first');
+    }
   });
 
   // Login server button handler
   document.getElementById('loginServer').addEventListener('click', () => {
     if (serverUrl.value) {
       window.open(`${serverUrl.value}/admin`, '_blank');
+    }
+  });
+  document.getElementById('loginAdminUILink').addEventListener('click', () => {
+    if (serverUrl.value) {
+      window.open(`${serverUrl.value}/admin/login/`, '_blank');
+    }
+  });
+  document.getElementById('generateApiKeyLink').addEventListener('click', () => {
+    if (serverUrl.value) {
+      window.open(`${serverUrl.value}/admin/api/apitoken/add/`, '_blank');
     }
   });
 

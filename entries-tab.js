@@ -19,7 +19,7 @@ export async function renderEntries(filterText = '', tagFilter = '') {
   entriesList.innerHTML = filteredEntries.map(entry => `
     <div class="list-group-item">
       <div class="row">
-        <small class="col-lg-2" style="display: block;min-width: 151px;text-align: center;">
+        <small class="col-lg-2" style="display: block;">
           ${new Date(entry.timestamp).toISOString().replace('T', ' ').split('.')[0]}
         </small>
         <h5 class="col-lg-7">
@@ -411,6 +411,9 @@ export function initializeEntriesTab() {
       return searchableText.includes(filterText);
     });
 
+    // sort entries by timestamp, newest first
+    filteredEntries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
     // Add CSS for URL truncation if not already present
     if (!document.getElementById('entriesListStyles')) {
       const style = document.createElement('style');
@@ -437,7 +440,7 @@ export function initializeEntriesTab() {
         .entry-link-to-archivebox {
           font-size: 0.7em;
           color: #888;
-          padding-right: 20px;
+          min-width: 330px;
         }
         .entry-timestamp {
           font-size: 0.8em;
@@ -470,9 +473,15 @@ export function initializeEntriesTab() {
             <div class="entry-title">${entry.title || 'Untitled'}</div>
             ${(()=>{
               return archivebox_server_url ?
-                `<div class="entry-link-to-archivebox">
-                   <a href=${archivebox_server_url}/archive/${entry.url}>
-                     View entry
+                `<div class="entry-link-to-archivebox btn-group" role="group">
+                   <a href=${entry.url} target="_blank" class="btn btn-sm btn-outline-primary">
+                     🔗 Original
+                   </a>
+                   <a href=${archivebox_server_url}/archive/${entry.url} target="_blank" class="btn btn-sm btn-outline-primary">
+                     📦 ArchiveBox
+                   </a>
+                   <a href="https://web.archive.org/web/${entry.url}" target="_blank" class="btn btn-sm btn-outline-primary">
+                     🏛️ Archive.org
                    </a>
                  </div>`
                 : '' })()
@@ -657,23 +666,30 @@ export function initializeEntriesTab() {
       // Update status to "in progress"
       statusIndicator.className = 'sync-status status-indicator';
       statusIndicator.style.backgroundColor = '#ffc107'; // yellow
+      // animate the status indicator pulsing until the request is complete
+      statusIndicator.style.animation = 'pulse 1s infinite';
 
       // Send to ArchiveBox
       const addCommandArgs = JSON.stringify({urls: [item.url], tag: item.tags.join(',')});
-      const response = await addToArchiveBox(addCommandArgs);
 
-      // Update status indicator
-      statusIndicator.className = `sync-status status-indicator status-${response.ok ? 'success' : 'error'}`;
-      statusIndicator.style.backgroundColor = response.ok ? '#28a745' : '#dc3545';
-      statusIndicator.title = response.status;
+      const onResponse = (response) => {
+        // Update status indicator
+        statusIndicator.className = `sync-status status-indicator status-${response.ok ? 'success' : 'error'}`;
+        statusIndicator.style.backgroundColor = response.ok ? '#28a745' : '#dc3545';
+        statusIndicator.title = response.status;
+        statusIndicator.style.animation = 'none';
+      }
 
-      // Wait 1s before next request
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      addToArchiveBox(addCommandArgs, onResponse, onResponse);
+
+      // Wait 0.5s before next request
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     // Reset button state
     syncBtn.disabled = false;
-    syncBtn.textContent = 'SYNC';  });
+    syncBtn.textContent = '⬆️ Sync to ArchiveBox';  
+  });
 }
 
 // // Helper function to sync a single entry to ArchiveBox
