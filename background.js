@@ -34,10 +34,7 @@ chrome.action.onClicked.addListener(async (tab) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'archivebox_add') {
-      const result = addToArchiveBox(message.body)
-        .then(result => {
-          sendResponse(result);
-        })
+    addToArchiveBox(message.body, sendResponse, sendResponse);
   }
   return true;
 });

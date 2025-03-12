@@ -23,7 +23,7 @@ async function getAllTags() {
 
 async function sendToArchiveBox(url, tags) {
   try {
-    console.log('i Sending to ArchiveBox', { method: 'POST', url, tags });
+    console.log('i Sending to ArchiveBox', { url, tags });
 
     const addCommandArgs = JSON.stringify({
       urls: [url],
@@ -43,6 +43,12 @@ async function sendToArchiveBox(url, tags) {
         resolve(result);
       });
     })
+
+    const status_div = popup_element.querySelector('small');
+    status_div.innerHTML = `
+      <span class="status-indicator ${result.ok ? 'success' : 'error'}"></span>
+      ${result.status}
+    `;
     return { ok: response.ok, status: `${response.status} ${response.statusText}`};
   } catch (error) {
     console.log(`ArchiveBox request failed: ${error}`);
@@ -93,24 +99,30 @@ window.getSuggestedTags = async function() {
   .slice(0, 4);
 }
 
+window.updateSuggestions = async function() {
+  // console.log('Getting tag suggestions');
+  if (!popup_element) return
+  const suggestions_div = popup_element.querySelector('.ARCHIVEBOX__tag-suggestions');
+  const suggested_tags = await getSuggestedTags();
+  // console.log('Got suggestions', suggested_tags);
+  suggestions_div.innerHTML = suggested_tags.length 
+    ? `${suggested_tags
+        .map(tag => `<span class="ARCHIVEBOX__tag-badge suggestion">${tag}</span>`)
+        .join(' ')}`
+    : '';
+}
+
 window.updateCurrentTags = async function() {
   if (!popup_element) return;
   const current_tags_div = popup_element.querySelector('.ARCHIVEBOX__current-tags');
   const status_div = popup_element.querySelector('small');
   const { current_entry } = await getCurrentEntry();
 
-  const result = await sendToArchiveBox(current_entry.url, current_entry.tags);
-
   current_tags_div.innerHTML = current_entry.tags.length 
     ? `${current_entry.tags
         .map(tag => `<span class="ARCHIVEBOX__tag-badge current" data-tag="${tag}">${tag}</span>`)
         .join(' ')}`
     : '';
-
-  status_div.innerHTML = `
-    <span class="status-indicator ${result.ok ? 'success' : 'error'}"></span>
-    ${result.status}
-  `;
 
   // Add click handlers for removing tags
   current_tags_div.querySelectorAll('.ARCHIVEBOX__tag-badge.current').forEach(badge => {
@@ -125,18 +137,10 @@ window.updateCurrentTags = async function() {
       }
     });
   });
+  
+  sendToArchiveBox(current_entry.url, current_entry.tags);
 }
 
-window.updateSuggestions = async function() {
-  if (!popup_element) return;
-  const suggestions_div = popup_element.querySelector('.ARCHIVEBOX__tag-suggestions');
-  const suggested_tags = await getSuggestedTags();
-  suggestions_div.innerHTML = suggested_tags.length 
-    ? `${suggested_tags
-        .map(tag => `<span class="ARCHIVEBOX__tag-badge suggestion">${tag}</span>`)
-        .join(' ')}`
-    : '';
-}
 
 window.createPopup = async function() {
   const { current_entry } = await getCurrentEntry();
@@ -416,9 +420,11 @@ window.createPopup = async function() {
   const suggestions_div = popup.querySelector('.ARCHIVEBOX__tag-suggestions');
   const current_tags_div = popup.querySelector('.ARCHIVEBOX__current-tags');
   
+  // console.log('Getting current tags and suggestions');
+
   // Initial display of current tags and suggestions
-  await updateCurrentTags();
-  await updateSuggestions();
+  await window.updateCurrentTags();
+  await window.updateSuggestions();
   
   // Add click handlers for suggestion badges
   suggestions_div.addEventListener('click', async (e) => {
