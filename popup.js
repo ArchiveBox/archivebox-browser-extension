@@ -137,7 +137,7 @@ window.updateCurrentTags = async function() {
       }
     });
   });
-  
+
   sendToArchiveBox(current_entry.url, current_entry.tags);
 }
 
@@ -165,7 +165,8 @@ window.createPopup = async function() {
     boxSizing: 'border-box',
     width: '550px', // Initial width
     height: '200px', // Initial height
-    transition: 'height 0.2s ease-out' // Smooth height transitions
+    transition: 'height 0.2s ease-out', // Smooth height transitions
+    display: 'block',
   });
 
   document.body.appendChild(iframe);
