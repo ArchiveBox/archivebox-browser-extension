@@ -285,9 +285,49 @@
     <div class="tab-pane fade" id="personas" role="tabpanel">
       <div class="row mt-4">
         <div class="col-md-12">
-
-          <div class="alert alert-info">
-            Import cookies from this browser into to an archiving profile to re-use those credentials for logged-in archiving.
+          <div class="mb-4 alert alert-success">
+            <p class="alert-title">
+              <strong>Personas</strong> are a new <i>BETA</i> feature that allow you to more easily manage cookies used to archive sites while logged in.<br/>
+              A persona is similar to a browser profile dedicated to archiving, it's a collection of login credentials your archiving bot can use when it goes to archive sites.<br/>
+              It's recommneded to create at least 2 personas to start:<br/>
+              <ul>
+                <li>a safe anonymous persona that uses only burner temporary accounts so that the archives created are safe to share with the world (<i><a href="https://docs.sweeting.me/s/cookie-dilemma">why use burner credentials for archiving?</a></i>)</li>
+                <li>an unsafe private persona used only for your personal data like social media, email, corporate resources, etc. (the archives generated with this one are safe <a href="https://docs.sweeting.me/s/cookie-dilemma">for your own eyes only</a>!)</li>
+              </ul>
+              <br/>
+            </p>
+            <p class="alert-body">
+              <i>In the future you will be able to sync your personas from this extension to ArchiveBox servers automatically.</i>
+              <br/>
+              For now, a manual export is provided which can be saved into a <a href="https://github.com/ArchiveBox/ArchiveBox/wiki/Configuration#cookies_file"><code>cookies.txt</code> file the ArchiveBox server can use</a>.
+              <br/>
+              <br/>
+              <ol>
+                <li>Create a new persona by clicking the "<strong>Create New Persona</strong>" button below.</li>
+                <li>Set the <strong>Active Persona</strong> to the persona you just created.</li>
+                <li><i>In a new tab:</i> log into all the sites you want to archive using the login credentials you want this persona to use.</li>
+                <li>Then under "Import Browser Cookies" below, select the logins you want to attach to the Persona and click "<strong>Import Cookies to Active Persona</strong>" at the bottom.</li>
+                <li>Click the "<strong>Export Cookies</strong>" button under the persona to get a <code>cookies.txt</code> file, then save that on your server and <a href="https://github.com/ArchiveBox/ArchiveBox/wiki/Configuration#cookies_file">configure ArchiveBox to use it</a>.</li>
+              </ol>
+            </p>
+          </div>
+          
+          <!-- Active Persona Selection -->
+          <div class="card mb-4">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="d-flex align-items-center">
+                  <h5 class="mb-0 me-3">Active Persona:</h5>
+                  <select class="form-select" id="activePersona" style="width: auto;">
+                    <option value="">Select a persona...</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary" id="newPersona">
+                  Create New Persona
+                </button>
+              </div>
+              <div id="personaStats" class="text-muted small"></div>
+            </div>
           </div>
 
           <!-- Persona List -->
