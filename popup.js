@@ -404,7 +404,7 @@ window.createPopup = async function() {
     <div class="ARCHIVEBOX__current-tags"></div><div class="ARCHIVEBOX__tag-suggestions"></div><br/>
     <small class="fade-out">
       <span class="status-indicator"></span>
-      Saved
+      Saving...
     </small>
   `;
 
