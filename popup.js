@@ -234,7 +234,7 @@ window.createPopup = async function() {
     }
 
     .archive-box-popup small.fade-out {
-      animation: fadeOut 2.5s ease-in-out forwards;
+      animation: fadeOut 10s ease-in-out forwards;
     }
     
     .archive-box-popup img {
