@@ -73,7 +73,8 @@ export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
     const body = new FormData();
     body.append("url", urls);
     body.append("tag", tags);
-    body.append("only_new", "1");
+    body.append("parser", "auto")
+    body.append("depth", 0)
 
     try {
       const response = await fetch(`${archivebox_server_url}/add/`, {
