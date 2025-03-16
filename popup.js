@@ -30,7 +30,7 @@ async function sendToArchiveBox(url, tags) {
 
     const addCommandArgs = JSON.stringify({
       urls: [url],
-      tag: tags.join(','),
+      tags: tags.join(','),
     });
 
     const addResponse = await new Promise((resolve, reject) => {
