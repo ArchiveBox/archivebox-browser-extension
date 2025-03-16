@@ -7,10 +7,10 @@
     "storage",
     "scripting",
     "activeTab",
-    "contextMenus"
+    "contextMenus",
+    "unlimitedStorage"
   ],
   "optional_permissions": [
-    "unlimitedStorage",
     "cookies",
     "history",
     "bookmarks"
