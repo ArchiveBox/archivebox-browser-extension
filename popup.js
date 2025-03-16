@@ -45,8 +45,8 @@ async function sendToArchiveBox(url, tags) {
       });
     })
 
-    ok = addResponse.ok;
-    status = `${addResponse.status} ${addResponse.statusText}`
+    ok = true;
+    status = 'Saved to ArchiveBox Server'
   } catch (error) {
     console.log(`ArchiveBox request failed: ${error}`);
     ok = false;
@@ -409,7 +409,7 @@ window.createPopup = async function() {
     <div class="ARCHIVEBOX__current-tags"></div><div class="ARCHIVEBOX__tag-suggestions"></div><br/>
     <small class="fade-out">
       <span class="status-indicator"></span>
-      Saving...
+      Saved locally...
     </small>
   `;
 
