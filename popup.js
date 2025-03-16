@@ -22,6 +22,9 @@ async function getAllTags() {
 }
 
 async function sendToArchiveBox(url, tags) {
+  let status = "pending";
+  let ok = false;
+
   try {
     console.log('i Sending to ArchiveBox', { url, tags });
 
@@ -30,30 +33,32 @@ async function sendToArchiveBox(url, tags) {
       tag: tags.join(','),
     });
 
-    const response = await new Promise((resolve, reject) => {
+    const addResponse = await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
         type: 'archivebox_add',
         body: addCommandArgs
       }, (response) => {
         if (!response.ok) {
-          console.log(`ArchiveBox request failed: ${response.errorMessage}`);
           reject(`${response.errorMessage}`);
         }
-
         resolve(response);
       });
     })
 
-    const status_div = popup_element.querySelector('small');
-    status_div.innerHTML = `
-      <span class="status-indicator ${response.ok ? 'success' : 'error'}"></span>
-      ${response.status}
-    `;
-    return { ok: response.ok, status: `${response.status} ${response.statusText}`};
+    ok = addResponse.ok;
+    status = `${addResponse.status} ${addResponse.statusText}`
   } catch (error) {
     console.log(`ArchiveBox request failed: ${error}`);
-    return { ok: false, status: `Failed to archive: ${error}` };
+    ok = false;
+    status = `Failed to archive: ${error}`
   }
+
+  const status_div = popup_element.querySelector('small');
+  status_div.innerHTML = `
+    <span class="status-indicator ${ok ? 'success' : 'error'}"></span>
+    ${status}
+  `;
+  return { ok: ok, status: status};
 }
 
 window.getCurrentEntry = async function() {
