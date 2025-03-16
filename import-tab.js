@@ -22,8 +22,6 @@ export async function initializeImport() {
   document.getElementById('deselectAll').addEventListener('click', () => toggleAllSelection(false));
   document.getElementById('selectAllHeader').addEventListener('change', e => toggleAllSelection(e.target.checked));
   document.getElementById('importSelected').addEventListener('click', importSelected);
-
-  loadHistory();
 }
 
 async function loadHistory() {
