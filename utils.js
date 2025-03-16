@@ -30,7 +30,7 @@ export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
       });
     });
 
-    console.log('i addToArchiveBox', archivebox_server_url, addCommandArgs);
+    console.log('i addToArchiveBox server url', archivebox_server_url);
     if (!archivebox_server_url) {
       throw new Error('Server not configured.');
     }
