@@ -64,9 +64,13 @@ export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
     // fall back to pre-v0.8.0 endpoint for backwards compatibility
     console.log('i addToArchiveBox using legacy /add POST method');
 
+    const parsedAddCommandArgs = JSON.parse(addCommandArgs);
+    const urls = parsedAddCommandArgs && parsedAddCommandArgs.urls
+      ? parsedAddCommandArgs.urls.join("\n") : "";
+    const tags = parsedAddCommandArgs && parsedAddCommandArgs.tags
+      ? parsedAddCommandArgs.tags : "";
+
     const body = new FormData();
-    const urls = addCommandArgs && addCommandArgs.urls ? addCommandArgs.urls.join("\n") : "";
-    const tags = addCommandArgs && addCommandArgs.tags ? addCommandArgs.tags : "";
     body.append("url", urls);
     body.append("tag", tags);
     body.append("only_new", "1");
