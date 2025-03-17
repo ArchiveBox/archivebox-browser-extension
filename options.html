@@ -72,6 +72,10 @@
       background: #dc3545;
     }
 
+    .status-warning {
+      background: #ffc107;
+    }
+
     .test-section {
       margin-top: 2rem;
       padding-top: 1rem;
@@ -93,6 +97,10 @@
 
     .sync-status.status-error {
       background: #dc3545;
+    }
+
+    .sync-status.status-warning {
+      background: #ffc107;
     }
 
     @keyframes pulse {
@@ -125,15 +133,11 @@
         <div class="col-md-10">
           <div class="d-flex gap-2 mb-3">
             <div class="btn-group">
-              <button class="btn btn-outline-secondary" id="selectAllUrls">☑️ Select All</button>
-              <button class="btn btn-outline-secondary" id="deselectAllUrls">☐ Deselect All</button>
+              <button class="btn btn-outline-secondary" id="selectAllUrls">☑ <span id="selectedUrlCount" class="ms-1">0</span></button>
             </div>
             <div class="btn-group flex-grow-1">
               <label class="input-group-text" aria-label="Search" for="filterInput">🔍</label>
-              <input type="search" class="form-control" id="filterInput" placeholder="Filter entries...">
-              <span class="input-group-text">
-                Selected: <span id="selectedUrlCount" class="ms-1">0</span>
-              </span>
+              <input type="search" class="form-control" id="filterInput" placeholder="Search by URL, title, or tags...">
             </div>
             <div class="btn-group">
               <button class="btn btn-outline-secondary" id="editTags" data-bs-toggle="modal" data-bs-target="#editTagsModal">
@@ -217,7 +221,7 @@
               </div>
               <div class="form-text">
                 The base URL of your self-hosted <a href="https://github.com/ArchiveBox/archivebox#quickstart">ArchiveBox</a> server, e.g. <code>http://localhost:8000</code><br/>
-                This extension works by sending URLs from the browser to your remote ArchiveBox server via the <a href="https://demo.archivebox.io/docs/api/overview/">ArchiveBox REST API</a>.
+                This extension works by sending URLs from the browser to your remote ArchiveBox server via the <a href="https://demo.archivebox.io/api/v1/docs">ArchiveBox REST API</a>.
                 <span id="serverStatusText" class="ms-2"></span>
               </div>
             </div>
@@ -237,35 +241,51 @@
                 </button>
               </div>
               <div class="form-text">
-                If the server is running ArchiveBox <code>&gt;= v0.8.5</code>: <a href="#" id="generateApiKeyLink">Log In to your Admin UI & generate an API Token</a>, copy the <code>Token</code> value, set an <code>Expiration Date</code>, click <code>Save</code>, then paste the value here.<br/>
-                If the server is running ArchiveBox <code>&lt;= v0.7.3</code>: <a href="#" id="loginAdminUILink">Log In to your Admin UI</a> in this browser every 2 weeks and <i>leave this field blank</i>. To allow submitting URLs without requiring a login, run: <code>archivebox config --set PUBLIC_ADD_VIEW=True</code><br/>
+                If the server is running ArchiveBox <code>&gt;= v0.8.5</code>: <a href="#" id="generateApiKeyLink">Log In to your Admin UI & generate an API Token</a>, copy the <code>Token</code> value, set an <code>Expiration Date</code> <small>(REQUIRED)</small>, click <code>Save</code>, then paste the value here.<br/>
+                If the server is running ArchiveBox <code>&lt;= v0.7.3</code>: <a href="#" id="loginAdminUILink">Log In to your Admin UI</a> in this browser every 2 weeks <small>(sorry)</small> and <i>leave this field blank</i>, it will re-use your admin UI login session.<br/>
+                To configure your server to allow submitting URLs <b>without requiring a login or API Token</b> <small>(<a href="https://github.com/ArchiveBox/ArchiveBox/wiki/Security-Overview">SECURITY RISK!</a>)</small>, run: <code>archivebox config --set <a href="https://github.com/ArchiveBox/ArchiveBox/wiki/Configuration#PUBLIC_ADD_VIEW" style="color: darkblue">PUBLIC_ADD_VIEW=True</a></code><br/>
                 <br/>
-                For detailed instructions and troubleshooting tips see the <a href="https://github.com/ArchiveBox/archivebox-browser-extension">ArchiveBox Extension Documentation</a> and <a href="https://github.com/ArchiveBox/archivebox/wiki/Configuration#public_index--public_snapshots--public_add_view">ArchiveBox Config Documentation</a> on Github.
+                <div class="alert alert-success">
+                  For detailed instructions and troubleshooting tips see the <a href="https://github.com/ArchiveBox/archivebox-browser-extension#setup">🧩 ArchiveBox Extension Setup Guide</a> and <a href="https://github.com/ArchiveBox/archivebox/wiki/Configuration#public_index--public_snapshots--public_add_view">🗄️ ArchiveBox Server Config Documentation</a>.
+                </div>
                 <span id="apiKeyStatusText" class="ms-2"></span>
               </div>
             </div>
-            <br/><br/>
+            <br/>
             <hr/>
-            <br/><br/>
+            <br/>
+            <h5>Advanced Users Only: Auto-archive URLs</h5><br/>
             <div class="mb-3">
-              <label for="match_urls" class="form-label">🔍 Match URL Patterns</label>
-              <input type="text" class="form-control" id="match_urls" value="(youtube.com)|(wikipedia.org)|(reddit.com)|(news.ycombinator.com)|(x.com)|(github.com)"
-                     placeholder="(youtube.com)|(wikipedia.org)|(reddit.com)|(news.ycombinator.com)|(x.com)|(github.com)">
-              <div class="form-text">By default sites are only archived when the extension icon is clicked. To archive some sites automatically whenever they are visited, specify them as a <a href="https://regexr.com/8d19s">regex</a> here. To archive <i>all</i> visited pages (not recommended), set this to: <code>.*</code></div>
+              <label for="match_urls" class="form-label">➕ Auto-archive all visited URLs that match this <code>regex</code> pattern</label>
+              <div class="form-text">
+                By default sites are only archived when you click <img src="/128.png" alt="ArchiveBox Extension Icon" style="vertical-align: middle; margin-right: 2px; width: 16px; "> <code>Save to ArchiveBox</code>.
+                <br/>
+                To archive specific pages automatically whenever they are visited, specify them as a <a href="https://regexr.com/8d19s">regex</a> here.
+              </div>
+              <input type="text" class="form-control" id="match_urls" value="(wikipedia.org)|(archive.org)|(github.com\/ArchiveBox\/ArchiveBox\/$)"
+                     placeholder="(wikipedia.org)|(archive.org)|(github.com\/ArchiveBox\/ArchiveBox\/$)">
+              <div class="form-text">
+                To archive <i>all</i> visited pages (not recommended), set this to: <code>.*</code>
+              </div>
             </div>
 
             <div class="mb-3">
-              <label for="exclude_urls" class="form-label">🚫 Exclude URL Patterns</label>
+              <label for="exclude_urls" class="form-label">🚫 Don't auto-archive URLs matching this <code>regex</code> pattern</label>
               <input type="text" class="form-control" id="exclude_urls" 
-                     placeholder=":\/\/(mail.google.com)" value=":\/\/(mail.google.com)">
-              <div class="form-text"><a href="regexr.com/8d19v">Regex of URLs</a> to never auotomatically archive (overrides the setting above). Exclude sensitive domains like your email inbox, corporate documents provider, banking sites, etc. here.</div>
+                     placeholder="(mail.google.com)|(docs.google.com)|(password)|(login)|(logout)|(signup)|(register)" value="(mail.google.com)|(password)|(login)|(logout)|(signup)|(register)">
+              <div class="form-text">
+                <a href="regexr.com/8d19v">Regex of URLs</a> to never automatically archive (does not prevent adding them manually).
+                <br/>
+                Exclude sensitive URLs like your email inbox, forms, corporate documents, banking sites, etc. here to avoid accidentally archiving them.
+              </div>
             </div>
             <br/><br/>
             <div class="mb-3" style="background-color: #dfebfd; padding: 5px; border-radius: 6px;">
-              <label for="testUrl" class="form-label">🔍 Test the patterns and try adding a URL</label><span class="status-indicator mt-2" id="urlStatus" style="display:none;"></span>
+              <label for="testUrl" class="form-label">🚀 Test the patterns and try adding a URL</label><span class="status-indicator mt-2" id="urlStatus" style="display:none;"></span>
               <div class="input-group">
                 <input type="url" class="form-control" id="testUrl" 
-                       placeholder="Enter a URL to test against patterns">
+                       placeholder="Enter a URL to test against patterns"
+                       value="https://example.com">
                 <button type="button" id="testAdding" class="btn btn-outline-secondary" style="background-color: #dfebfd;">
                   TEST ADDING
                   <span class="status-indicator" id="addingStatus"></span>
@@ -285,6 +305,7 @@
     <div class="tab-pane fade" id="personas" role="tabpanel">
       <div class="row mt-4">
         <div class="col-md-12">
+<<<<<<< HEAD
           <div class="mb-4 alert alert-success">
             <p class="alert-title">
               <strong>Personas</strong> are a new <i>BETA</i> feature that allow you to more easily manage cookies used to archive sites while logged in.<br/>
@@ -328,6 +349,29 @@
               </div>
               <div id="personaStats" class="text-muted small"></div>
             </div>
+||||||| parent of 405abd3 (latest fixes)
+
+          <div class="alert alert-info">
+            Import cookies from this browser into to an archiving profile to re-use those credentials for logged-in archiving.
+=======
+
+          <div class="alert alert-info">
+            <h3>Advanced Users Only: Logged-in Archiving</h3>
+            For <a href="https://github.com/ArchiveBox/ArchiveBox/wiki/Chromium-Install#setting-up-a-chromium-user-profile" style="color: darkblue">Logged-in Archiving</a>, you must set up one or more <code>Archiving Profiles</code> by importing the credentials you need from a browser. 
+            An <code>Archiving Profile</code> is ArchiveBox's equivalent to a browser profile, it's a set of cookies or login credentials to the websites you want to capture.<br/>
+            <hr/>
+            To import cookies from this browser and use them for archiving, click the <code>Export cookies.txt</code> button on the profile you want to use below. <br/><br/>
+            <pre>
+# save the cookies.txt contents into a text file on your ArchiveBox server, then run:
+archivebox config --set <a href="https://github.com/ArchiveBox/ArchiveBox/wiki/Configuration#cookie_file" style="color: darkblue">COOKIE_FILE</a>=$PWD/cookies.txt
+
+# advanced: copy a Chrome user data directory (Profile Path visible on chrome://profile-internals) to the server to use it for logged-in archiving:
+archivebox config --set <a href="https://github.com/ArchiveBox/ArchiveBox/wiki/Configuration#chrome_user_data_dir" style="color: darkblue">CHROME_USER_DATA_DIR</a>=$PWD/chrome-user-data</pre>
+          </div>
+          <div class="alert alert-warning">
+            It's recommended to create <a href="https://docs.sweeting.me/s/cookie-dilemma" style="color: darkblue">dedicated separate accounts</a> for archiving and normal browsing to avoid embedding your personal browsing data + cookies headers into the archives.<br/>
+            e.g. if you normally log in to Twitter as <code>johndoe@example.com</code>, you should not archive with that account, but instead create a new account for archiving like <code>johndoeswitness@example.com</code>.
+>>>>>>> 405abd3 (latest fixes)
           </div>
 
           <!-- Persona List -->
@@ -369,11 +413,11 @@
             </div>
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-center mb-3">
-                <div>
-                  <button class="btn btn-outline-secondary" id="selectAllCookies">Select All</button>
-                  <button class="btn btn-outline-secondary" id="deselectAllCookies">Deselect All</button>
+                <div class="btn-group">
+                  <button class="btn btn-outline-secondary" id="selectAllCookies">☑</button>
+                  <button class="btn btn-outline-secondary" id="deselectAllCookies">☐</button>
                 </div>
-                <div class="input-group" style="max-width: 800px;">
+                <div class="input-group" style="max-width: 950px;">
                   <span class="input-group-text">🔎</span>
                   <input type="search" class="form-control" id="cookieFilter" placeholder="Filter domains...">
                 </div>
@@ -390,6 +434,7 @@
                       <th>Domain</th>
                       <th style="width: 100px;">Cookies</th>
                       <th>Export <code>cookies.txt</code></th>
+                      <th>Select for archiving</th>
                     </tr>
                   </thead>
                   <tbody></tbody>
@@ -416,49 +461,22 @@
     <div class="tab-pane fade" id="import" role="tabpanel">
       <div class="row mt-4">
         <div class="col-md-12">
-          <ul class="nav nav-pills mb-4" role="tablist">
+          <ul class="nav nav-pills mb-4 justify-content-center flex" role="tablist">
             <li class="nav-item">
-              <a class="nav-link active" id="history-tab" data-bs-toggle="pill" href="#history" role="tab">Chrome History</a>
+              <a class="nav-link" id="history-tab" data-bs-toggle="pill" href="#history" role="tab">📜 Import from Browser History</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" id="bookmarks-tab" data-bs-toggle="pill" href="#bookmarks" role="tab">Chrome Bookmarks</a>
+              <a class="nav-link" id="bookmarks-tab" data-bs-toggle="pill" href="#bookmarks" role="tab">📌 Import from Browser Bookmarks</a>
             </li>
           </ul>
-
-          <div class="tab-content">
-            <!-- History Import -->
-            <div class="tab-pane fade show active" id="history" role="tabpanel">
-              <div class="row mb-4">
-                <div class="col-md-6">
-                  <div class="input-group">
-                    <span class="input-group-text">From</span>
-                    <input type="date" class="form-control" id="historyStartDate">
-                    <span class="input-group-text">To</span>
-                    <input type="date" class="form-control" id="historyEndDate">
-                    <button class="btn btn-primary" id="loadHistory">Load History</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Bookmarks Import -->
-            <div class="tab-pane fade" id="bookmarks" role="tabpanel">
-              <div class="row mb-4">
-                <div class="col-md-6">
-                  <button class="btn btn-primary" id="loadBookmarks">Load Bookmarks</button>
-                </div>
-              </div>
-            </div>
-          </div>
 
           <!-- Common Import UI -->
           <div class="card">
             <div class="card-body">
-              <div class="d-flex justify-content-between align-items-center mb-3">
-                <div>
-                  <span class="me-3">Selected: <span id="selectedCount">0</span></span>
-                  <button class="btn btn-outline-secondary" id="selectAll">Select All</button>
-                  <button class="btn btn-outline-secondary" id="deselectAll">Deselect All</button>
+              <div class="d-flex align-items-left justify-content-left">
+                <div class="input-group">
+                  <button class="btn btn-outline-secondary" id="selectAll">☑ <span id="selectedCount">0</span></button>
+                  <button class="btn btn-outline-secondary" id="deselectAll">☐</button>
                 </div>
                 <div class="input-group" style="max-width: 600px;">
                   <input type="search" class="form-control" id="importFilter" placeholder="Filter URLs and titles...">
@@ -467,9 +485,15 @@
                     <label class="form-check-label ms-2" for="showNewOnly">Show new only</label>
                   </div>
                 </div>
+                <div class="input-group">
+                    <span class="input-group-text">From</span>
+                    <input type="date" class="form-control" id="historyStartDate">
+                    <span class="input-group-text">To</span>
+                    <input type="date" class="form-control" id="historyEndDate">
+                </div>
                 <div class="input-group" style="max-width: 600px;">
                   <span class="input-group-text">Tags</span>
-                  <input type="text" class="form-control" id="importTags" placeholder="Add tags (comma separated)">
+                  <input type="text" class="form-control" id="importTags" placeholder="Add tags (comma,separated)">
                   <button class="btn btn-success" id="importSelected">Import Selected &nbsp; <i class="bi bi-arrow-right"></i></button>
                 </div>
               </div>

@@ -6,17 +6,20 @@ export async function initializeConfigTab() {
   const serverUrl = document.getElementById('archivebox_server_url');
   const apiKey = document.getElementById('archivebox_api_key');
   const matchUrls = document.getElementById('match_urls');
+  const excludeUrls = document.getElementById('exclude_urls');
   
   // Load saved values
   const archivebox_server_url = await getArchiveBoxServerUrl();
   const { archivebox_api_key, match_urls } = await chrome.storage.local.get([
     'archivebox_api_key',
-    'match_urls'
+    'match_urls',
+    'exclude_urls',
   ]);
   
-  serverUrl.value = archivebox_server_url;
-  apiKey.value = archivebox_api_key || '';
-  matchUrls.value = match_urls || '';
+  serverUrl.value = savedConfig.archivebox_server_url || '';
+  apiKey.value = savedConfig.archivebox_api_key || '';
+  matchUrls.value = savedConfig.match_urls || '';
+  excludeUrls.value = savedConfig.exclude_urls || '';
 
   // Server test button handler
   document.getElementById('testServer').addEventListener('click', async () => {
@@ -113,12 +116,13 @@ export async function initializeConfigTab() {
   });
 
   // Save changes when inputs change
-  [serverUrl, apiKey, matchUrls].forEach(input => {
+  [serverUrl, apiKey, matchUrls, excludeUrls].forEach(input => {
     input.addEventListener('change', async () => {
       await chrome.storage.local.set({
         archivebox_server_url: serverUrl.value.replace(/\/$/, ''),
         archivebox_api_key: apiKey.value,
-        match_urls: matchUrls.value
+        match_urls: matchUrls.value,
+        exclude_urls: excludeUrls.value,
       });
     });
   });
@@ -130,19 +134,44 @@ export async function initializeConfigTab() {
 
   testButton.addEventListener('click', async () => {
     const url = testUrlInput.value.trim();
+
+    // test if the URL matches the regex match patterns
+    const matchPattern = matchUrls.value.length ? new RegExp(matchUrls.value) : /^$/;
+    if (matchPattern.test(url)) {
+      testStatus.innerHTML = `
+        <span class="status-indicator status-success"></span>
+        ➕ URL would be auto-archived when visited<br/>
+      `;
+    } else {
+      testStatus.innerHTML = `
+        <span class="status-indicator status-warning"></span>
+        ☝ URL does not match the auto-archive pattern (but it can still be saved manually)<br/>
+      `;
+    }
+
+    const excludePattern = excludeUrls.value.length ? new RegExp(excludeUrls.value) : /^$/;
+    if (excludePattern.test(url)) {
+      testStatus.innerHTML = `
+       <span class="status-indicator status-warning"></span>
+        🚫 URL is excluded from auto-archiving (but it can still be saved manually)<br/>
+      `;
+    }
+
     if (!url) {
       testStatus.innerHTML = `
         <span class="status-indicator status-error"></span>
-        Please enter a URL to test
+        ⌨️ Please enter a URL to test
       `;
       return;
     }
 
     // Show loading state
     testButton.disabled = true;
-    testStatus.innerHTML = `
-      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-      Testing...
+    testStatus.innerHTML += `
+      <span id="inprogress-test">
+        &nbsp; &nbsp; <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+        Submitting...
+      </span>
     `;
 
     try {
@@ -154,22 +183,23 @@ export async function initializeConfigTab() {
       };
 
       const result = await syncToArchiveBox(testEntry);
+      document.getElementById('inprogress-test').remove();
 
       if (result.ok) {
-        testStatus.innerHTML = `
-          <span class="status-indicator status-success"></span>
-          Success! URL was added to ArchiveBox
+        testStatus.innerHTML += `
+          &nbsp; <span class="status-indicator status-success"></span>
+          🚀 URL was submitted and <a href="${serverUrl.value}/" target="_blank">✓ queued for archiving</a> on the ArchiveBox server: <a href="${serverUrl.value}/archive/${testEntry.url}" target="_blank">📦 <code>${serverUrl.value}/archive/${testEntry.url}</code></a>.
         `;
         // Clear the input on success
         testUrlInput.value = '';
       } else {
-        testStatus.innerHTML = `
+        testStatus.innerHTML += `
           <span class="status-indicator status-error"></span>
           Error: ${result.status}
         `;
       }
     } catch (error) {
-      testStatus.innerHTML = `
+      testStatus.innerHTML += `
         <span class="status-indicator status-error"></span>
         Error: ${error.message}
       `;

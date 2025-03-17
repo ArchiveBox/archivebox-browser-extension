@@ -186,6 +186,7 @@ document.getElementById('requestCookiesPermission').addEventListener('click', as
     alert('Permission denied.');
     return;
   } else {
-    window.location.reload();
+    loadAvailableCookies();
+    renderCookieTable(document.getElementById('cookieFilter').value);
   }
 });

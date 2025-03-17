@@ -14,8 +14,8 @@ export async function initializeImport() {
   document.getElementById('historyEndDate').valueAsDate = endDate;
   
   // Add event listeners
-  document.getElementById('loadHistory').addEventListener('click', loadHistory);
-  document.getElementById('loadBookmarks').addEventListener('click', loadBookmarks);
+  document.getElementById('history-tab').addEventListener('click', loadHistory);
+  document.getElementById('bookmarks-tab').addEventListener('click', loadBookmarks);
   document.getElementById('importFilter').addEventListener('input', filterImportItems);
   document.getElementById('showNewOnly').addEventListener('change', filterImportItems);
   document.getElementById('selectAll').addEventListener('click', () => toggleAllSelection(true));
