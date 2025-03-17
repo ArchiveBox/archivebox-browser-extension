@@ -1,4 +1,4 @@
-import { filterEntries, addToArchiveBox, downloadCsv, downloadJson, syncToArchiveBox, updateStatusIndicator } from './utils.js';
+import { filterEntries, addToArchiveBox, downloadCsv, downloadJson, syncToArchiveBox, updateStatusIndicator, getArchiveBoxServerUrl } from './utils.js';
 
 export async function renderEntries(filterText = '', tagFilter = '') {
   const { entries = [] } = await chrome.storage.local.get('entries');
@@ -382,8 +382,8 @@ export function initializeEntriesTab() {
 
   // Modify existing renderEntries function
   async function renderEntries() {
-    let { entries = [], archivebox_server_url, config_archiveBoxBaseUrl } = await chrome.storage.local.get(['entries', 'archivebox_server_url', 'config_archiveBoxBaseUrl']);
-    archivebox_server_url = archivebox_server_url || config_archiveBoxBaseUrl;
+    const { entries = [] } = await chrome.storage.local.get(['entries']);
+    const archivebox_server_url = await getArchiveBoxServerUrl();
 
     const filterText = document.getElementById('filterInput').value.toLowerCase();
     const entriesList = document.getElementById('entriesList');

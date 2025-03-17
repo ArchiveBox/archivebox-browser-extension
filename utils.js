@@ -1,5 +1,14 @@
 // Common utility functions
 
+// Helper to get server URL with fallback to legacy config name
+export async function getArchiveBoxServerUrl() {
+  const { archivebox_server_url, config_archiveBoxBaseUrl } = await chrome.storage.local.get([
+    'archivebox_server_url',
+    'config_archiveBoxBaseUrl'
+  ]);
+  return archivebox_server_url || config_archiveBoxBaseUrl || '';
+}
+
 export function filterEntries(entries, filterText) {
   if (!filterText) return entries;
   
@@ -36,18 +45,11 @@ export function updateStatusIndicator(indicator, textElement, success, message) 
 export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
   console.log('i addToArchiveBox', addCommandArgs);
   try {
-    const { archivebox_server_url, archivebox_api_key } = await new Promise((resolve, reject) => {
-      chrome.storage.local.get(['archivebox_server_url', 'archivebox_api_key', 'config_archiveBoxBaseUrl'], (vals) => {
-        if (chrome.runtime.lastError) {
-          reject(chrome.runtime.lastError);
-        } else {
-          resolve({archivebox_server_url: vals.archivebox_server_url || vals.config_archiveBoxBaseUrl, archivebox_api_key: vals.archivebox_api_key});
-        }
-      });
-    });
+    const archivebox_server_url = await getArchiveBoxServerUrl();
+    const { archivebox_api_key } = await chrome.storage.local.get(['archivebox_api_key']);
 
     console.log('i addToArchiveBox server url', archivebox_server_url);
-    if (archivebox_server_url) {
+    if (!archivebox_server_url) {
       throw new Error('Server not configured.');
     }
 
@@ -159,12 +161,8 @@ export function downloadJson(entries) {
 
 // Shared syncToArchiveBox function for config-tab and entries-tab
 export async function syncToArchiveBox(entry) {
-  let { archivebox_server_url, archivebox_api_key, config_archiveBoxBaseUrl } = await chrome.storage.local.get([
-    'archivebox_server_url',
-    'archivebox_api_key',
-    'config_archiveBoxBaseUrl'
-  ]);
-  archivebox_server_url = archivebox_server_url || config_archiveBoxBaseUrl;
+  const archivebox_server_url = await getArchiveBoxServerUrl();
+  const { archivebox_api_key } = await chrome.storage.local.get(['archivebox_api_key']);
   
   if (!archivebox_server_url || !archivebox_api_key) {
     return { 

@@ -1,5 +1,5 @@
 // Config tab initialization and handlers
-import { updateStatusIndicator, syncToArchiveBox } from './utils.js';
+import { updateStatusIndicator, syncToArchiveBox, getArchiveBoxServerUrl } from './utils.js';
 
 export async function initializeConfigTab() {
   const configForm = document.getElementById('configForm');
@@ -8,16 +8,15 @@ export async function initializeConfigTab() {
   const matchUrls = document.getElementById('match_urls');
   
   // Load saved values
-  const savedConfig = await chrome.storage.local.get([
-    'archivebox_server_url',
+  const archivebox_server_url = await getArchiveBoxServerUrl();
+  const { archivebox_api_key, match_urls } = await chrome.storage.local.get([
     'archivebox_api_key',
-    'match_urls',
-    'config_archiveBoxBaseUrl', // old name for archivebox_server_url
+    'match_urls'
   ]);
   
-  serverUrl.value = savedConfig.archivebox_server_url || savedConfig.config_archiveBoxBaseUrl || '';
-  apiKey.value = savedConfig.archivebox_api_key || '';
-  matchUrls.value = savedConfig.match_urls || '';
+  serverUrl.value = archivebox_server_url;
+  apiKey.value = archivebox_api_key || '';
+  matchUrls.value = match_urls || '';
 
   // Server test button handler
   document.getElementById('testServer').addEventListener('click', async () => {
