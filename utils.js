@@ -2,10 +2,8 @@
 
 // Helper to get server URL with fallback to legacy config name
 export async function getArchiveBoxServerUrl() {
-  const { archivebox_server_url, config_archiveBoxBaseUrl } = await chrome.storage.local.get([
-    'archivebox_server_url',
-    'config_archiveBoxBaseUrl'
-  ]);
+  const { archivebox_server_url } = await chrome.storage.local.get(['archivebox_server_url']);    // new ArchiveBox Extension v2.1.3 location
+  const {config_archiveBoxBaseUrl} = await chrome.storage.sync.get(['config_archiveBoxBaseUrl']); // old ArchiveBox Exporter v1.3.1 location
   return archivebox_server_url || config_archiveBoxBaseUrl || '';
 }
 
