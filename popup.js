@@ -1,4 +1,8 @@
 // popup.js
+
+const IS_IN_POPUP = window.location.href.startsWith('chrome-extension://') && window.location.href.endsWith('/popup.html');
+const IS_ON_WEBSITE = !window.location.href.startsWith('chrome-extension://');
+
 window.popup_element = null;  // Global reference to popup element
 window.hide_timer = null;
 
@@ -9,7 +13,7 @@ window.closePopup = function () {
 };
 
 // handle escape key when popup doesn't have focus
-document.addEventListener('keydown', (e)=>{
+document.addEventListener('keydown', (e) => {
   if (e.key == 'Escape') {
     closePopup();
   }
