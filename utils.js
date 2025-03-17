@@ -207,3 +207,110 @@ export async function syncToArchiveBox(entry) {
     };
   }
 }
+
+// Helper: Only process pages that are "real" (skip about:blank, chrome://newtab, etc.)
+function isRealPage(url) {
+    return url !== "about:blank" && !url.startsWith("chrome://newtab");
+}
+
+// Convert a data URL to a Uint8Array.
+// function dataUrlToUint8Array(dataUrl) {
+//     const base64 = dataUrl.split(",")[1];
+//     const binary = atob(base64);
+//     const array = new Uint8Array(binary.length);
+//     for (let i = 0; i < binary.length; i++) {
+//         array[i] = binary.charCodeAt(i);
+//     }
+//     return array;
+// }
+
+export async function captureScreenshot() {
+    const activeTabs = await chrome.tabs.query({active: true, currentWindow: true});
+    const tab = activeTabs[0];
+    if (
+        !tab.url ||
+        !isRealPage(tab.url) ||
+        tab.url.startsWith("chrome-extension://")
+    ) {
+        return;
+    }
+
+    // Capture the visible tab as a PNG data URL.
+    const dataUrl = await new Promise((resolve, reject) => {
+      chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" }, (dataUrl) => {
+        if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError);
+        } else {
+            resolve(dataUrl);
+        }
+      });
+    });
+
+    try {
+      const base64 = dataUrl.split(",")[1];
+      const byteString = atob(base64);
+      const arrayBuffer = new ArrayBuffer(byteString.length);
+      const uint8Array = new Uint8Array(arrayBuffer);
+
+      for (let i = 0; i < byteString.length; i++) {
+        uint8Array[i] = byteString.charCodeAt(i);
+      }
+
+      const blob = new Blob([uint8Array], { type: "image/png" });
+
+      const root = await navigator.storage.getDirectory();
+
+      const screenshotsDir = await root.getDirectoryHandle('screenshots', { create: true });
+
+      const timestamp = Date.now();
+      const fileName = `screenshot-${timestamp}.png`;
+
+      const fileHandle = await screenshotsDir.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+
+      console.log(`Screenshot saved to OPFS: /screenshots/${fileName}`);
+      return { ok: true, fileName, path: `/screenshots/${fileName}` };
+    } catch (error) {
+      console.error("Failed to save screenshot to OPFS:", error);
+      return { ok: false }
+    }
+}
+
+
+export async function captureDom() {
+  try {
+    const activeTabs = await chrome.tabs.query({active: true, currentWindow: true})
+    const tabId = activeTabs[0].id;
+
+    // sends a message to the content script
+    const captureResponse = await chrome.tabs.sendMessage( tabId, { type: 'capture_dom' } );
+
+    const timestamp = Date.now();
+    const fileName = `${timestamp}.html`;
+
+    const blob = new Blob([captureResponse.domContent], { type: "text/html" });
+
+    try {
+      const root = await navigator.storage.getDirectory();
+
+      const domDir = await root.getDirectoryHandle('dom', { create: true });
+
+      const fileHandle = await domDir.getFileHandle(fileName, { create: true });
+
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+
+      console.log(`DOM content saved to OPFS: /dom/${fileName}`);
+      return { ok: true, fileName, path: `/dom/${fileName}` };
+    } catch (error) {
+      console.error("Failed to save DOM to OPFS:", error);
+      throw error;
+    }
+  } catch (error) {
+    console.log("failed to capture dom:", error);
+    return { ok: false }
+  }
+}

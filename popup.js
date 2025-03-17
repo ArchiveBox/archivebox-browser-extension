@@ -65,6 +65,26 @@ async function sendToArchiveBox(url, tags) {
   return { ok: ok, status: status};
 }
 
+async function sendCaptureMessage(type) {
+  try {
+    const captureResponse = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({
+        type: type,
+      }, (response) => {
+        if (!response.ok) {
+          reject(`${response.errorMessage}`);
+        }
+        resolve(response);
+      });
+    })
+    console.log("captureResponse", captureResponse)
+    return captureResponse;
+  } catch (error) {
+    console.log("failed to capture: ", error)
+    return {ok: false}
+  }
+}
+
 window.getCurrentEntry = async function() {
   const { entries = [] } = await chrome.storage.local.get('entries');
   let current_entry = entries.find(entry => entry.url === window.location.href);
@@ -147,7 +167,25 @@ window.updateCurrentTags = async function() {
     });
   });
 
-  sendToArchiveBox(current_entry.url, current_entry.tags);
+  {
+    const {ok, fileName, path} = await sendCaptureMessage('capture_screenshot')
+    console.log(ok ,fileName, path)
+    if (ok) {
+      console.log(`i Saved ${fileName} to ${path}`)
+    } else {
+      console.log('failed to save screenshot locally')
+    }
+  }
+
+  {
+    const {ok, fileName, path} = await sendCaptureMessage('capture_dom')
+    if (ok) {
+      console.log(`i Saved ${fileName} to ${path}`)
+    } else {
+      console.log('failed to save dom locally')
+    }
+  }
+  // sendToArchiveBox(current_entry.url, current_entry.tags);
 }
 
 
