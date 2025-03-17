@@ -10,16 +10,23 @@ export async function initializeConfigTab() {
   
   // Load saved values
   const archivebox_server_url = await getArchiveBoxServerUrl();
-  const { archivebox_api_key, match_urls } = await chrome.storage.local.get([
+  const { archivebox_api_key, match_urls, exclude_urls } = await chrome.storage.local.get([
     'archivebox_api_key',
     'match_urls',
     'exclude_urls',
   ]);
+  console.log('Got config values from storage:', archivebox_server_url, archivebox_api_key, match_urls, exclude_urls);
+
+  // migrate old config_archiveboxBaseUrl to archivebox_server_url
+  const {config_archiveBoxBaseUrl} = await chrome.storage.sync.get('config_archiveboxBaseUrl', );
+  if (config_archiveBoxBaseUrl) {
+    await chrome.storage.local.set({ archivebox_server_url: config_archiveBoxBaseUrl });
+  }
   
-  serverUrl.value = savedConfig.archivebox_server_url || '';
-  apiKey.value = savedConfig.archivebox_api_key || '';
-  matchUrls.value = savedConfig.match_urls || '';
-  excludeUrls.value = savedConfig.exclude_urls || '';
+  serverUrl.value = archivebox_server_url || '';
+  apiKey.value = archivebox_api_key || '';
+  matchUrls.value = typeof match_urls === 'string' ? match_urls : '';
+  excludeUrls.value = typeof exclude_urls === 'string' ? exclude_urls : '';
 
   // Server test button handler
   document.getElementById('testServer').addEventListener('click', async () => {
@@ -120,7 +127,7 @@ export async function initializeConfigTab() {
     input.addEventListener('change', async () => {
       await chrome.storage.local.set({
         archivebox_server_url: serverUrl.value.replace(/\/$/, ''),
-        archivebox_api_key: apiKey.value,
+        archivebox_api_key: apiKey.value.trim(),
         match_urls: matchUrls.value,
         exclude_urls: excludeUrls.value,
       });
@@ -136,7 +143,16 @@ export async function initializeConfigTab() {
     const url = testUrlInput.value.trim();
 
     // test if the URL matches the regex match patterns
-    const matchPattern = matchUrls.value.length ? new RegExp(matchUrls.value) : /^$/;
+    try {
+      const matchPattern = new RegExp(matchUrls.value || /^$/);
+    } catch (error) {
+      testStatus.innerHTML = `
+        <span class="status-indicator status-error"></span>
+        Error with match pattern: ${error.message}<br/>
+      `;
+      return;
+    }
+
     if (matchPattern.test(url)) {
       testStatus.innerHTML = `
         <span class="status-indicator status-success"></span>
@@ -149,11 +165,19 @@ export async function initializeConfigTab() {
       `;
     }
 
-    const excludePattern = excludeUrls.value.length ? new RegExp(excludeUrls.value) : /^$/;
-    if (excludePattern.test(url)) {
+    // test if the URL matches the regex exclude patterns
+    try {
+      const excludePattern = new RegExp(excludeUrls.value || /^$/);
+      if (excludePattern.test(url)) {
+        testStatus.innerHTML = `
+        <span class="status-indicator status-warning"></span>
+          🚫 URL is excluded from auto-archiving (but it can still be saved manually)<br/>
+        `;
+      }
+    } catch (error) {
       testStatus.innerHTML = `
-       <span class="status-indicator status-warning"></span>
-        🚫 URL is excluded from auto-archiving (but it can still be saved manually)<br/>
+        <span class="status-indicator status-error"></span>
+        Error with exclude pattern: ${error.message}<br/>
       `;
     }
 

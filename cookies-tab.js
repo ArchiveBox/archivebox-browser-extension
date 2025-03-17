@@ -175,8 +175,6 @@ export function initializeCookiesTab() {
   
   document.getElementById('importCookies').addEventListener('click', importSelectedCookies);
   
-  // Load initial data
-  loadAvailableCookies();
 } 
 
 document.getElementById('requestCookiesPermission').addEventListener('click', async () => {
