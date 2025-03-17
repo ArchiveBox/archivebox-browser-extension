@@ -143,8 +143,9 @@ export async function initializeConfigTab() {
     const url = testUrlInput.value.trim();
 
     // test if the URL matches the regex match patterns
+    let matchPattern;
     try {
-      const matchPattern = new RegExp(matchUrls.value || /^$/);
+      matchPattern = new RegExp(matchUrls.value || /^$/);
     } catch (error) {
       testStatus.innerHTML = `
         <span class="status-indicator status-error"></span>
@@ -166,8 +167,9 @@ export async function initializeConfigTab() {
     }
 
     // test if the URL matches the regex exclude patterns
+    let excludePattern;
     try {
-      const excludePattern = new RegExp(excludeUrls.value || /^$/);
+      excludePattern = new RegExp(excludeUrls.value || /^$/);
       if (excludePattern.test(url)) {
         testStatus.innerHTML = `
         <span class="status-indicator status-warning"></span>
