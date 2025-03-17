@@ -268,13 +268,7 @@ async function setActivePersona(id) {
   await loadPersonas();
 }
 
-function formatCookiesForExport(cookies) {
-  return Object.entries(cookies).map(([domain, domainCookies]) => {
-    return `# ${domain}\n${domainCookies.map(cookie => 
-      `${cookie.name}=${cookie.value}; domain=${cookie.domain}; path=${cookie.path}`
-    ).join('\n')}`;
-  }).join('\n\n');
-}
+// Using formatCookiesForExport from utils.js
 
 async function exportPersonaCookies(id) {
   const persona = currentPersonas.find(p => p.id === id);
@@ -284,6 +278,8 @@ async function exportPersonaCookies(id) {
   await navigator.clipboard.writeText(text);
   alert(`${Object.keys(persona.cookies).length} domain logins (${Object.values(persona.cookies).reduce((sum, cookies) => sum + cookies.length, 0)} cookies) copied to clipboard for "${persona.name}"! Save them into cookies.txt on your ArchiveBox server and run: archivebox config --set COOKIES_FILE=/path/to/cookies.txt`);
 }
+
+import { formatCookiesForExport } from './utils.js';
 
 export function initializePersonasTab() {
   // Persona management

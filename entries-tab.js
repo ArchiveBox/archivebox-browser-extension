@@ -1,4 +1,4 @@
-import { filterEntries, addToArchiveBox, downloadCsv, downloadJson } from './utils.js';
+import { filterEntries, addToArchiveBox, downloadCsv, downloadJson, syncToArchiveBox, updateStatusIndicator } from './utils.js';
 
 export async function renderEntries(filterText = '', tagFilter = '') {
   const { entries = [] } = await chrome.storage.local.get('entries');
@@ -271,16 +271,7 @@ export function initializeEntriesTab() {
       const filterText = document.getElementById('filterInput').value.toLowerCase();
       
       // Get currently filtered entries
-      const filteredEntries = entries.filter(entry => {
-        const searchableText = [
-          entry.url,
-          entry.title,
-          entry.id,
-          ...entry.tags
-        ].join(' ').toLowerCase();
-        
-        return searchableText.includes(filterText);
-      });
+      const filteredEntries = filterEntries(entries, filterText);
 
       // If all filtered entries are selected, deselect all
       const allFilteredSelected = filteredEntries.every(entry => 
@@ -401,16 +392,7 @@ export function initializeEntriesTab() {
     updateFilterUrl(filterText);
     
     // Filter entries based on search text
-    const filteredEntries = entries.filter(entry => {
-      const searchableText = [
-        entry.url,
-        entry.title,
-        entry.id,
-        ...entry.tags
-      ].join(' ').toLowerCase();
-      
-      return searchableText.includes(filterText);
-    });
+    const filteredEntries = filterEntries(entries, filterText);
 
     // sort entries by timestamp, newest first
     filteredEntries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -549,34 +531,7 @@ export function initializeEntriesTab() {
       return;
     }
 
-    // CSV Header
-    const csvRows = [
-      ['ID', 'Timestamp', 'URL', 'Title', 'Tags'].join(',')
-    ];
-
-    // CSV Data Rows
-    selectedItems.forEach(entry => {
-      const row = [
-        entry.id,
-        entry.timestamp,
-        `"${entry.url.replace(/"/g, '""')}"`, // Escape quotes in URL
-        `"${(entry.title || '').replace(/"/g, '""')}"`, // Escape quotes in title
-        `"${entry.tags.join(', ')}"` // Join tags with comma
-      ];
-      csvRows.push(row.join(','));
-    });
-
-    // Create and trigger download
-    const csvContent = csvRows.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `archivebox-export-${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadCsv(selectedItems);
   });
 
   // Export to JSON
@@ -589,26 +544,7 @@ export function initializeEntriesTab() {
       return;
     }
 
-    // Create formatted JSON with selected fields
-    const exportData = selectedItems.map(entry => ({
-      id: entry.id,
-      timestamp: entry.timestamp,
-      url: entry.url,
-      title: entry.title || '',
-      tags: entry.tags
-    }));
-
-    // Create and trigger download
-    const jsonContent = JSON.stringify(exportData, null, 2); // Pretty print with 2 spaces
-    const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `archivebox-export-${new Date().toISOString().slice(0,10)}.json`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadJson(selectedItems);
   });
 
   // Delete entries
@@ -693,41 +629,4 @@ export function initializeEntriesTab() {
   });
 }
 
-// // Helper function to sync a single entry to ArchiveBox
-// async function syncToArchiveBox(entry) {
-//   const { archivebox_server_url, archivebox_api_key } = await chrome.storage.local.get([
-//     'archivebox_server_url',
-//     'archivebox_api_key'
-//   ]);
-
-//   if (!archivebox_server_url || !archivebox_api_key) {
-//     return { ok: false, status: 'Server not configured' };
-//   }
-
-//   try {
-//     const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
-//       method: 'POST',
-//       mode: 'cors',
-//       credentials: 'omit',
-//       headers: {
-//         'Accept': 'application/json',
-//         'Content-Type': 'application/json',
-//         'x-archivebox-api-key': archivebox_api_key,
-//       },
-//       body: JSON.stringify({
-//         urls: [entry.url],
-//         tag: entry.tags.join(','),
-//         depth: 0,
-//         update: false,
-//         update_all: false,
-//       }),
-//     });
-
-//     return {
-//       ok: response.ok,
-//       status: `${response.status} ${response.statusText}`
-//     };
-//   } catch (err) {
-//     return { ok: false, status: `Connection failed ${err}` };
-//   }
-// } 
+// Using syncToArchiveBox from utils.js 

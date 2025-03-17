@@ -1,4 +1,5 @@
 // Config tab initialization and handlers
+import { updateStatusIndicator, syncToArchiveBox } from './utils.js';
 
 export async function initializeConfigTab() {
   const configForm = document.getElementById('configForm');
@@ -31,9 +32,7 @@ export async function initializeConfigTab() {
     }
 
     const updateStatus = (success, message) => {
-      statusIndicator.className = success ? 'status-indicator status-success' : 'status-indicator status-error';
-      statusText.textContent = message;
-      statusText.className = success ? 'text-success' : 'text-danger';
+      updateStatusIndicator(statusIndicator, statusText, success, message);
     };
 
     try {
@@ -79,18 +78,12 @@ export async function initializeConfigTab() {
       const data = await response.json();
       
       if (data.user_id) {
-        statusIndicator.className = 'status-indicator status-success';
-        statusText.textContent = `✓ API key is valid: user_id = ${data.user_id}`;
-        statusText.className = 'text-success';
+        updateStatusIndicator(statusIndicator, statusText, true, `✓ API key is valid: user_id = ${data.user_id}`);
       } else {
-        statusIndicator.className = 'status-indicator status-error';
-        statusText.textContent = `✗ API key error: ${response.status} ${response.statusText} ${JSON.stringify(data)}`;
-        statusText.className = 'text-danger';
+        updateStatusIndicator(statusIndicator, statusText, false, `✗ API key error: ${response.status} ${response.statusText} ${JSON.stringify(data)}`);
       }
     } catch (err) {
-      statusIndicator.className = 'status-indicator status-error';
-      statusText.textContent = `✗ API test failed: ${err.message}`;
-      statusText.className = 'text-danger';
+      updateStatusIndicator(statusIndicator, statusText, false, `✗ API test failed: ${err.message}`);
     }
   });
 
@@ -195,56 +188,4 @@ export async function initializeConfigTab() {
   });
 }
 
-async function syncToArchiveBox(entry) {
-  let { archivebox_server_url, archivebox_api_key, config_archiveBoxBaseUrl } = await chrome.storage.local.get([
-    'archivebox_server_url',
-    'archivebox_api_key',
-    'config_archiveBoxBaseUrl'
-  ]);
-  archivebox_server_url = archivebox_server_url || config_archiveBoxBaseUrl;
-  
-  if (!archivebox_server_url || !archivebox_api_key) {
-    return { 
-      ok: false, 
-      status: 'Server URL and API key must be configured and saved first' 
-    };
-  }
-
-  try {
-    const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
-      method: 'POST',
-      mode: 'cors',
-      credentials: 'omit',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'x-archivebox-api-key': archivebox_api_key,
-      },
-      body: JSON.stringify({
-        urls: [entry.url],
-        tag: entry.tags.join(','),
-        depth: 0,
-        update: false,
-        update_all: false,
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      return { 
-        ok: false, 
-        status: `Server returned ${response.status}: ${text}`
-      };
-    }
-
-    return {
-      ok: true,
-      status: 'Success'
-    };
-  } catch (err) {
-    return { 
-      ok: false, 
-      status: `Connection failed: ${err.message}` 
-    };
-  }
-}
+// Using shared syncToArchiveBox function from utils.js

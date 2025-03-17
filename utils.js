@@ -17,6 +17,22 @@ export function filterEntries(entries, filterText) {
   });
 }
 
+// Common function to format cookies for export used in both personas-tab.js and cookies-tab.js
+export function formatCookiesForExport(cookies) {
+  return Object.entries(cookies).map(([domain, domainCookies]) => {
+    return `# ${domain}\n${domainCookies.map(cookie => 
+      `${cookie.name}=${cookie.value}; domain=${cookie.domain}; path=${cookie.path}`
+    ).join('\n')}`;
+  }).join('\n\n');
+}
+
+// Status indicator update helper
+export function updateStatusIndicator(indicator, textElement, success, message) {
+  indicator.className = success ? 'status-indicator status-success' : 'status-indicator status-error';
+  textElement.textContent = message;
+  textElement.className = success ? 'text-success' : 'text-danger';
+}
+
 export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
   console.log('i addToArchiveBox', addCommandArgs);
   try {
@@ -139,4 +155,59 @@ export function downloadJson(entries) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-} 
+}
+
+// Shared syncToArchiveBox function for config-tab and entries-tab
+export async function syncToArchiveBox(entry) {
+  let { archivebox_server_url, archivebox_api_key, config_archiveBoxBaseUrl } = await chrome.storage.local.get([
+    'archivebox_server_url',
+    'archivebox_api_key',
+    'config_archiveBoxBaseUrl'
+  ]);
+  archivebox_server_url = archivebox_server_url || config_archiveBoxBaseUrl;
+  
+  if (!archivebox_server_url || !archivebox_api_key) {
+    return { 
+      ok: false, 
+      status: 'Server URL and API key must be configured and saved first' 
+    };
+  }
+
+  try {
+    const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
+      method: 'POST',
+      mode: 'cors',
+      credentials: 'omit',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'x-archivebox-api-key': archivebox_api_key,
+      },
+      body: JSON.stringify({
+        urls: [entry.url],
+        tag: entry.tags.join(','),
+        depth: 0,
+        update: false,
+        update_all: false,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return { 
+        ok: false, 
+        status: `Server returned ${response.status}: ${text}`
+      };
+    }
+
+    return {
+      ok: true,
+      status: 'Success'
+    };
+  } catch (err) {
+    return { 
+      ok: false, 
+      status: `Connection failed: ${err.message}` 
+    };
+  }
+}

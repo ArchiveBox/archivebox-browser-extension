@@ -1,6 +1,8 @@
 let availableCookies = [];
 let selectedCookieDomains = new Set();
 
+import { formatCookiesForExport } from './utils.js';
+
 export async function loadAvailableCookies() {
   
 
@@ -90,13 +92,7 @@ async function previewCookies(domain) {
   alert(`${cookies.length} cookies copied to clipboard for "${domain}"!  Save them into cookies.txt on your ArchiveBox server and run: archivebox config --set COOKIES_FILE=/path/to/cookies.txt`);
 }
 
-function formatCookiesForExport(cookies) {
-  return Object.entries(cookies).map(([domain, domainCookies]) => {
-    return `# ${domain}\n${domainCookies.map(cookie => 
-      `${cookie.name}=${cookie.value}; domain=${cookie.domain}; path=${cookie.path}`
-    ).join('\n')}`;
-  }).join('\n\n');
-}
+// Using formatCookiesForExport from utils.js
 
 async function importSelectedCookies() {
   const { activePersona } = await chrome.storage.local.get('activePersona');
