@@ -391,7 +391,8 @@ export function initializeEntriesTab() {
 
   // Modify existing renderEntries function
   async function renderEntries() {
-    const { entries = [], archivebox_server_url } = await chrome.storage.local.get(['entries', 'archivebox_server_url']);
+    let { entries = [], archivebox_server_url, config_archiveBoxBaseUrl } = await chrome.storage.local.get(['entries', 'archivebox_server_url', 'config_archiveBoxBaseUrl']);
+    archivebox_server_url = archivebox_server_url || config_archiveBoxBaseUrl;
 
     const filterText = document.getElementById('filterInput').value.toLowerCase();
     const entriesList = document.getElementById('entriesList');

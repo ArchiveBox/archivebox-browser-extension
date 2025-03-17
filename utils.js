@@ -21,17 +21,17 @@ export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
   console.log('i addToArchiveBox', addCommandArgs);
   try {
     const { archivebox_server_url, archivebox_api_key } = await new Promise((resolve, reject) => {
-      chrome.storage.local.get(['archivebox_server_url', 'archivebox_api_key'], (vals) => {
+      chrome.storage.local.get(['archivebox_server_url', 'archivebox_api_key', 'config_archiveBoxBaseUrl'], (vals) => {
         if (chrome.runtime.lastError) {
           reject(chrome.runtime.lastError);
         } else {
-          resolve(vals);
+          resolve({archivebox_server_url: vals.archivebox_server_url || vals.config_archiveBoxBaseUrl, archivebox_api_key: vals.archivebox_api_key});
         }
       });
     });
 
     console.log('i addToArchiveBox server url', archivebox_server_url);
-    if (!archivebox_server_url) {
+    if (archivebox_server_url) {
       throw new Error('Server not configured.');
     }
 

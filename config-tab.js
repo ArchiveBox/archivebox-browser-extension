@@ -10,10 +10,11 @@ export async function initializeConfigTab() {
   const savedConfig = await chrome.storage.local.get([
     'archivebox_server_url',
     'archivebox_api_key',
-    'match_urls'
+    'match_urls',
+    'config_archiveBoxBaseUrl', // old name for archivebox_server_url
   ]);
   
-  serverUrl.value = savedConfig.archivebox_server_url || '';
+  serverUrl.value = savedConfig.archivebox_server_url || savedConfig.config_archiveBoxBaseUrl || '';
   apiKey.value = savedConfig.archivebox_api_key || '';
   matchUrls.value = savedConfig.match_urls || '';
 
@@ -195,11 +196,13 @@ export async function initializeConfigTab() {
 }
 
 async function syncToArchiveBox(entry) {
-  const { archivebox_server_url, archivebox_api_key } = await chrome.storage.local.get([
+  let { archivebox_server_url, archivebox_api_key, config_archiveBoxBaseUrl } = await chrome.storage.local.get([
     'archivebox_server_url',
-    'archivebox_api_key'
+    'archivebox_api_key',
+    'config_archiveBoxBaseUrl'
   ]);
-
+  archivebox_server_url = archivebox_server_url || config_archiveBoxBaseUrl;
+  
   if (!archivebox_server_url || !archivebox_api_key) {
     return { 
       ok: false, 
