@@ -51,15 +51,6 @@ This is a browser extension that lets you send individual browser tabs or all UR
 5. ✅ *Test it out by right-clicking on any page and selecting `ArchiveBox Exporter > Archive Current Page`*  
     <img width="400" alt="Screenshot of right-clicking to add a page to ArchiveBox using extension" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/6c0b8125-e1b9-4c64-b79a-c74a8d85c176" align="top"><img width="600" alt="Screenshot of ArchiveBox server with added URL" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/ab2dc48a-e2cd-4bef-aea3-553a91bc70c9" align="top">
 
-
-## Features
-
-- Different archive modes
-  - Allowlist mode doesn't archive pages by default, and lets you specify domains or regexes to archive
-  - Blocklist mode archives all visited pages by default, but lets you specify domains or regexes to not archive
-- Archive any arbitrary page with the "Archive Current Page" context menu item
-- Archive any link with the "Archive Link" context menu item
-
 ---
 
 ## Development
@@ -85,6 +76,7 @@ Please open an issue to discuss any proposed changes *before* starting work on a
 
 ## Changelog
 
+- 2025-03 New Manifest v3 [Extension v2.1.3](https://github.com/ArchiveBox/archivebox-browser-extension/releases/tag/v2.1.3) Released
 - 2024-11 Development [started](https://github.com/ArchiveBox/archivebox-browser-extension/pull/31) on v2 extension with more advanced UI and tagging options
 - 2024-01 Extension repo moved from `tjhorner/archivebox-exporter` to `Archivebox/archivebox-browser-extension`
 - 2021-09 Extension offically supported by ArchiveBox v0.6.2, no longer needed to run `:dev` branch
