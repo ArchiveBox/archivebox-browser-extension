@@ -40,6 +40,7 @@ This is a browser extension that lets you send individual browser tabs or all UR
 
 1. Set up an [ArchiveBox](https://github.com/ArchiveBox/ArchiveBox#quickstart) server and make sure it's accessible to the machine you're browsing on
 2. Configure your ArchiveBox server to allow URL submissions without requiring login ([more info here...](https://github.com/ArchiveBox/ArchiveBox/wiki/Configuration#public_index--public_snapshots--public_add_view))  
+    *`>= v0.8.5`: users of the new BETA releases can use an API key generated at `/admin/api/apitoken/` instead.*  
     *Alternatively: if you stay signed in to your ArchiveBox instance in the same browser, it will share your login credentials.*
     ```bash
     archivebox config --set PUBLIC_ADD_VIEW=True
@@ -47,8 +48,8 @@ This is a browser extension that lets you send individual browser tabs or all UR
     ```
     <img width="400" alt="Screenshot of ArchiveBox CLI configuring PUBLIC_ADD_VIEW=True" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/b0dc715c-4f88-49dd-a019-ffd65ebcc7c4">
 4. Configure the extension to point to your ArchiveBox server's base URL (e.g. `http://localhost:8000`, `https://archivebox.example.com`, etc.)  
-    <img width="400" alt="Screenshot of extension config area: example with localhost" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/43673b8c-389d-45f7-9cda-f1ec72844a00" align="top"><img width="350" alt="Screenshot of extension config area: example with demo" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/82d6ae08-6327-45ef-a536-cb775ec58b41" align="top">
-5. ✅ *Test it out by right-clicking on any page and selecting `ArchiveBox Exporter > Archive Current Page`*  
+    <img width="500" alt="Screenshot of extension config area: example with localhost" src="https://github.com/user-attachments/assets/308c4462-ca09-434f-89a6-3f6bac404be2" align="top"><img width="250" alt="Screenshot of extension config area: example with demo" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/82d6ae08-6327-45ef-a536-cb775ec58b41" align="top">
+5. ✅ *Test it out by right-clicking on any page and selecting `Save to ArchiveBox`, or by clicking the extension icon in the menubar.*  
     <img width="400" alt="Screenshot of right-clicking to add a page to ArchiveBox using extension" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/6c0b8125-e1b9-4c64-b79a-c74a8d85c176" align="top"><img width="600" alt="Screenshot of ArchiveBox server with added URL" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/ab2dc48a-e2cd-4bef-aea3-553a91bc70c9" align="top">
 
 ---
@@ -63,14 +64,11 @@ If you wish to contribute to (or just build for yourself) this extension, you wi
 git clone https://github.com/ArchiveBox/archivebox-browser-extension
 cd archivebox-browser-extension/
 
-npm install
-npm run build
-
-# or for hot-reloading during development:
-npm run dev
+# There is no build step with v2.1.3 and above, the project uses vanilla ESM JS.
+# Simply load the entire directory as an unpacked extension in Chrome
 ```
 
-Both commands will produce an output in the `dist/` directory, load that folder into Chrome or Firefox using their [Load Unpacked Extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) UI.
+Load the root repo folder into Chrome or Firefox using their [Load Unpacked Extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) UI.
 
 Please open an issue to discuss any proposed changes *before* starting work on any PRs.
 
