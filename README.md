@@ -87,13 +87,13 @@ Please open an issue to discuss any proposed changes *before* starting work on a
 
 ## Alternative Extensions for Archiving
 
-Other browser extensions that also do web archiving, may be a better fit if ArchiveBox doesn't suit your needs.
+Other browser extensions that also do web archiving which may be a better fit if ArchiveBox doesn't suit your needs.
 
-- https://archiveweb.page/ + https://replayweb.page (super high fidelity archiving extension by the Webrecorder team)
-- https://github.com/gildas-lormeau/SingleFile (a great extension for saving pages into a single `.html` file, built-in to ArchiveBox already)
-- https://web.hypothes.is/start/ (extension focused on annotating, but also supports archiving)
-- https://memex.garden/ (another project focused on annotating that supports archiving)
-- https://addons.mozilla.org/en-US/firefox/addon/save-page-we/ (a Firefox extension that also saves webpages as a single HTML file)
+- [ArchiveWeb.page](https://webrecorder.net/archivewebpage) (super high fidelity archiving extension by Webrecorder)
+- [SingleFile](https://github.com/gildas-lormeau/SingleFile) (a great extension for saving pages into a single `.html` file, built-in to ArchiveBox already)
+- [Hypothesis](https://web.hypothes.is/start/) (extension focused on annotating, but also supports archiving)
+- [Memex](https://memex.garden/) (another project focused on annotating that supports archiving)
+- [Save Page WE](https://addons.mozilla.org/en-US/firefox/addon/save-page-we/) (a Firefox extension that also saves webpages as a single HTML file)
 
 ## Other ArchiveBox Helper Projects
 
