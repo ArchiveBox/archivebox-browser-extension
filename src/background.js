@@ -66,30 +66,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'capture_screenshot') {
     (async ()=> {
       try {
-        const {fileName, path} = await captureScreenshot(message.timestamp);
-        sendResponse({ok: true, fileName, path});
+        const result = await captureScreenshot(message.timestamp);
+        if (result.ok) {
+          sendResponse(result);
+        } else {
+          throw new Error(result.errorMessage);
+        }
       } catch (error) {
-        console.log("failed to capture screenshot: ", error);
+        console.log("Failed to capture screenshot: ", error);
         sendResponse({ok: false, errorMessage: String(error)});
       }
     })();
+
+    return true;
   }
-  return true;
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'capture_dom') {
     (async ()=> {
       try {
-        const {fileName, path} = await captureDom(message.timestamp)
-        sendResponse({ok: true, fileName, path});
+        const result = await captureDom(message.timestamp)
+        if (result.ok) {
+          sendResponse(result);
+        } else {
+          throw new Error(result.errorMessage);
+        }
       } catch (error) {
-        console.log("failed to capture dom: ", error);
+        console.log("Failed to capture DOM: ", error);
         sendResponse({ok: false, errorMessage: String(error)});
       }
     })();
+
+    return true;
   }
-  return true;
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

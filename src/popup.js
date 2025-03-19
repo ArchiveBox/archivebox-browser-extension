@@ -173,6 +173,7 @@ async function saveAndBackup(timestamp, messageType, dataType) {
     if (S3UploadResponse.ok) {
       console.log(`i Saved ${captureResponse.path} to S3 at ${S3UploadResponse.url}`);
     }
+    return S3UploadResponse.url
   } else {
     console.log(`Error: Failed to save ${messageType} locally`)
   }
@@ -209,7 +210,17 @@ window.updateCurrentTags = async function() {
 
 
 window.createPopup = async function() {
-  const { current_entry } = await getCurrentEntry();
+  const { current_entry, entries } = await getCurrentEntry();
+
+  // Take the screenshot before the popup appears
+  const screenshotURL = await saveAndBackup(current_entry.timestamp, 'capture_screenshot', 'image/png');
+  const domURL = await saveAndBackup(current_entry.timestamp, 'capture_dom', 'text/html');
+
+  // Update entry with S3 URLs
+  current_entry.s3ScreenshotURL = screenshotURL;
+  current_entry.s3DomURL = domURL;
+  entries.push(current_entry);
+  await chrome.storage.local.set({ entries });
 
   // Create iframe container
   document.querySelector('.archive-box-iframe')?.remove();
@@ -715,8 +726,6 @@ window.createPopup = async function() {
   // Initial resize
   setTimeout(resizeIframe, 0);
 
-  await saveAndBackup(current_entry.timestamp, 'capture_screenshot', 'image/png');
-  await saveAndBackup(current_entry.timestamp, 'capture_dom', 'text/html');
 }
 
 window.createPopup();

@@ -275,7 +275,7 @@ export async function captureScreenshot(timestamp) {
       return { ok: true, fileName, path: `/screenshots/${fileName}` };
     } catch (error) {
       console.error("Failed to save screenshot to OPFS:", error);
-      return { ok: false }
+      return { ok: false, errorMessage: String(error) };
     }
 }
 
@@ -285,7 +285,7 @@ export async function captureDom(timestamp) {
     const activeTabs = await chrome.tabs.query({active: true, currentWindow: true})
     const tabId = activeTabs[0].id;
 
-    // sends a message to the content script
+    // Send a message to the content script
     const captureResponse = await chrome.tabs.sendMessage( tabId, { type: 'capture_dom' } );
 
     const fileName = `${timestamp}.html`;
@@ -310,33 +310,9 @@ export async function captureDom(timestamp) {
       throw error;
     }
   } catch (error) {
-    console.log("failed to capture dom:", error);
+    console.log("Failed to capture dom:", error);
     return { ok: false }
   }
-}
-
-async function makeS3Client() {
-  const s3Config = await new Promise((resolve) => {
-    chrome.storage.sync.get(['s3config'], (result) => {
-      resolve(result.s3config || {});
-    });
-  });
-
-  if (!s3Config.endpoint || !s3Config.bucket || !s3Config.accessKeyId || !s3Config.secretAccessKey) {
-    throw new Error("S3 configuration is incomplete");
-  }
-  client = new S3Client({
-      endpoint: s3Config.endpoint,
-      credentials: {
-          accessKeyId: s3Config.accessKeyId,
-          secretAccessKey: s3Config.secretAccessKey,
-      },
-      region: s3Config.region,
-      forcePathStyle: true,
-      requestChecksumCalculation: "WHEN_REQUIRED",
-  })
-
-  return {client: client, bucket: s3Config.bucket};
 }
 
 export async function uploadToS3(fileName, data, contentType) {
@@ -403,7 +379,6 @@ export async function uploadToS3(fileName, data, contentType) {
   return `${s3Config.endpoint}/${s3Config.bucket}/${fileName}`;
 }
 
-// Helper function to read a file from Origin Private File System (OPFS)
 export async function readFileFromOPFS(path) {
   try {
     const root = await navigator.storage.getDirectory();
