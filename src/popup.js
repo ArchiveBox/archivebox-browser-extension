@@ -3,7 +3,7 @@
 const IS_IN_POPUP = window.location.href.startsWith('chrome-extension://') && window.location.href.endsWith('/popup.html');
 const IS_ON_WEBSITE = !window.location.href.startsWith('chrome-extension://');
 
-window.popup_element = null;  // Global reference to popup element
+window.popup_element = null;
 window.hide_timer = null;
 
 window.closePopup = function () {
@@ -12,7 +12,7 @@ window.closePopup = function () {
   console.log("close popup");
 };
 
-// handle escape key when popup doesn't have focus
+// Handle escape key when popup doesn't have focus
 document.addEventListener('keydown', (e) => {
   if (e.key == 'Escape') {
     closePopup();
@@ -65,11 +65,11 @@ async function sendToArchiveBox(url, tags) {
   return { ok: ok, status: status};
 }
 
-async function sendCaptureMessage(type) {
+async function sendCaptureMessage(type, timestamp) {
   try {
     const captureResponse = await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
-        type: type,
+        type: type, timestamp: timestamp,
       }, (response) => {
         if (!response.ok) {
           reject(`${response.errorMessage}`);
@@ -79,6 +79,27 @@ async function sendCaptureMessage(type) {
     })
     console.log("captureResponse", captureResponse)
     return captureResponse;
+  } catch (error) {
+    console.log("failed to capture: ", error)
+    return {ok: false}
+  }
+}
+
+async function sendSaveToS3Message(path, contentType) {
+  try {
+    const s3Response = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({
+        type: 'save_to_s3',
+        path,
+        contentType,
+      }, (response) => {
+        if (!response.ok) {
+          reject(`${response.errorMessage}`);
+        }
+        resolve(response);
+      });
+    })
+    return s3Response;
   } catch (error) {
     console.log("failed to capture: ", error)
     return {ok: false}
@@ -141,6 +162,29 @@ window.updateSuggestions = async function() {
     : '';
 }
 
+async function saveScreenshotAndDom(timestamp) {
+  const captures = [
+    {messageType: 'capture_screenshot', dataType: 'image/png'},
+    {messageType: 'capture_dom', dataType: 'text/html'},
+  ];
+
+  for ({messageType, dataType} of captures) {
+    const captureResponse = await sendCaptureMessage(messageType, timestamp)
+
+    // Save screenshot locally and backup to S3
+    if (captureResponse.ok) {
+      console.log(`i Saved ${captureResponse.fileName} to ${captureResponse.path}`)
+
+      const S3UploadResponse = await sendSaveToS3Message(captureResponse.path, dataType)
+      if (S3UploadResponse.ok) {
+        console.log(`i Saved ${captureResponse.path} to S3 at ${S3UploadResponse.url}`);
+      }
+    } else {
+      console.log(`Error: Failed to save ${messageType} locally`)
+    }
+  }
+}
+
 window.updateCurrentTags = async function() {
   if (!popup_element) return;
   const current_tags_div = popup_element.querySelector('.ARCHIVEBOX__current-tags');
@@ -167,24 +211,6 @@ window.updateCurrentTags = async function() {
     });
   });
 
-  {
-    const {ok, fileName, path} = await sendCaptureMessage('capture_screenshot')
-    console.log(ok ,fileName, path)
-    if (ok) {
-      console.log(`i Saved ${fileName} to ${path}`)
-    } else {
-      console.log('failed to save screenshot locally')
-    }
-  }
-
-  {
-    const {ok, fileName, path} = await sendCaptureMessage('capture_dom')
-    if (ok) {
-      console.log(`i Saved ${fileName} to ${path}`)
-    } else {
-      console.log('failed to save dom locally')
-    }
-  }
   // sendToArchiveBox(current_entry.url, current_entry.tags);
 }
 
@@ -547,7 +573,7 @@ window.createPopup = async function() {
 
   // Handle keyboard navigation
 
-  // handle escape key when popup has focus
+  // Handle escape key when popup has focus
   input.addEventListener("keydown", async (e) => {
     if (e.key === "Escape") {
       e.stopPropagation();
@@ -695,6 +721,8 @@ window.createPopup = async function() {
 
   // Initial resize
   setTimeout(resizeIframe, 0);
+
+  await saveScreenshotAndDom(current_entry.timestamp)
 }
 
 window.createPopup();

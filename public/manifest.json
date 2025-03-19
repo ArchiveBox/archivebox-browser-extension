@@ -41,7 +41,7 @@
   },
   "options_page": "options.html",
   "background": {
-    "service_worker": "dist/background.js",
+    "service_worker": "background.js",
     "type": "module"
   },
   "web_accessible_resources": [{

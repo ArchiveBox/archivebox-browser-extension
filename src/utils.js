@@ -1,5 +1,7 @@
 // Common utility functions
 
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+
 // Helper to get server URL with fallback to legacy config name
 export async function getArchiveBoxServerUrl() {
   const { archivebox_server_url } = await chrome.storage.local.get(['archivebox_server_url']);    // new ArchiveBox Extension v2.1.3 location
@@ -224,7 +226,7 @@ function isRealPage(url) {
 //     return array;
 // }
 
-export async function captureScreenshot() {
+export async function captureScreenshot(timestamp) {
     const activeTabs = await chrome.tabs.query({active: true, currentWindow: true});
     const tab = activeTabs[0];
     if (
@@ -262,7 +264,6 @@ export async function captureScreenshot() {
 
       const screenshotsDir = await root.getDirectoryHandle('screenshots', { create: true });
 
-      const timestamp = Date.now();
       const fileName = `screenshot-${timestamp}.png`;
 
       const fileHandle = await screenshotsDir.getFileHandle(fileName, { create: true });
@@ -279,7 +280,7 @@ export async function captureScreenshot() {
 }
 
 
-export async function captureDom() {
+export async function captureDom(timestamp) {
   try {
     const activeTabs = await chrome.tabs.query({active: true, currentWindow: true})
     const tabId = activeTabs[0].id;
@@ -287,7 +288,6 @@ export async function captureDom() {
     // sends a message to the content script
     const captureResponse = await chrome.tabs.sendMessage( tabId, { type: 'capture_dom' } );
 
-    const timestamp = Date.now();
     const fileName = `${timestamp}.html`;
 
     const blob = new Blob([captureResponse.domContent], { type: "text/html" });
@@ -312,5 +312,107 @@ export async function captureDom() {
   } catch (error) {
     console.log("failed to capture dom:", error);
     return { ok: false }
+  }
+}
+
+export async function uploadToS3(fileName, data, contentType) {
+  try {
+    // Make client
+    const s3Config = await new Promise((resolve) => {
+      chrome.storage.sync.get(['s3config'], (result) => {
+        resolve(result.s3config || {});
+      });
+    });
+
+    console.log('S3 config: ', s3Config);
+
+    if (!s3Config.endpoint || !s3Config.bucket || !s3Config.accessKeyId || !s3Config.secretAccessKey) {
+      throw new Error('S3 configuration is incomplete');
+    }
+
+    const client = new S3Client({
+        endpoint: s3Config.endpoint,
+        credentials: {
+            accessKeyId: s3Config.accessKeyId,
+            secretAccessKey: s3Config.secretAccessKey,
+        },
+        region: s3Config.region,
+        forcePathStyle: true,
+        requestChecksumCalculation: "WHEN_REQUIRED",
+    })
+
+    // Use custom headers for our requests
+    client.middlewareStack.add(
+        (next) =>
+            async (args) => {
+            const request = args.request;
+
+            const headers = request.headers;
+            delete headers["x-amz-checksum-crc32"];
+            delete headers["x-amz-checksum-crc32c"];
+            delete headers["x-amz-checksum-sha1"];
+            delete headers["x-amz-checksum-sha256"];
+            request.headers = headers;
+
+            Object.entries(request.headers).forEach(
+                ([key, value]) => {
+                    if (!request.headers) {
+                        request.headers = {};
+                    }
+                    (request.headers)[key] = value;
+                }
+            );
+
+            return next(args);
+        },
+        { step: "build", name: "customHeaders" }
+    );
+    
+    // Send to S3
+    const command = new PutObjectCommand({
+        Bucket: s3Config.bucket,
+        Key: fileName,
+        Body: data,
+        ContentType: contentType,
+    });
+
+    try {
+        await client.send(command);
+        return `${s3Config.endpoint}/${s3Config.bucket}/${fileName}`;
+    } catch (err) {
+        console.error("Upload failed:", err);
+        throw err;
+    }
+  } catch (err) {
+    console.log('Upload failed: ', err)
+  }
+}
+
+// Helper function to read a file from Origin Private File System (OPFS)
+export async function readFileFromOPFS(path) {
+  try {
+    const root = await navigator.storage.getDirectory();
+
+    const pathParts = path.split('/').filter(part => part.length > 0);
+    if (pathParts.length === 0) {
+      throw new Error('Invalid path: empty path');
+    }
+    const fileName = pathParts.pop();
+
+    let currentDir = root;
+    for (const dirName of pathParts) {
+      currentDir = await currentDir.getDirectoryHandle(dirName);
+    }
+    const fileHandle = await currentDir.getFileHandle(fileName);
+    const file = await fileHandle.getFile();
+
+    // Return either bytes or text
+    if (file.type.startsWith('image/') || file.type === 'application/octet-stream') {
+      return new Uint8Array(await file.arrayBuffer());
+    }
+    return await file.text();
+  } catch (error) {
+    console.error(`Error reading file from OPFS at path ${path}:`, error);
+    return null;
   }
 }
