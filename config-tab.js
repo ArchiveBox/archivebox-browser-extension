@@ -18,7 +18,7 @@ export async function initializeConfigTab() {
   console.log('Got config values from storage:', archivebox_server_url, archivebox_api_key, match_urls, exclude_urls);
 
   // migrate old config_archiveboxBaseUrl to archivebox_server_url
-  const {config_archiveBoxBaseUrl} = await chrome.storage.sync.get('config_archiveboxBaseUrl', );
+  const {config_archiveBoxBaseUrl} = await chrome.storage.sync.get('config_archiveBoxBaseUrl', );
   if (config_archiveBoxBaseUrl) {
     await chrome.storage.local.set({ archivebox_server_url: config_archiveBoxBaseUrl });
   }
@@ -209,7 +209,7 @@ export async function initializeConfigTab() {
       };
 
       const result = await syncToArchiveBox(testEntry);
-      document.getElementById('inprogress-test').remove();
+      document.getElementById('inprogress-test')?.remove();
 
       if (result.ok) {
         testStatus.innerHTML += `
@@ -240,6 +240,25 @@ export async function initializeConfigTab() {
       e.preventDefault();
       testButton.click();
     }
+  });
+
+  //Load scroll capture settings
+  const enableScrollCapture = document.getElementById('enableScrollCapture');
+  const scrollCaptureTags = document.getElementById('scrollCaptureTags');
+
+  const { enableScrollCapture: savedEnableScrollCapture, scrollCaptureTags: savedScrollCaptureTags } = 
+    await chrome.storage.local.get(['enableScrollCapture', 'scrollCaptureTags']);
+
+  enableScrollCapture.checked = !!savedEnableScrollCapture;
+  scrollCaptureTags.value = savedScrollCaptureTags || '';
+
+  // Add event handlers for scroll capture settings
+  enableScrollCapture.addEventListener('change', async () => {
+    await chrome.storage.local.set({ enableScrollCapture: enableScrollCapture.checked });
+  });
+
+  scrollCaptureTags.addEventListener('change', async () => {
+    await chrome.storage.local.set({ scrollCaptureTags: scrollCaptureTags.value });
   });
 }
 

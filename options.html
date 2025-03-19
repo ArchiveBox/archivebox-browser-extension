@@ -299,6 +299,40 @@
           </form>
         </div>
       </div>
+
+      <div class="mb-3" style="background-color: #f0f8ff; padding: 15px; border-radius: 6px;">
+          <h5>Reddit Content Capture</h5>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="enableScrollCapture">
+            <label class="form-check-label" for="enableScrollCapture">
+              Automatically capture Reddit posts as you browse
+            </label>
+          </div>
+          <div class="form-text">
+            When enabled, the extension will automatically detect and save Reddit posts as you browse them. Posts are captured as they become visible in your viewport.
+          </div>
+          
+          <div class="mt-3">
+            <label for="scrollCaptureTags" class="form-label">Additional tags for captured Reddit content</label>
+            <input type="text" class="form-control" id="scrollCaptureTags" 
+                   placeholder="Comma-separated tags (e.g., auto,reddit,memes)">
+          </div>
+          
+          <div class="mt-3">
+            <h6>Reddit Content Capture Features:</h6>
+            <ul class="list-group list-group-flush">
+              <li class="list-group-item">✓ Automatic capture of posts visible in your viewport</li>
+              <li class="list-group-item">✓ Detection of new content as you scroll</li>
+              <li class="list-group-item">✓ Capturing metadata including subreddit name</li>
+              <li class="list-group-item">✓ Throttled content capture to prevent performance issues</li>
+              <li class="list-group-item">✓ Visual indicator when content is captured</li>
+            </ul>
+            <small class="text-muted mt-2">
+              The extension uses a mutation observer to detect new posts as they load during infinite scrolling.
+            </small>
+          </div>
+        </div>
+
     </div>
 
     <!-- Personas Tab -->

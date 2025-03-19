@@ -8,7 +8,10 @@
     "scripting",
     "activeTab",
     "contextMenus",
-    "unlimitedStorage"
+    "unlimitedStorage",
+    "webRequest",
+    "tabs",
+    "webNavigation"
   ],
   "optional_permissions": [
     "cookies",
