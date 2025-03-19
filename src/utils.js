@@ -54,7 +54,7 @@ export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
     }
 
     if (archivebox_api_key) {
-      // try ArchiveBox v0.8.0+ API endpoint first
+      // Try ArchiveBox v0.8.0+ API endpoint first
       try {
         const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
           headers: {
@@ -79,7 +79,7 @@ export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
       }
     }
 
-    // fall back to pre-v0.8.0 endpoint for backwards compatibility
+    // Fall back to pre-v0.8.0 endpoint for backwards compatibility
     console.log('i addToArchiveBox using legacy /add POST method');
 
     const parsedAddCommandArgs = JSON.parse(addCommandArgs);
@@ -214,17 +214,6 @@ export async function syncToArchiveBox(entry) {
 function isRealPage(url) {
     return url !== "about:blank" && !url.startsWith("chrome://newtab");
 }
-
-// Convert a data URL to a Uint8Array.
-// function dataUrlToUint8Array(dataUrl) {
-//     const base64 = dataUrl.split(",")[1];
-//     const binary = atob(base64);
-//     const array = new Uint8Array(binary.length);
-//     for (let i = 0; i < binary.length; i++) {
-//         array[i] = binary.charCodeAt(i);
-//     }
-//     return array;
-// }
 
 export async function captureScreenshot(timestamp) {
     const activeTabs = await chrome.tabs.query({active: true, currentWindow: true});

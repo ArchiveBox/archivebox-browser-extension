@@ -486,13 +486,11 @@ window.createPopup = async function() {
   const input = popup.querySelector('input');
   const suggestions_div = popup.querySelector('.ARCHIVEBOX__tag-suggestions');
   const current_tags_div = popup.querySelector('.ARCHIVEBOX__current-tags');
-  
-  // console.log('Getting current tags and suggestions');
 
   // Initial display of current tags and suggestions
   await window.updateCurrentTags();
   await window.updateSuggestions();
-  
+
   // Add click handlers for suggestion badges
   suggestions_div.addEventListener('click', async (e) => {
     if (e.target.classList.contains('suggestion')) {
