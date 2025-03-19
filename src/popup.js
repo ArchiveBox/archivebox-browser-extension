@@ -219,7 +219,6 @@ window.createPopup = async function() {
   // Update entry with S3 URLs
   current_entry.s3ScreenshotURL = screenshotURL;
   current_entry.s3DomURL = domURL;
-  entries.push(current_entry);
   await chrome.storage.local.set({ entries });
 
   // Create iframe container
