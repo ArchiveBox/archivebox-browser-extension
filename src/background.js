@@ -70,7 +70,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ok: true, fileName, path});
       } catch (error) {
         console.log("failed to capture screenshot: ", error);
-        sendResponse({ok: false});
+        sendResponse({ok: false, errorMessage: String(error)});
       }
     })();
   }
@@ -85,7 +85,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ok: true, fileName, path});
       } catch (error) {
         console.log("failed to capture dom: ", error);
-        sendResponse({ok: false});
+        sendResponse({ok: false, errorMessage: String(error)});
       }
     })();
   }
@@ -94,8 +94,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'save_to_s3') {
-    try {
-      (async ()=> {
+    (async ()=> {
+      try {
         const data = await readFileFromOPFS(message.path);
 
         if (!data) {
@@ -103,18 +103,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         const fileName = message.path.split('/').filter(part=>part.length > 0).pop();
-    
+
         console.log('filename: ', fileName);
         const s3Url = await uploadToS3(fileName, data, message.contentType);
         sendResponse({ok: true, url: s3Url});
-      })();
-    } catch (error) {
-      console.log('Failed to upload to S3: ', error);
-      sendResponse({ok: false});
-    }
+      } catch (error) {
+        console.log('Failed to upload to S3: ', error);
+        sendResponse({ok: false, errorMessage: String(error)});
+      }
+    })();
     return true;
   }
-});
+})
 
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

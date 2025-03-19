@@ -41,6 +41,7 @@ export async function initializeS3Tab() {
         accessKeyId: accessKeyId.value.trim(),
         secretAccessKey: secretAccessKey.value.trim()
       };
+
       // Check for missing or empty values
       for (const [key, value] of Object.entries(config)) {
         if (value === undefined || value === null || value === '') {

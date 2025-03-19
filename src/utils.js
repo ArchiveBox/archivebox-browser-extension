@@ -340,75 +340,67 @@ async function makeS3Client() {
 }
 
 export async function uploadToS3(fileName, data, contentType) {
-  try {
-    // Make client
-    const s3Config = await new Promise((resolve) => {
-      chrome.storage.sync.get(['s3config'], (result) => {
-        resolve(result.s3config || {});
-      });
+  // Get saved config and make client
+  const s3Config = await new Promise((resolve) => {
+    chrome.storage.sync.get(['s3config'], (result) => {
+      resolve(result.s3config || {});
     });
+  });
 
-    console.log('S3 config: ', s3Config);
+  console.log('S3 config: ', s3Config);
 
-    if (!s3Config.endpoint || !s3Config.bucket || !s3Config.accessKeyId || !s3Config.secretAccessKey) {
-      throw new Error('S3 configuration is incomplete');
-    }
-
-    const client = new S3Client({
-        endpoint: s3Config.endpoint,
-        credentials: {
-            accessKeyId: s3Config.accessKeyId,
-            secretAccessKey: s3Config.secretAccessKey,
-        },
-        region: s3Config.region,
-        forcePathStyle: true,
-        requestChecksumCalculation: "WHEN_REQUIRED",
-    })
-
-    // Use custom headers for our requests
-    client.middlewareStack.add(
-        (next) =>
-            async (args) => {
-            const request = args.request;
-
-            const headers = request.headers;
-            delete headers["x-amz-checksum-crc32"];
-            delete headers["x-amz-checksum-crc32c"];
-            delete headers["x-amz-checksum-sha1"];
-            delete headers["x-amz-checksum-sha256"];
-            request.headers = headers;
-
-            Object.entries(request.headers).forEach(
-                ([key, value]) => {
-                    if (!request.headers) {
-                        request.headers = {};
-                    }
-                    (request.headers)[key] = value;
-                }
-            );
-
-            return next(args);
-        },
-        { step: "build", name: "customHeaders" }
-    );
-    
-    // Send to S3
-    const command = new PutObjectCommand({
-        Bucket: s3Config.bucket,
-        Key: fileName,
-        Body: data,
-        ContentType: contentType,
-    });
-
-    try {
-        await client.send(command);
-        return `${s3Config.endpoint}/${s3Config.bucket}/${fileName}`;
-    } catch (err) {
-        console.error("Upload failed:", err);
-    }
-  } catch (err) {
-    console.log('Upload failed: ', err)
+  if (!s3Config.endpoint || !s3Config.bucket || !s3Config.accessKeyId || !s3Config.secretAccessKey) {
+    throw new Error('S3 configuration is incomplete');
   }
+
+  const client = new S3Client({
+      endpoint: s3Config.endpoint,
+      credentials: {
+          accessKeyId: s3Config.accessKeyId,
+          secretAccessKey: s3Config.secretAccessKey,
+      },
+      region: s3Config.region,
+      forcePathStyle: true,
+      requestChecksumCalculation: "WHEN_REQUIRED",
+  })
+
+  // Use custom headers for our requests
+  client.middlewareStack.add(
+      (next) =>
+          async (args) => {
+          const request = args.request;
+
+          const headers = request.headers;
+          delete headers["x-amz-checksum-crc32"];
+          delete headers["x-amz-checksum-crc32c"];
+          delete headers["x-amz-checksum-sha1"];
+          delete headers["x-amz-checksum-sha256"];
+          request.headers = headers;
+
+          Object.entries(request.headers).forEach(
+              ([key, value]) => {
+                  if (!request.headers) {
+                      request.headers = {};
+                  }
+                  (request.headers)[key] = value;
+              }
+          );
+
+          return next(args);
+      },
+      { step: "build", name: "customHeaders" }
+  );
+
+  // Send to S3
+  const command = new PutObjectCommand({
+      Bucket: s3Config.bucket,
+      Key: fileName,
+      Body: data,
+      ContentType: contentType,
+  });
+
+  await client.send(command);
+  return `${s3Config.endpoint}/${s3Config.bucket}/${fileName}`;
 }
 
 // Helper function to read a file from Origin Private File System (OPFS)

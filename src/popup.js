@@ -77,10 +77,9 @@ async function sendCaptureMessage(type, timestamp) {
         resolve(response);
       });
     })
-    console.log("captureResponse", captureResponse)
     return captureResponse;
   } catch (error) {
-    console.log("failed to capture: ", error)
+    console.log("Failed to capture: ", error)
     return {ok: false}
   }
 }
@@ -101,7 +100,7 @@ async function sendSaveToS3Message(path, contentType) {
     })
     return s3Response;
   } catch (error) {
-    console.log("failed to capture: ", error)
+    console.log("Failed to save to S3: ", error)
     return {ok: false}
   }
 }
@@ -162,26 +161,20 @@ window.updateSuggestions = async function() {
     : '';
 }
 
-async function saveScreenshotAndDom(timestamp) {
-  const captures = [
-    {messageType: 'capture_screenshot', dataType: 'image/png'},
-    {messageType: 'capture_dom', dataType: 'text/html'},
-  ];
+async function saveAndBackup(timestamp, messageType, dataType) {
+  // Save locally
+  const captureResponse = await sendCaptureMessage(messageType, timestamp)
 
-  for ({messageType, dataType} of captures) {
-    const captureResponse = await sendCaptureMessage(messageType, timestamp)
+  if (captureResponse.ok) {
+    console.log(`i Saved ${captureResponse.fileName} to ${captureResponse.path}`)
 
-    // Save screenshot locally and backup to S3
-    if (captureResponse.ok) {
-      console.log(`i Saved ${captureResponse.fileName} to ${captureResponse.path}`)
-
-      const S3UploadResponse = await sendSaveToS3Message(captureResponse.path, dataType)
-      if (S3UploadResponse.ok) {
-        console.log(`i Saved ${captureResponse.path} to S3 at ${S3UploadResponse.url}`);
-      }
-    } else {
-      console.log(`Error: Failed to save ${messageType} locally`)
+    // Backup to S3
+    const S3UploadResponse = await sendSaveToS3Message(captureResponse.path, dataType)
+    if (S3UploadResponse.ok) {
+      console.log(`i Saved ${captureResponse.path} to S3 at ${S3UploadResponse.url}`);
     }
+  } else {
+    console.log(`Error: Failed to save ${messageType} locally`)
   }
 }
 
@@ -722,7 +715,8 @@ window.createPopup = async function() {
   // Initial resize
   setTimeout(resizeIframe, 0);
 
-  await saveScreenshotAndDom(current_entry.timestamp)
+  await saveAndBackup(current_entry.timestamp, 'capture_screenshot', 'image/png');
+  await saveAndBackup(current_entry.timestamp, 'capture_dom', 'text/html');
 }
 
 window.createPopup();
