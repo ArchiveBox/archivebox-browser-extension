@@ -1,5 +1,7 @@
 // Common utility functions
 
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+
 // Helper to get server URL with fallback to legacy config name
 export async function getArchiveBoxServerUrl() {
   const { archivebox_server_url } = await chrome.storage.local.get(['archivebox_server_url']);    // new ArchiveBox Extension v2.1.3 location
@@ -52,7 +54,7 @@ export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
     }
 
     if (archivebox_api_key) {
-      // try ArchiveBox v0.8.0+ API endpoint first
+      // Try ArchiveBox v0.8.0+ API endpoint first
       try {
         const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
           headers: {
@@ -77,7 +79,7 @@ export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
       }
     }
 
-    // fall back to pre-v0.8.0 endpoint for backwards compatibility
+    // Fall back to pre-v0.8.0 endpoint for backwards compatibility
     console.log('i addToArchiveBox using legacy /add POST method');
 
     const parsedAddCommandArgs = JSON.parse(addCommandArgs);
@@ -205,5 +207,191 @@ export async function syncToArchiveBox(entry) {
       ok: false, 
       status: `Connection failed: ${err.message}` 
     };
+  }
+}
+
+// Helper: Only process pages that are "real" (skip about:blank, chrome://newtab, etc.)
+function isRealPage(url) {
+    return url !== "about:blank" && !url.startsWith("chrome://newtab");
+}
+
+export async function captureScreenshot(timestamp) {
+    const activeTabs = await chrome.tabs.query({active: true, currentWindow: true});
+    const tab = activeTabs[0];
+    if (
+        !tab.url ||
+        !isRealPage(tab.url) ||
+        tab.url.startsWith("chrome-extension://")
+    ) {
+        return;
+    }
+
+    // Capture the visible tab as a PNG data URL.
+    const dataUrl = await new Promise((resolve, reject) => {
+      chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" }, (dataUrl) => {
+        if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError);
+        } else {
+            resolve(dataUrl);
+        }
+      });
+    });
+
+    try {
+      const base64 = dataUrl.split(",")[1];
+      const byteString = atob(base64);
+      const arrayBuffer = new ArrayBuffer(byteString.length);
+      const uint8Array = new Uint8Array(arrayBuffer);
+
+      for (let i = 0; i < byteString.length; i++) {
+        uint8Array[i] = byteString.charCodeAt(i);
+      }
+
+      const blob = new Blob([uint8Array], { type: "image/png" });
+
+      const root = await navigator.storage.getDirectory();
+
+      const screenshotsDir = await root.getDirectoryHandle('screenshots', { create: true });
+
+      const fileName = `screenshot-${timestamp}.png`;
+
+      const fileHandle = await screenshotsDir.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+
+      console.log(`Screenshot saved to OPFS: /screenshots/${fileName}`);
+      return { ok: true, fileName, path: `/screenshots/${fileName}` };
+    } catch (error) {
+      console.error("Failed to save screenshot to OPFS:", error);
+      return { ok: false, errorMessage: String(error) };
+    }
+}
+
+
+export async function captureDom(timestamp) {
+  try {
+    const activeTabs = await chrome.tabs.query({active: true, currentWindow: true})
+    const tabId = activeTabs[0].id;
+
+    // Send a message to the content script
+    const captureResponse = await chrome.tabs.sendMessage( tabId, { type: 'capture_dom' } );
+
+    const fileName = `${timestamp}.html`;
+
+    const blob = new Blob([captureResponse.domContent], { type: "text/html" });
+
+    try {
+      const root = await navigator.storage.getDirectory();
+
+      const domDir = await root.getDirectoryHandle('dom', { create: true });
+
+      const fileHandle = await domDir.getFileHandle(fileName, { create: true });
+
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+
+      console.log(`DOM content saved to OPFS: /dom/${fileName}`);
+      return { ok: true, fileName, path: `/dom/${fileName}` };
+    } catch (error) {
+      console.error("Failed to save DOM to OPFS:", error);
+      throw error;
+    }
+  } catch (error) {
+    console.log("Failed to capture dom:", error);
+    return { ok: false }
+  }
+}
+
+export async function uploadToS3(fileName, data, contentType) {
+  // Get saved config and make client
+  const s3Config = await new Promise((resolve) => {
+    chrome.storage.sync.get(['s3config'], (result) => {
+      resolve(result.s3config || {});
+    });
+  });
+
+  console.log('S3 config: ', s3Config);
+
+  if (!s3Config.endpoint || !s3Config.bucket || !s3Config.accessKeyId || !s3Config.secretAccessKey) {
+    throw new Error('S3 configuration is incomplete');
+  }
+
+  const client = new S3Client({
+      endpoint: s3Config.endpoint,
+      credentials: {
+          accessKeyId: s3Config.accessKeyId,
+          secretAccessKey: s3Config.secretAccessKey,
+      },
+      region: s3Config.region,
+      forcePathStyle: true,
+      requestChecksumCalculation: "WHEN_REQUIRED",
+  })
+
+  // Use custom headers for our requests
+  client.middlewareStack.add(
+      (next) =>
+          async (args) => {
+          const request = args.request;
+
+          const headers = request.headers;
+          delete headers["x-amz-checksum-crc32"];
+          delete headers["x-amz-checksum-crc32c"];
+          delete headers["x-amz-checksum-sha1"];
+          delete headers["x-amz-checksum-sha256"];
+          request.headers = headers;
+
+          Object.entries(request.headers).forEach(
+              ([key, value]) => {
+                  if (!request.headers) {
+                      request.headers = {};
+                  }
+                  (request.headers)[key] = value;
+              }
+          );
+
+          return next(args);
+      },
+      { step: "build", name: "customHeaders" }
+  );
+
+  // Send to S3
+  const command = new PutObjectCommand({
+      Bucket: s3Config.bucket,
+      Key: fileName,
+      Body: data,
+      ContentType: contentType,
+  });
+
+  await client.send(command);
+  return `${s3Config.endpoint}/${s3Config.bucket}/${fileName}`;
+}
+
+export async function readFileFromOPFS(path) {
+  try {
+    const root = await navigator.storage.getDirectory();
+
+    const pathParts = path.split('/').filter(part => part.length > 0);
+    if (pathParts.length === 0) {
+      throw new Error('Invalid path: empty path');
+    }
+    const fileName = pathParts.pop();
+
+    let currentDir = root;
+    for (const dirName of pathParts) {
+      currentDir = await currentDir.getDirectoryHandle(dirName);
+    }
+    const fileHandle = await currentDir.getFileHandle(fileName);
+    const file = await fileHandle.getFile();
+
+    // Return either bytes or text
+    if (file.type.startsWith('image/') || file.type === 'application/octet-stream') {
+      return new Uint8Array(await file.arrayBuffer());
+    }
+    return await file.text();
+  } catch (error) {
+    console.error(`Error reading file from OPFS at path ${path}:`, error);
+    return null;
   }
 }

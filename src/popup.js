@@ -3,7 +3,7 @@
 const IS_IN_POPUP = window.location.href.startsWith('chrome-extension://') && window.location.href.endsWith('/popup.html');
 const IS_ON_WEBSITE = !window.location.href.startsWith('chrome-extension://');
 
-window.popup_element = null;  // Global reference to popup element
+window.popup_element = null;
 window.hide_timer = null;
 
 window.closePopup = function () {
@@ -12,7 +12,7 @@ window.closePopup = function () {
   console.log("close popup");
 };
 
-// handle escape key when popup doesn't have focus
+// Handle escape key when popup doesn't have focus
 document.addEventListener('keydown', (e) => {
   if (e.key == 'Escape') {
     closePopup();
@@ -63,6 +63,44 @@ async function sendToArchiveBox(url, tags) {
     ${status}
   `;
   return { ok: ok, status: status};
+}
+
+async function sendCaptureMessage(messageType, timestamp) {
+  try {
+    const captureResponse = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({
+        type: messageType, timestamp: timestamp,
+      }, (response) => {
+        if (!response.ok) {
+          reject(`${response.errorMessage}`);
+        }
+        resolve(response);
+      });
+    })
+    return captureResponse;
+  } catch (error) {
+    return {ok: false, errorMessage: `Failed to capture: ${String(error)}`}
+  }
+}
+
+async function sendSaveToS3Message(path, contentType) {
+  try {
+    const s3Response = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({
+        type: 'save_to_s3',
+        path,
+        contentType,
+      }, (response) => {
+        if (!response.ok) {
+          reject(`${response.errorMessage}`);
+        }
+        resolve(response);
+      });
+    })
+    return s3Response;
+  } catch (error) {
+    return {ok: false, errorMessage: `Failed to save to S3: ${String(error)}`};
+  }
 }
 
 window.getCurrentEntry = async function() {
@@ -121,6 +159,17 @@ window.updateSuggestions = async function() {
     : '';
 }
 
+async function saveLocally(timestamp, messageType) {
+  // Save locally
+  const captureResponse = await sendCaptureMessage(messageType, timestamp);
+  if (captureResponse.ok) {
+    console.log(`i Saved ${captureResponse.fileName} to ${captureResponse.path}`);
+    return captureResponse.path;
+  } else {
+    console.log(`Error: Failed to save ${messageType} locally: ${captureResponse.errorMessage}` );
+  }
+}
+
 window.updateCurrentTags = async function() {
   if (!popup_element) return;
   const current_tags_div = popup_element.querySelector('.ARCHIVEBOX__current-tags');
@@ -152,7 +201,15 @@ window.updateCurrentTags = async function() {
 
 
 window.createPopup = async function() {
-  const { current_entry } = await getCurrentEntry();
+  const { current_entry, entries } = await getCurrentEntry();
+
+  // Take the screenshot before the popup appears, but don't wait until it has
+  // been saved to S3
+  const screenshotPath = await saveLocally(current_entry.timestamp, 'capture_screenshot');
+  screenshotS3Promise = screenshotPath ? sendSaveToS3Message(screenshotPath, 'image/png') : undefined;
+
+  const domPath = await saveLocally(current_entry.timestamp, 'capture_dom');
+  const domS3Promise = domPath ? sendSaveToS3Message(domPath, 'text/html') : undefined;
 
   // Create iframe container
   document.querySelector('.archive-box-iframe')?.remove();
@@ -429,13 +486,11 @@ window.createPopup = async function() {
   const input = popup.querySelector('input');
   const suggestions_div = popup.querySelector('.ARCHIVEBOX__tag-suggestions');
   const current_tags_div = popup.querySelector('.ARCHIVEBOX__current-tags');
-  
-  // console.log('Getting current tags and suggestions');
 
   // Initial display of current tags and suggestions
   await window.updateCurrentTags();
   await window.updateSuggestions();
-  
+
   // Add click handlers for suggestion badges
   suggestions_div.addEventListener('click', async (e) => {
     if (e.target.classList.contains('suggestion')) {
@@ -509,7 +564,7 @@ window.createPopup = async function() {
 
   // Handle keyboard navigation
 
-  // handle escape key when popup has focus
+  // Handle escape key when popup has focus
   input.addEventListener("keydown", async (e) => {
     if (e.key === "Escape") {
       e.stopPropagation();
@@ -657,6 +712,29 @@ window.createPopup = async function() {
 
   // Initial resize
   setTimeout(resizeIframe, 0);
+
+  // Update the current entry with the result of the S3 backups
+  if (screenshotS3Promise) {
+    const screenshotS3Response = await screenshotS3Promise;
+    if (screenshotS3Response.ok) {
+      console.log(`i Saved screenshot to S3 at ${screenshotS3Response.url}`);
+      current_entry.s3ScreenshotURL = screenshotS3Response.url;
+    } else {
+      console.log(`Failed to backup to S3: ${screenshotS3Response.errorMessage}`);
+    }
+  }
+
+  if (domS3Promise) {
+    const domS3Response = await domS3Promise;
+    if (domS3Response.ok) {
+      console.log(`i Saved DOM to S3 at ${domS3Response.url}`);
+      current_entry.s3domURL = domS3Response.url;
+    } else {
+      console.log(`Failed to backup to S3: ${domS3Response.errorMessage}`);
+    }
+  }
+
+  await chrome.storage.local.set({ entries });
 }
 
 window.createPopup();

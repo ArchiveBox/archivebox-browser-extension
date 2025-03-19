@@ -124,6 +124,9 @@
     <li class="nav-item">
       <a class="nav-link" id="import-tab" data-bs-toggle="tab" href="#import" role="tab">📤 Bulk Import URLs</a>
     </li>
+    <li class="nav-item">
+      <a class="nav-link" id="s3-tab" data-bs-toggle="tab" href="#s3" role="tab">🗄️ S3 Configuration</a>
+    </li>
   </ul>
 
   <div class="tab-content">
@@ -469,6 +472,76 @@ archivebox config --set <a href="https://github.com/ArchiveBox/ArchiveBox/wiki/C
         </div>
       </div>
     </div>
+
+    <!-- S3 Configuration Tab -->
+    <div class="tab-pane fade" id="s3" role="tabpanel">
+      <div class="row mt-4">
+        <div class="col-md-8">
+          <form id="s3Form" class="needs-validation" novalidate>
+            <div class="mb-3">
+              <label for="s3_endpoint" class="form-label"><b>🌐 S3 Endpoint URL *</b></label>
+              <input type="url" class="form-control" id="s3_endpoint" 
+                     placeholder="https://s3.amazonaws.com">
+              <div class="form-text">
+                The endpoint URL for your S3 service. For AWS S3, use the regional endpoint (e.g., <code>https://s3.us-west-2.amazonaws.com</code>).
+                For other S3-compatible services, use their specific endpoint.
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label for="s3_region" class="form-label"><b>🌍 S3 Region *</b></label>
+              <input type="text" class="form-control" id="s3_region" 
+                     placeholder="us-east-1">
+              <div class="form-text">
+                The region where your S3 bucket is located (e.g., <code>us-east-1</code>, <code>eu-west-1</code>).
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label for="s3_bucket" class="form-label"><b>🪣 S3 Bucket Name *</b></label>
+              <input type="text" class="form-control" id="s3_bucket" 
+                     placeholder="my-archive-bucket">
+              <div class="form-text">
+                The name of the S3 bucket where screenshots and archives will be stored.
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label for="s3_access_key_id" class="form-label"><b>🔑 Access Key ID *</b></label>
+              <input type="text" class="form-control" id="s3_access_key_id" 
+                     placeholder="AKIAIOSFODNN7EXAMPLE">
+              <div class="form-text">
+                Your S3 access key ID. It's recommended to use a key with limited permissions.
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label for="s3_secret_access_key" class="form-label"><b>🔒 Secret Access Key *</b></label>
+              <input type="password" class="form-control" id="s3_secret_access_key" 
+                     placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY">
+              <div class="form-text">
+                Your S3 secret access key. This will be stored securely in your browser.
+              </div>
+            </div>
+
+            <div class="d-flex gap-2">
+              <button type="button" id="saveS3Config" class="btn btn-primary">
+                Save Configuration
+                <span class="status-indicator" id="s3ConfigStatus"></span>
+              </button>
+              <button type="button" id="testS3Credentials" class="btn btn-outline-secondary">
+                Test S3 Connection
+                <span class="status-indicator" id="s3TestStatus"></span>
+              </button>
+            </div>
+            <div class="form-text mt-2">
+              <span id="s3ConfigStatusText" class="ms-2"></span>
+              <span id="s3TestStatusText" class="ms-2"></span>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
   </div>
 
   <footer>
@@ -507,7 +580,8 @@ archivebox config --set <a href="https://github.com/ArchiveBox/ArchiveBox/wiki/C
   <!-- <script type="module" src="entries-tab.js"></script>
   <script type="module" src="import-tab.js"></script>
   <script type="module" src="personas-tab.js"></script>
-  <script type="module" src="cookies-tab.js"></script> -->
+  <script type="module" src="cookies-tab.js"></script>
+  <script type="module" src="s3-tab.js"></script> -->
   <script type="module" src="options.js"></script>
 </body>
 </html>
