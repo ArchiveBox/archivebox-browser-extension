@@ -196,7 +196,7 @@ window.updateCurrentTags = async function() {
     });
   });
 
-  // sendToArchiveBox(current_entry.url, current_entry.tags);
+  sendToArchiveBox(current_entry.url, current_entry.tags);
 }
 
 
