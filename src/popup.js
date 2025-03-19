@@ -65,11 +65,11 @@ async function sendToArchiveBox(url, tags) {
   return { ok: ok, status: status};
 }
 
-async function sendCaptureMessage(type, timestamp) {
+async function sendCaptureMessage(messageType, timestamp) {
   try {
     const captureResponse = await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
-        type: type, timestamp: timestamp,
+        type: messageType, timestamp: timestamp,
       }, (response) => {
         if (!response.ok) {
           reject(`${response.errorMessage}`);
@@ -79,8 +79,7 @@ async function sendCaptureMessage(type, timestamp) {
     })
     return captureResponse;
   } catch (error) {
-    console.log("Failed to capture: ", error)
-    return {ok: false}
+    return {ok: false, errorMessage: `Failed to capture: ${String(error)}`}
   }
 }
 
@@ -100,8 +99,7 @@ async function sendSaveToS3Message(path, contentType) {
     })
     return s3Response;
   } catch (error) {
-    console.log("Failed to save to S3: ", error)
-    return {ok: false}
+    return {ok: false, errorMessage: `Failed to save to S3: ${String(error)}`};
   }
 }
 
@@ -161,21 +159,14 @@ window.updateSuggestions = async function() {
     : '';
 }
 
-async function saveAndBackup(timestamp, messageType, dataType) {
+async function saveLocally(timestamp, messageType) {
   // Save locally
-  const captureResponse = await sendCaptureMessage(messageType, timestamp)
-
+  const captureResponse = await sendCaptureMessage(messageType, timestamp);
   if (captureResponse.ok) {
-    console.log(`i Saved ${captureResponse.fileName} to ${captureResponse.path}`)
-
-    // Backup to S3
-    const S3UploadResponse = await sendSaveToS3Message(captureResponse.path, dataType)
-    if (S3UploadResponse.ok) {
-      console.log(`i Saved ${captureResponse.path} to S3 at ${S3UploadResponse.url}`);
-    }
-    return S3UploadResponse.url
+    console.log(`i Saved ${captureResponse.fileName} to ${captureResponse.path}`);
+    return captureResponse.path;
   } else {
-    console.log(`Error: Failed to save ${messageType} locally`)
+    console.log(`Error: Failed to save ${messageType} locally: ${captureResponse.errorMessage}` );
   }
 }
 
@@ -212,14 +203,13 @@ window.updateCurrentTags = async function() {
 window.createPopup = async function() {
   const { current_entry, entries } = await getCurrentEntry();
 
-  // Take the screenshot before the popup appears
-  const screenshotURL = await saveAndBackup(current_entry.timestamp, 'capture_screenshot', 'image/png');
-  const domURL = await saveAndBackup(current_entry.timestamp, 'capture_dom', 'text/html');
+  // Take the screenshot before the popup appears, but don't wait until it has
+  // been saved to S3
+  const screenshotPath = await saveLocally(current_entry.timestamp, 'capture_screenshot');
+  screenshotS3Promise = screenshotPath ? sendSaveToS3Message(screenshotPath, 'image/png') : undefined;
 
-  // Update entry with S3 URLs
-  current_entry.s3ScreenshotURL = screenshotURL;
-  current_entry.s3DomURL = domURL;
-  await chrome.storage.local.set({ entries });
+  const domPath = await saveLocally(current_entry.timestamp, 'capture_dom');
+  const domS3Promise = domPath ? sendSaveToS3Message(domPath, 'text/html') : undefined;
 
   // Create iframe container
   document.querySelector('.archive-box-iframe')?.remove();
@@ -725,6 +715,28 @@ window.createPopup = async function() {
   // Initial resize
   setTimeout(resizeIframe, 0);
 
+  // Update the current entry with the result of the S3 backups
+  if (screenshotS3Promise) {
+    const screenshotS3Response = await screenshotS3Promise;
+    if (screenshotS3Response.ok) {
+      console.log(`i Saved screenshot to S3 at ${screenshotS3Response.url}`);
+      current_entry.s3ScreenshotURL = screenshotS3Response.url;
+    } else {
+      console.log(`Failed to backup to S3: ${screenshotS3Response.errorMessage}`);
+    }
+  }
+
+  if (domS3Promise) {
+    const domS3Response = await domS3Promise;
+    if (domS3Response.ok) {
+      console.log(`i Saved DOM to S3 at ${domS3Response.url}`);
+      current_entry.s3domURL = domS3Response.url;
+    } else {
+      console.log(`Failed to backup to S3: ${domS3Response.errorMessage}`);
+    }
+  }
+
+  await chrome.storage.local.set({ entries });
 }
 
 window.createPopup();
