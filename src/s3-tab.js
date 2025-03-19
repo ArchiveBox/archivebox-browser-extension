@@ -20,29 +20,34 @@ export async function initializeS3Tab() {
   }
 
   document.getElementById('saveS3Config').addEventListener('click', async () => {
-    const statusIndicator = document.getElementById('s3ConfigStatus');
-    const statusText = document.getElementById('s3ConfigStatusText');
+      const statusIndicator = document.getElementById('s3ConfigStatus');
+      const statusText = document.getElementById('s3ConfigStatusText');
     
-    let endpointValue = endpoint.value.trim();
+      let endpointValue = endpoint.value.trim();
 
-    if (endpointValue && !endpointValue.startsWith('http://') && !endpointValue.startsWith('https://')) {
-      endpointValue = 'https://' + endpointValue;
-    }
+      if (endpointValue && !endpointValue.startsWith('http://') && !endpointValue.startsWith('https://')) {
+        endpointValue = 'https://' + endpointValue;
+      }
 
-    if (endpointValue.endsWith('/')) {
-      endpointValue = endpointValue.slice(0, -1);
-    }
+      if (endpointValue.endsWith('/')) {
+        endpointValue = endpointValue.slice(0, -1);
+      }
     
-    const config = {
-      endpoint: endpointValue,
-      region: region.value.trim(),
-      bucket: bucket.value.trim(),
-      accessKeyId: accessKeyId.value.trim(),
-      secretAccessKey: secretAccessKey.value.trim()
-    };
-    
-    console.log('Saving config: ', config);
     try {
+      const config = {
+        endpoint: endpointValue,
+        region: region.value.trim(),
+        bucket: bucket.value.trim(),
+        accessKeyId: accessKeyId.value.trim(),
+        secretAccessKey: secretAccessKey.value.trim()
+      };
+      // Check for missing or empty values
+      for (const [key, value] of Object.entries(config)) {
+        if (value === undefined || value === null || value === '') {
+          throw new Error(`Missing or empty configuration field: ${key}`);
+        }
+      }
+      console.log('Saving config: ', config);
       chrome.storage.sync.set({ s3config: config });
       updateStatusIndicator(statusIndicator, statusText, true, '✓ S3 Configuration saved successfully');
     } catch (err) {
@@ -66,7 +71,7 @@ export async function initializeS3Tab() {
       if (response === 'success') {
         updateStatusIndicator(statusIndicator, statusText, true, '✓ Connection to S3 successful');
       } else {
-        updateStatusIndicator(statusIndicator, statusText, false, `✗ Connection failed: ${response}`);
+        updateStatusIndicator(statusIndicator, statusText, false, `✗ Connection to S3 failed`);
       }
     } catch (err) {
       updateStatusIndicator(statusIndicator, statusText, false, `✗ Error testing credentials: ${err.message}`);

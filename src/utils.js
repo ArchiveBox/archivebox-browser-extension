@@ -315,6 +315,30 @@ export async function captureDom(timestamp) {
   }
 }
 
+async function makeS3Client() {
+  const s3Config = await new Promise((resolve) => {
+    chrome.storage.sync.get(['s3config'], (result) => {
+      resolve(result.s3config || {});
+    });
+  });
+
+  if (!s3Config.endpoint || !s3Config.bucket || !s3Config.accessKeyId || !s3Config.secretAccessKey) {
+    throw new Error("S3 configuration is incomplete");
+  }
+  client = new S3Client({
+      endpoint: s3Config.endpoint,
+      credentials: {
+          accessKeyId: s3Config.accessKeyId,
+          secretAccessKey: s3Config.secretAccessKey,
+      },
+      region: s3Config.region,
+      forcePathStyle: true,
+      requestChecksumCalculation: "WHEN_REQUIRED",
+  })
+
+  return {client: client, bucket: s3Config.bucket};
+}
+
 export async function uploadToS3(fileName, data, contentType) {
   try {
     // Make client
@@ -381,7 +405,6 @@ export async function uploadToS3(fileName, data, contentType) {
         return `${s3Config.endpoint}/${s3Config.bucket}/${fileName}`;
     } catch (err) {
         console.error("Upload failed:", err);
-        throw err;
     }
   } catch (err) {
     console.log('Upload failed: ', err)

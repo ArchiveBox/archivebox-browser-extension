@@ -128,21 +128,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
           const s3Url = await uploadToS3(fileName, testData, 'text/plain');
 
-          console.log("Test S3 URL:", s3Url);
-
           // Verify test file matches
-          try {
-            const response = await fetch(s3Url);
-            console.log("verification response", response);
-            if (response.ok) {
-              const responseText = await response.text();
-              const testPassed = responseText === randomContent;
-              sendResponse(testPassed ? 'success' : 'failure');
-            } else {
-              sendResponse('failure');
-            }
-          } catch (fetchError) {
-            console.error('Error verifying S3 upload:', fetchError);
+          const response = await fetch(s3Url);
+
+          if (response.ok) {
+            const responseText = await response.text();
+            const testPassed = responseText === randomContent;
+            sendResponse(testPassed ? 'success' : 'failure');
+          } else {
+            console.error(`Failed to fetch test content: ${response.status} ${response,statusText}`);
             sendResponse('failure');
           }
         } catch (error) {
