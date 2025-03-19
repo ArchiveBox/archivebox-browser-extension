@@ -95,7 +95,7 @@ window.getCurrentEntry = async function() {
 window.getSuggestedTags = async function() {
   const { current_entry, entries } = await getCurrentEntry();
   // Get all unique tags sorted by recency, excluding current entry's tags
-  return [...new Set(
+  return ['⭐️', ...new Set(
     [
       window.location.hostname.replace('www.', '').replace('.com', ''),
       ...entries
@@ -105,7 +105,7 @@ window.getSuggestedTags = async function() {
     ]
   )]
   .filter(tag => !current_entry.tags.includes(tag))
-  .slice(0, 4);
+  .slice(0, 5);
 }
 
 window.updateSuggestions = async function() {
