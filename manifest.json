@@ -18,8 +18,8 @@
     "history",
     "bookmarks"
   ],
-  "optional_host_permissions": [
-    "*://*\/*"
+  "host_permissions": [
+    "<all_urls>"
   ],
   "icons": {
     "16": "16.png",
