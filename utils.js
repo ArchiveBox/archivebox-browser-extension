@@ -10,6 +10,20 @@ export async function getArchiveBoxServerUrl() {
 export function filterEntries(entries, filterText) {
   if (!filterText) return entries;
   
+  // Handle site: prefix
+  if (filterText.toLowerCase().startsWith('site:')) {
+    const siteId = filterText.slice(5).toLowerCase().trim();
+    const handlers = getAllHandlers();
+    const handler = handlers[siteId];
+    
+    if (handler) {
+      return entries.filter(entry => 
+        handler.domains.some(domain => entry.url.includes(domain))
+      );
+    }
+  }
+  
+  // Regular search
   const searchTerms = filterText.toLowerCase().split(' ');
   return entries.filter(entry => {
     const searchableText = [
@@ -205,5 +219,126 @@ export async function syncToArchiveBox(entry) {
       ok: false, 
       status: `Connection failed: ${err.message}` 
     };
+  }
+}
+
+/**
+ * Check if a URL should be captured automatically based on regex patterns
+ * @param {string} url - The URL to check
+ * @returns {boolean} - Whether the URL should be captured
+ */
+export async function shouldAutoCapture(url) {
+  if (!url) return false;
+  
+  try {
+    const { match_urls, exclude_urls } = await chrome.storage.local.get(['match_urls', 'exclude_urls']);
+    
+    // If no match pattern is defined, don't capture
+    if (!match_urls) return false;
+    
+    // Create RegExp objects
+    const matchPattern = new RegExp(match_urls);
+    const excludePattern = exclude_urls ? new RegExp(exclude_urls) : null;
+    
+    // Check if URL matches the inclusion pattern and doesn't match the exclusion pattern
+    if (matchPattern.test(url)) {
+      return !excludePattern || !excludePattern.test(url);
+    }
+    
+    return false;
+  } catch (e) {
+    console.error('Error checking if URL should be captured:', e);
+    return false;
+  }
+}
+
+/**
+ * Get all available site handlers
+ * @returns {Promise<Array>} - Array of site handler information
+ */
+export async function getAvailableSiteHandlers() {
+  try {
+    return await chrome.runtime.sendMessage({ type: 'getSiteHandlers' });
+  } catch (e) {
+    console.error('Error getting site handlers:', e);
+    return [];
+  }
+}
+
+/**
+ * Get capture statistics
+ * @returns {Promise<Object>} - Capture statistics by site
+ */
+export async function getCaptureStats() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'getStats' });
+    return response?.stats || {};
+  } catch (e) {
+    console.error('Error getting capture stats:', e);
+    return {};
+  }
+}
+
+/**
+ * Limit the size of a collection with a max size
+ * @param {Array|Set} collection - The collection to limit
+ * @param {number} maxSize - Maximum size allowed
+ * @returns {Array|Set} - The limited collection
+ */
+export function limitCollectionSize(collection, maxSize) {
+  if (!collection || typeof maxSize !== 'number' || maxSize <= 0) {
+    return collection;
+  }
+  
+  if (collection instanceof Set) {
+    if (collection.size <= maxSize) return collection;
+    
+    const newSet = new Set();
+    const entries = [...collection].slice(-maxSize); // Keep newest items (at the end)
+    for (const entry of entries) {
+      newSet.add(entry);
+    }
+    return newSet;
+  }
+  
+  if (Array.isArray(collection)) {
+    if (collection.length <= maxSize) return collection;
+    return collection.slice(-maxSize); // Keep newest items (at the end)
+  }
+  
+  return collection;
+}
+
+/**
+ * Get current capture configuration
+ * @returns {Promise<Object>} - Configuration object
+ */
+export async function getCaptureConfig() {
+  return await chrome.storage.local.get([
+    'enableScrollCapture',
+    'scrollCaptureTags',
+    'redditCaptureConfig'
+  ]);
+}
+
+/**
+ * Save capture configuration
+ * @param {Object} config - Configuration to save
+ * @returns {Promise<void>}
+ */
+export async function saveCaptureConfig(config) {
+  await chrome.storage.local.set(config);
+  
+  // Notify tabs about configuration changes
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    try {
+      chrome.tabs.sendMessage(tab.id, {
+        type: 'captureConfigChanged',
+        config
+      }).catch(() => {/* Ignore errors for tabs that don't have content scripts */});
+    } catch (e) {
+      // Ignore errors for tabs that don't have content scripts
+    }
   }
 }

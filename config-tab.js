@@ -1,5 +1,6 @@
 // Config tab initialization and handlers
 import { updateStatusIndicator, syncToArchiveBox, getArchiveBoxServerUrl } from './utils.js';
+import { getAllHandlers, getAllStats } from './site-handlers.js';
 
 export async function initializeConfigTab() {
   const configForm = document.getElementById('configForm');
@@ -15,7 +16,6 @@ export async function initializeConfigTab() {
     'match_urls',
     'exclude_urls',
   ]);
-  console.log('Got config values from storage:', archivebox_server_url, archivebox_api_key, match_urls, exclude_urls);
 
   // migrate old config_archiveboxBaseUrl to archivebox_server_url
   const {config_archiveBoxBaseUrl} = await chrome.storage.sync.get('config_archiveBoxBaseUrl', );
@@ -242,12 +242,27 @@ export async function initializeConfigTab() {
     }
   });
 
-  //Load scroll capture settings
+  // Initialize site-specific capture settings
+  await initializeSiteCapture();
+}
+
+/**
+ * Initialize site-specific capture settings
+ */
+async function initializeSiteCapture() {
+  // Load scroll capture settings
   const enableScrollCapture = document.getElementById('enableScrollCapture');
   const scrollCaptureTags = document.getElementById('scrollCaptureTags');
 
-  const { enableScrollCapture: savedEnableScrollCapture, scrollCaptureTags: savedScrollCaptureTags } = 
-    await chrome.storage.local.get(['enableScrollCapture', 'scrollCaptureTags']);
+  const { 
+    enableScrollCapture: savedEnableScrollCapture, 
+    scrollCaptureTags: savedScrollCaptureTags,
+    redditCaptureConfig
+  } = await chrome.storage.local.get([
+    'enableScrollCapture', 
+    'scrollCaptureTags',
+    'redditCaptureConfig'
+  ]);
 
   enableScrollCapture.checked = !!savedEnableScrollCapture;
   scrollCaptureTags.value = savedScrollCaptureTags || '';
@@ -255,11 +270,249 @@ export async function initializeConfigTab() {
   // Add event handlers for scroll capture settings
   enableScrollCapture.addEventListener('change', async () => {
     await chrome.storage.local.set({ enableScrollCapture: enableScrollCapture.checked });
+    
+    // Notify all tabs of the change
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      try {
+        chrome.tabs.sendMessage(tab.id, {
+          type: 'captureStatusChanged',
+          enabled: enableScrollCapture.checked
+        }).catch(() => {/* Ignore errors for tabs that don't have the content script */});
+      } catch (e) {
+        // Ignore errors for tabs that don't have the content script
+      }
+    }
   });
 
   scrollCaptureTags.addEventListener('change', async () => {
     await chrome.storage.local.set({ scrollCaptureTags: scrollCaptureTags.value });
   });
+
+  // Initialize Reddit-specific settings
+  await initializeRedditSettings(redditCaptureConfig);
+  
+  // Add site handlers information
+  populateSiteHandlersInfo();
+  
+  // Add capture stats display
+  await updateCaptureStats();
+  
+  // Set up stats refresh button
+  document.getElementById('refreshCaptureStats')?.addEventListener('click', updateCaptureStats);
+}
+
+/**
+ * Initialize Reddit-specific settings
+ */
+async function initializeRedditSettings(savedConfig) {
+  // Default configuration
+  const defaultConfig = {
+    captureSubreddits: true,
+    capturePostDetails: true,
+    captureComments: false,
+    commentsDepth: 2,
+    excludedSubreddits: [],
+    includedSubreddits: [],
+    maxProcessedPosts: 1000
+  };
+
+  // Merge saved config with defaults
+  const config = { ...defaultConfig, ...(savedConfig || {}) };
+  
+  // Create Reddit-specific settings UI if it doesn't exist
+  const redditSettingsContainer = document.getElementById('redditSettingsContainer');
+  if (!redditSettingsContainer) {
+    return; // Element doesn't exist, can't add settings
+  }
+  
+  // Build the Reddit settings UI
+  redditSettingsContainer.innerHTML = `
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Reddit Capture Settings</h5>
+      </div>
+      <div class="card-body">
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" id="redditCaptureSubreddits" ${config.captureSubreddits ? 'checked' : ''}>
+              <label class="form-check-label" for="redditCaptureSubreddits">
+                Save subreddit information
+              </label>
+            </div>
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" id="redditCapturePostDetails" ${config.capturePostDetails ? 'checked' : ''}>
+              <label class="form-check-label" for="redditCapturePostDetails">
+                Save post details (upvotes, author)
+              </label>
+            </div>
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" id="redditCaptureComments" ${config.captureComments ? 'checked' : ''}>
+              <label class="form-check-label" for="redditCaptureComments">
+                Save post comments
+              </label>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label for="redditCommentsDepth" class="form-label">Comments depth to capture</label>
+              <select class="form-select" id="redditCommentsDepth">
+                <option value="1" ${config.commentsDepth === 1 ? 'selected' : ''}>Top-level comments only</option>
+                <option value="2" ${config.commentsDepth === 2 ? 'selected' : ''}>Two levels deep</option>
+                <option value="3" ${config.commentsDepth === 3 ? 'selected' : ''}>Three levels deep</option>
+                <option value="0" ${config.commentsDepth === 0 ? 'selected' : ''}>All available comments</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label for="redditMaxProcessedPosts" class="form-label">Maximum processed posts</label>
+              <input type="number" class="form-control" id="redditMaxProcessedPosts" value="${config.maxProcessedPosts}" min="100" max="10000">
+              <div class="form-text">Maximum number of post IDs to keep in memory (100-10000)</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label for="redditIncludedSubreddits" class="form-label">Only capture these subreddits (leave empty for all)</label>
+            <input type="text" class="form-control" id="redditIncludedSubreddits" placeholder="comma,separated,subreddits" value="${config.includedSubreddits.join(',')}">
+            <div class="form-text">Only posts from these subreddits will be captured</div>
+          </div>
+          <div class="col-md-6">
+            <label for="redditExcludedSubreddits" class="form-label">Excluded subreddits</label>
+            <input type="text" class="form-control" id="redditExcludedSubreddits" placeholder="comma,separated,subreddits" value="${config.excludedSubreddits.join(',')}">
+            <div class="form-text">Posts from these subreddits will never be captured</div>
+          </div>
+        </div>
+        
+        <button class="btn btn-primary" id="saveRedditSettings">Save Reddit Settings</button>
+      </div>
+    </div>
+  `;
+  
+  // Add event listener for saving settings
+  document.getElementById('saveRedditSettings').addEventListener('click', async () => {
+    // Collect the current settings
+    const newConfig = {
+      captureSubreddits: document.getElementById('redditCaptureSubreddits').checked,
+      capturePostDetails: document.getElementById('redditCapturePostDetails').checked,
+      captureComments: document.getElementById('redditCaptureComments').checked,
+      commentsDepth: parseInt(document.getElementById('redditCommentsDepth').value, 10),
+      maxProcessedPosts: parseInt(document.getElementById('redditMaxProcessedPosts').value, 10),
+      includedSubreddits: document.getElementById('redditIncludedSubreddits').value
+        .split(',')
+        .map(s => s.trim().toLowerCase())
+        .filter(s => s),
+      excludedSubreddits: document.getElementById('redditExcludedSubreddits').value
+        .split(',')
+        .map(s => s.trim().toLowerCase())
+        .filter(s => s)
+    };
+    
+    // Validate settings
+    if (newConfig.maxProcessedPosts < 100) newConfig.maxProcessedPosts = 100;
+    if (newConfig.maxProcessedPosts > 10000) newConfig.maxProcessedPosts = 10000;
+    
+    // Save the settings
+    await chrome.storage.local.set({ redditCaptureConfig: newConfig });
+    
+    // Show success message
+    alert('Reddit settings saved successfully');
+  });
+}
+
+/**
+ * Populate site handlers information
+ */
+function populateSiteHandlersInfo() {
+  const handlersContainer = document.getElementById('siteHandlersContainer');
+  if (!handlersContainer) return;
+  
+  const handlers = getAllHandlers();
+  
+  // Create the handlers info UI
+  handlersContainer.innerHTML = `
+    <div class="card mt-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Site Handlers</h5>
+      </div>
+      <div class="card-body">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Handler</th>
+              <th>Domains</th>
+              <th>Version</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${Object.entries(handlers).map(([id, handler]) => `
+              <tr>
+                <td>${handler.name}</td>
+                <td>${handler.domains.join(', ')}</td>
+                <td>${handler.version}</td>
+                <td>${handler.description}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Update capture stats
+ */
+async function updateCaptureStats() {
+  const statsContainer = document.getElementById('captureStatsContainer');
+  if (!statsContainer) return;
+  
+  // Get stats from all handlers
+  const stats = await new Promise(resolve => {
+    chrome.runtime.sendMessage({ type: 'getStats' }, response => {
+      resolve(response?.stats || {});
+    });
+  });
+  
+  // Create the stats UI
+  statsContainer.innerHTML = `
+    <div class="card mt-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Capture Statistics</h5>
+        <button class="btn btn-sm btn-outline-secondary" id="refreshCaptureStats">
+          <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          ${Object.entries(stats).map(([site, siteStats]) => `
+            <div class="col-md-4 mb-3">
+              <div class="card h-100">
+                <div class="card-header">
+                  <h6 class="mb-0">${site.charAt(0).toUpperCase() + site.slice(1)} Stats</h6>
+                </div>
+                <div class="card-body">
+                  <ul class="list-group list-group-flush">
+                    ${Object.entries(siteStats).map(([key, value]) => `
+                      <li class="list-group-item d-flex justify-content-between align-items-center">
+                        ${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                        <span class="badge bg-primary rounded-pill">${value}</span>
+                      </li>
+                    `).join('')}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // Re-attach the refresh button event listener
+  document.getElementById('refreshCaptureStats')?.addEventListener('click', updateCaptureStats);
 }
 
 // Using shared syncToArchiveBox function from utils.js

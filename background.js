@@ -1,9 +1,16 @@
 // background.js
 
 import { addToArchiveBox } from "./utils.js";
+import * as RedditHandler from "./reddit-handler.js";
 
 // Debug configuration
-const DEBUG_MODE = false; // Easy toggle for debugging
+const DEBUG_MODE = true; // Set to true to see debugging info
+
+// Configuration
+const CONFIG = {
+  MAX_ENTRIES: 10000, // Maximum number of entries to store locally
+  STATUS_DISPLAY_TIME: 3000 // Time in ms to show status indicators
+};
 
 function debugLog(...args) {
   if (DEBUG_MODE) {
@@ -11,95 +18,59 @@ function debugLog(...args) {
   }
 }
 
-// Queue for managing entry saving
-const entrySaveQueue = [];
-let processingQueue = false;
+// State management - sites handlers registry
+const siteHandlers = {
+  reddit: RedditHandler
+};
 
-// Process the save queue
-function processEntrySaveQueue() {
-  if (entrySaveQueue.length === 0) {
-    processingQueue = false;
-    debugLog('Queue empty, stopping processor');
-    return;
+// Content capture configuration
+let captureEnabled = false;
+
+// Initialize background script
+async function initialize() {
+  debugLog('Initializing background script');
+  
+  // Load configuration
+  const { enableScrollCapture } = await chrome.storage.local.get('enableScrollCapture');
+  captureEnabled = !!enableScrollCapture;
+  
+  // Initialize site handlers
+  if (captureEnabled) {
+    debugLog('Content capture is enabled, initializing handlers');
+    Object.values(siteHandlers).forEach(handler => {
+      if (typeof handler.initialize === 'function') {
+        handler.initialize();
+      }
+    });
   }
   
-  processingQueue = true;
-  const entry = entrySaveQueue.shift();
-  debugLog('Processing entry from queue:', entry.url);
-  
-  // Process entry
-  chrome.storage.local.get(['entries', 'enableScrollCapture'], (result) => {
-    // Only save entries if automatic capture is enabled
-    if (!result.enableScrollCapture) {
-      debugLog('Automatic content capture disabled, not saving entry');
-      setTimeout(processEntrySaveQueue, 200);
-      return;
-    }
-    
-    const entries = result.entries || [];
-    debugLog('Current entries count:', entries.length);
-    
-    // Normalize URLs for more accurate comparison
-    const normalizeUrl = (url) => {
-      try {
-        const normalized = new URL(url);
-        // Remove trailing slashes, query parameters, and fragment
-        return normalized.origin + normalized.pathname.replace(/\/$/, '');
-      } catch (e) {
-        debugLog('URL normalization error:', e);
-        return url;
-      }
-    };
-    
-    const normalizedEntryUrl = normalizeUrl(entry.url);
-    debugLog('Normalized URL:', normalizedEntryUrl);
-    
-    // Check if this URL already exists in our entries (use normalized URLs)
-    const existingEntry = entries.find(e => normalizeUrl(e.url) === normalizedEntryUrl);
-    if (existingEntry) {
-      debugLog('URL already exists in entries, skipping:', entry.url);
-      setTimeout(processEntrySaveQueue, 200);
-      return;
-    }
-    
-    // Add custom tags if configured
-    chrome.storage.local.get(['scrollCaptureTags', 'archivebox_server_url', 'archivebox_api_key'], (tagResult) => {
-      debugLog('Server configuration:', {
-        serverUrl: tagResult.archivebox_server_url || 'Not configured',
-        apiKeySet: tagResult.archivebox_api_key ? 'Yes' : 'No'
+  // Check all existing tabs to find any supported site tabs already open
+  chrome.tabs.query({}, (tabs) => {
+    if (captureEnabled) {
+      debugLog(`Found ${tabs.length} existing tabs, checking for supported sites`);
+      
+      // Check each tab for supported sites
+      tabs.forEach(tab => {
+        if (tab.url) {
+          Object.entries(siteHandlers).forEach(([site, handler]) => {
+            if (handler.shouldCaptureUrl && handler.shouldCaptureUrl(tab.url)) {
+              debugLog(`Found existing ${site} tab:`, tab.url);
+              if (handler.injectContentScript) {
+                handler.injectContentScript(tab.id);
+              }
+            }
+          });
+        }
       });
-      
-      const customTags = tagResult.scrollCaptureTags ? 
-        tagResult.scrollCaptureTags.split(',').map(tag => tag.trim()) : [];
-      
-      debugLog('Custom tags:', customTags);
-      
-      // Extract site tags
-      const siteTags = getSiteTags(entry.url);
-      debugLog('Site tags:', siteTags);
-      
-      // Create the full entry object
-      const fullEntry = {
-        id: crypto.randomUUID(),
-        url: entry.url,
-        timestamp: entry.timestamp || new Date().toISOString(),
-        tags: ['auto-captured', ...siteTags, ...customTags, ...(entry.tags || [])],
-        title: entry.title || 'Captured content',
-        notes: `Auto-captured content: ${entry.url}`
-      };
-      
-      debugLog('Saving new entry:', fullEntry);
-      entries.push(fullEntry);
-      
-      chrome.storage.local.set({ entries }, () => {
-        debugLog('Entry saved to local storage');
-        // Process next item after a delay - increased for better throttling
-        setTimeout(processEntrySaveQueue, 500);
-      });
-    });
+    }
   });
+  
+  debugLog('Background script initialized');
 }
 
+/**
+ * Listens for messages from content scripts and popup
+ */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   debugLog('Message received:', message.type || message.action);
   
@@ -120,11 +91,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Handle content capture
   if (message.type === 'capture') {
     debugLog('Capture request received:', message.entry.url);
-    saveEntry(message.entry);
+    
+    if (!captureEnabled) {
+      debugLog('Content capture is disabled, ignoring capture request');
+      sendResponse({ success: false, reason: 'Capture disabled' });
+      return true;
+    }
+    
+    // Determine site handler based on URL or tags
+    const url = message.entry.url;
+    let handled = false;
+    
+    // Check if it's from Reddit
+    if (message.entry.tags.includes('reddit') || url.includes('reddit.com')) {
+      if (message.entry.priority === 'high') {
+        // Use high priority capture for viewport posts
+        RedditHandler.captureHighPriority(message.entry, sender.tab?.id);
+      } else {
+        // Let reddit handler decide what to do
+        RedditHandler.queueForCapture(message.entry, sender.tab?.id, 'normal');
+      }
+      handled = true;
+    }
+    
+    // Generic handling for other sites or if no specific handler was found
+    if (!handled) {
+      saveEntry(message.entry);
+    }
+    
     sendResponse({ success: true });
   }
 
-  // Add the new handler for getEnableStatus
+  // Enable status requests
   if (message.type === 'getEnableStatus') {
     chrome.storage.local.get(['enableScrollCapture'], (result) => {
       sendResponse({ enableScrollCapture: !!result.enableScrollCapture });
@@ -132,9 +130,118 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // Keep the message channel open for async response
   }
   
+  // Show status notification in tabs
+  if (message.type === 'showStatus') {
+    const tabId = message.tabId || (sender.tab && sender.tab.id);
+    if (tabId) {
+      try {
+        showStatusInTab(tabId, message.message, message.count, message.immediate);
+      } catch (err) {
+        debugLog('Error showing status:', err);
+      }
+    }
+    sendResponse({ success: true });
+  }
+  
+  // Get site handler stats
+  if (message.type === 'getStats') {
+    const stats = {};
+    Object.entries(siteHandlers).forEach(([site, handler]) => {
+      if (handler.getStats) {
+        stats[site] = handler.getStats();
+      }
+    });
+    sendResponse({ stats });
+    return true;
+  }
+  if (message.type === 'getSiteHandlerForUrl') {
+    try {
+      const url = message.url;
+      const handlerResult = findHandlerForUrl(url);
+      
+      if (handlerResult) {
+        const { id, handler } = handlerResult;
+        const handlers = getAllHandlers();
+        const handlerInfo = handlers[id];
+        
+        sendResponse({
+          found: true,
+          handler: {
+            id,
+            name: handlerInfo.name,
+            description: handlerInfo.description,
+            version: handlerInfo.version
+          }
+        });
+      } else {
+        sendResponse({ found: false });
+      }
+    } catch (error) {
+      console.error('Error finding handler for URL:', error);
+      sendResponse({ found: false, error: error.message });
+    }
+    return true;
+  }
+  
+  // Get all site handlers
+  if (message.type === 'getSiteHandlers') {
+    try {
+      const handlers = getAllHandlers();
+      sendResponse({ handlers });
+    } catch (error) {
+      console.error('Error getting site handlers:', error);
+      sendResponse({ handlers: {} });
+    }
+    return true;
+  }
+  
+  // URL visited notification
+  if (message.type === 'urlVisited') {
+    try {
+      const url = message.url;
+      const handlerResult = findHandlerForUrl(url);
+      
+      if (handlerResult && typeof handlerResult.handler.onUrlVisited === 'function') {
+        handlerResult.handler.onUrlVisited(url);
+      }
+      
+      sendResponse({ success: true });
+    } catch (error) {
+      console.error('Error handling URL visit:', error);
+      sendResponse({ success: false });
+    }
+    return true;
+  }
+  
+  // Configuration change notification
+  if (message.type === 'captureConfigChanged') {
+    try {
+      const { config } = message;
+      
+      // Update enabled state
+      captureEnabled = !!config.enableScrollCapture;
+      
+      // Notify handlers
+      Object.values(siteHandlers).forEach(handler => {
+        if (typeof handler.onConfigChanged === 'function') {
+          handler.onConfigChanged(config);
+        }
+      });
+      
+      sendResponse({ success: true });
+    } catch (error) {
+      console.error('Error handling config change:', error);
+      sendResponse({ success: false });
+    }
+    return true;
+  }
+  
   return true; // Indicate async response
 });
 
+/**
+ * Handle click on extension icon
+ */
 chrome.action.onClicked.addListener(async (tab) => {
   debugLog('Extension icon clicked on tab:', tab.url);
   
@@ -161,7 +268,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   await chrome.storage.local.set({ entries });
   debugLog('Entry saved to local storage');
   
-  // Inject scripts
+  // Inject popup script
   debugLog('Injecting popup script into tab');
   await chrome.scripting.executeScript({
     target: { tabId: tab.id },
@@ -171,10 +278,10 @@ chrome.action.onClicked.addListener(async (tab) => {
   });
 });
 
-chrome.contextMenus.onClicked.addListener(onClickContextMenuSave);
-
-// A generic onclick callback function.
-async function onClickContextMenuSave(item, tab) {
+/**
+ * Handle context menu click
+ */
+chrome.contextMenus.onClicked.addListener(async function(item, tab) {
   debugLog('Context menu save clicked for tab:', tab.url);
   
   // Don't try to execute script on chrome:// URLs
@@ -200,7 +307,7 @@ async function onClickContextMenuSave(item, tab) {
   await chrome.storage.local.set({ entries });
   debugLog('Entry saved to local storage');
   
-  // Inject scripts
+  // Inject popup script
   debugLog('Injecting popup script into tab');
   await chrome.scripting.executeScript({
     target: { tabId: tab.id },
@@ -208,45 +315,182 @@ async function onClickContextMenuSave(item, tab) {
   }).catch(err => {
     console.error('Error injecting script:', err);
   });
-}
+});
 
+/**
+ * Handle extension installation and updates
+ */
 chrome.runtime.onInstalled.addListener(function () {
   debugLog('Extension installed or updated');
+  
+  // Create context menu
   chrome.contextMenus.create({
     id: 'save_to_archivebox_ctxmenu',
     title: 'Save to ArchiveBox',
   });
+  
+  // Set up configuration defaults
+  initializeConfiguration();
+  
+  // Initialize the extension
+  initialize();
 });
 
-// Replace the saveEntry function with this throttled version
-function saveEntry(entry) {
-  // Don't save if no URL
-  if (!entry || !entry.url) {
-    debugLog('Invalid entry, not saving', entry);
-    return;
+/**
+ * Set up configuration defaults if needed
+ */
+async function initializeConfiguration() {
+  const config = await chrome.storage.local.get([
+    'archivebox_server_url',
+    'archivebox_api_key',
+    'enableScrollCapture',
+    'scrollCaptureTags'
+  ]);
+  
+  const updates = {};
+  
+  // Set default values if undefined
+  if (config.archivebox_server_url === undefined) {
+    updates.archivebox_server_url = '';
   }
   
-  debugLog('Queueing entry for saving:', entry.url);
+  if (config.archivebox_api_key === undefined) {
+    updates.archivebox_api_key = '';
+  }
   
-  // Add to queue
-  entrySaveQueue.push(entry);
+  if (config.enableScrollCapture === undefined) {
+    updates.enableScrollCapture = false;
+  }
   
-  // Start processing if not already running
-  if (!processingQueue) {
-    debugLog('Starting queue processor');
-    processEntrySaveQueue();
+  if (config.scrollCaptureTags === undefined) {
+    updates.scrollCaptureTags = '';
+  }
+  
+  // Save defaults if needed
+  if (Object.keys(updates).length > 0) {
+    await chrome.storage.local.set(updates);
+    debugLog('Set default config values:', updates);
   }
 }
 
-// Extract site name for tagging
+/**
+ * Handle new tab creation
+ */
+chrome.tabs.onCreated.addListener((tab) => {
+  // We'll check if it's a supported site tab once the navigation completes
+  debugLog('New tab created:', tab.id);
+});
+
+/**
+ * Handle tab navigation to detect supported sites
+ */
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  // Only react when the tab has completed loading and we have a URL
+  if (changeInfo.status === 'complete' && tab.url) {
+    // Check if content capture is enabled
+    const { enableScrollCapture } = await chrome.storage.local.get('enableScrollCapture');
+    captureEnabled = !!enableScrollCapture;
+    
+    if (captureEnabled) {
+      debugLog('Tab updated, checking for supported sites:', tab.url);
+      
+      // Check URL against each site handler
+      Object.entries(siteHandlers).forEach(([site, handler]) => {
+        if (handler.shouldCaptureUrl && handler.shouldCaptureUrl(tab.url)) {
+          debugLog(`Detected ${site} site in tab:`, tab.url);
+          if (handler.injectContentScript) {
+            handler.injectContentScript(tabId);
+          }
+        }
+      });
+    }
+  }
+});
+
+/**
+ * Generic entry saving logic for any URL
+ */
+async function saveEntry(entry) {
+  try {
+    if (!entry || !entry.url) {
+      debugLog('Invalid entry, not saving', entry);
+      return { success: false, reason: 'Invalid entry' };
+    }
+    
+    debugLog('Saving entry:', entry.url);
+    
+    // Get current entries
+    const { entries = [] } = await chrome.storage.local.get('entries');
+    
+    // Check for duplicates
+    const normalizeUrl = (url) => {
+      try {
+        const normalized = new URL(url);
+        return normalized.origin + normalized.pathname.replace(/\/$/, '');
+      } catch (e) {
+        debugLog('URL normalization error:', e);
+        return url;
+      }
+    };
+    
+    const normalizedEntryUrl = normalizeUrl(entry.url);
+    const existingEntry = entries.find(e => normalizeUrl(e.url) === normalizedEntryUrl);
+    
+    if (existingEntry) {
+      debugLog('URL already exists in entries, skipping:', entry.url);
+      return { success: false, reason: 'URL already exists' };
+    }
+    
+    // Add custom tags if configured
+    const { scrollCaptureTags } = await chrome.storage.local.get(['scrollCaptureTags']);
+    const customTags = scrollCaptureTags ? 
+      scrollCaptureTags.split(',').map(tag => tag.trim()) : [];
+    
+    // Extract site tags
+    const siteTags = getSiteTags(entry.url);
+    
+    // Create the full entry object
+    const fullEntry = {
+      id: entry.id || crypto.randomUUID(),
+      url: entry.url,
+      timestamp: entry.timestamp || new Date().toISOString(),
+      tags: ['auto-captured', ...siteTags, ...customTags, ...(entry.tags || [])],
+      title: entry.title || 'Captured content',
+      notes: entry.notes || `Auto-captured content: ${entry.url}`,
+      favicon: entry.favicon
+    };
+    
+    // Add to entries
+    entries.push(fullEntry);
+    
+    // Limit entries if exceeding maximum
+    if (entries.length > CONFIG.MAX_ENTRIES) {
+      // Sort by timestamp (oldest first) and remove excess
+      entries.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      const removed = entries.splice(0, entries.length - CONFIG.MAX_ENTRIES);
+      debugLog(`Removed ${removed.length} oldest entries to stay under limit`);
+    }
+    
+    // Save entries
+    await chrome.storage.local.set({ entries });
+    debugLog('Entry saved to local storage');
+    
+    return { success: true };
+  } catch (e) {
+    debugLog('Error saving entry:', e);
+    return { success: false, reason: e.message };
+  }
+}
+
+/**
+ * Extract site name for tagging
+ */
 function getSiteTags(url) {
   try {
     const hostname = new URL(url).hostname;
     const domain = hostname
       .replace('www.', '')
-      .replace('.com', '')
-      .replace('.org', '')
-      .replace('.net', '');
+      .replace(/\.(com|org|net|io|gov|edu)$/, '');
     return [domain];
   } catch (e) {
     debugLog('Error extracting site tags:', e);
@@ -254,130 +498,83 @@ function getSiteTags(url) {
   }
 }
 
-// Setup content capture for Reddit
-function setupContentCapture() {
-  debugLog('Setting up content capture listeners');
-  // Setup page load detection
-  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    // Only run once the page is fully loaded
-    if (changeInfo.status !== 'complete') return;
-    
-    // Only run on Reddit
-    if (!tab.url.includes('reddit.com')) return;
-    
-    debugLog('Reddit page loaded, initializing capture:', tab.url);
-    
-    // Execute the content script immediately after page load
-    chrome.scripting.executeScript({
-      target: {tabId: tabId},
-      function: setupPageCapture
-    }).catch(err => {
-      console.error('Error setting up page capture:', err);
-      debugLog('Error details:', {
-        message: err.message,
-        tabUrl: tab.url,
-        tabId: tabId
-      });
-    });
-  });
-}
-
-// Call this function when the extension starts
-chrome.runtime.onStartup.addListener(() => {
-  debugLog('Extension started');
-  setupContentCapture();
-  
-  // Check for existing Reddit tabs
-  chrome.tabs.query({url: "*://*.reddit.com/*"}, (tabs) => {
-    debugLog(`Found ${tabs.length} existing Reddit tabs`);
-    
-    tabs.forEach(tab => {
-      debugLog(`Setting up Reddit capture on existing tab: ${tab.id} - ${tab.url}`);
-      chrome.scripting.executeScript({
-        target: {tabId: tab.id},
-        function: setupPageCapture
-      }).catch(err => {
-        console.error('Error setting up page capture on existing tab:', err);
-      });
-    });
-  });
-});
-
-chrome.runtime.onInstalled.addListener(() => {
-  debugLog('Extension installed');
-  setupContentCapture();
-});
-
-// This function sets up the content capture on Reddit pages
-function setupPageCapture() {
-  // Local logging function
-  function localLog(message, data) {
-    console.log('[ArchiveBox]', message, data || '');
-  }
-
-  localLog('Setting up page capture', {
-    url: window.location.href,
-    windowSize: `${window.innerWidth}x${window.innerHeight}`
-  });
-  
-  // Use window variables instead of chrome.storage for state tracking
-  if (window.archiveBoxSetupComplete) {
-    localLog('Setup already completed for this tab');
-    scanVisiblePosts();
-    return;
-  }
-  
-  // Mark as setup complete using window variable
-  window.archiveBoxSetupComplete = true;
-  window.archiveBoxProcessedElements = new Set();
-  window.archiveBoxCaptureQueue = [];
-  window.archiveBoxStatusQueue = [];
-  
-  localLog('Performing initial setup');
-  
-  // Setup throttled submission process
-  window.archiveBoxProcessingQueue = false;
-  
-  function processQueue() {
-    if (window.archiveBoxCaptureQueue.length === 0) {
-      window.archiveBoxProcessingQueue = false;
-      localLog('Capture queue empty, stopping processor');
+/**
+ * Show status message in tab
+ */
+async function showStatusInTab(tabId, message, count, immediate = false) {
+  try {
+    // Check if tab still exists before proceeding
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      if (!tab) {
+        debugLog(`Tab ${tabId} no longer exists, skipping status update`);
+        return;
+      }
+    } catch (e) {
+      debugLog(`Tab ${tabId} error or no longer exists:`, e.message);
       return;
     }
-    
-    window.archiveBoxProcessingQueue = true;
-    const entry = window.archiveBoxCaptureQueue.shift();
-    localLog('Processing from capture queue:', entry.url);
-    
-    chrome.runtime.sendMessage({
-      type: 'capture',
-      entry: entry
-    }, () => {
-      // Add timeout for throttling
-      setTimeout(processQueue, 500);
+
+    // Setup status indicator if not already present
+    await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      function: setupStatusIndicator,
+    }).catch(err => {
+      debugLog(`Error setting up status indicator in tab ${tabId}:`, err.message);
+      return;
     });
-  }
-  
-  // Function to add to queue and start processing if needed
-  window.queueCaptureEntry = (entry) => {
-    // Avoid duplicate entries in the queue by URL
-    if (!window.archiveBoxCaptureQueue.some(item => item.url === entry.url)) {
-      localLog('Adding to capture queue:', entry.url);
-      window.archiveBoxCaptureQueue.push(entry);
-      
-      // Start queue processing if not already running
-      if (!window.archiveBoxProcessingQueue) {
-        localLog('Starting capture queue processor');
-        processQueue();
+    
+    // Show the status message
+    await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      args: [message, count || 0, immediate],
+      function: (message, count, immediate) => {
+        // Add to status queue
+        if (!window.archiveBoxStatusQueue) window.archiveBoxStatusQueue = [];
+        window.archiveBoxStatusQueue.unshift(message);
+        
+        // Keep only 5 items
+        if (window.archiveBoxStatusQueue.length > 5) {
+          window.archiveBoxStatusQueue = window.archiveBoxStatusQueue.slice(0, 5);
+        }
+        
+        // Show status
+        const indicator = document.getElementById('archiveBoxStatusIndicator');
+        const messageContainer = document.getElementById('archiveBoxStatusMessages');
+        const countIndicator = document.getElementById('archiveBoxStatusCount');
+        
+        if (indicator && messageContainer && countIndicator) {
+          // Update message list
+          messageContainer.innerHTML = window.archiveBoxStatusQueue.map(msg => 
+            `<div>• ${msg}</div>`
+          ).join('');
+          
+          // Update count
+          countIndicator.textContent = `Captured ${count} posts`;
+          
+          // Show indicator
+          indicator.style.opacity = '1';
+          
+          // Auto hide
+          clearTimeout(window.archiveBoxStatusTimeout);
+          window.archiveBoxStatusTimeout = setTimeout(() => {
+            indicator.style.opacity = '0';
+          }, 3000);
+        }
       }
-    } else {
-      localLog('URL already in queue, skipping:', entry.url);
-    }
-  };
-  
-  // Create enhanced status indicator if it doesn't exist
+    }).catch(err => {
+      debugLog(`Error showing status in tab ${tabId}:`, err.message);
+    });
+  } catch (err) {
+    debugLog('Error showing status:', err);
+  }
+}
+
+/**
+ * Setup status indicator in tab
+ */
+function setupStatusIndicator() {
   if (!document.getElementById('archiveBoxStatusIndicator')) {
-    localLog('Creating status indicator');
     const indicator = document.createElement('div');
     indicator.id = 'archiveBoxStatusIndicator';
     indicator.style.cssText = `
@@ -415,330 +612,15 @@ function setupPageCapture() {
       padding-top: 5px;
     `;
     indicator.appendChild(countIndicator);
-  }
-  
-  // Improved function to show multiple status messages
-  window.showArchiveBoxStatus = (message) => {
-    const indicator = document.getElementById('archiveBoxStatusIndicator');
-    const messageContainer = document.getElementById('archiveBoxStatusMessages');
-    const countIndicator = document.getElementById('archiveBoxStatusCount');
     
-    if (!indicator || !messageContainer || !countIndicator) {
-      localLog('Status indicator elements not found');
-      return;
-    }
-    
-    // Add this message to the queue
-    if (!window.archiveBoxStatusQueue) window.archiveBoxStatusQueue = [];
-    window.archiveBoxStatusQueue.push(message);
-    localLog('Added to status queue:', message);
-    
-    // Limit queue to last 5 items
-    if (window.archiveBoxStatusQueue.length > 5) {
-      window.archiveBoxStatusQueue.shift();
-    }
-    
-    // Update the messages display
-    messageContainer.innerHTML = window.archiveBoxStatusQueue.map(msg => 
-      `<div>• ${msg}</div>`
-    ).join('');
-    
-    // Update count
-    countIndicator.textContent = `Captured ${window.archiveBoxStatusQueue.length} posts`;
-    
-    // Show the indicator
-    indicator.style.opacity = '1';
-    
-    // Hide after a longer delay to account for multiple captures
-    clearTimeout(window.archiveBoxStatusTimeout);
-    window.archiveBoxStatusTimeout = setTimeout(() => {
-      indicator.style.opacity = '0';
-      // Clear the queue after hiding
-      setTimeout(() => {
-        window.archiveBoxStatusQueue = [];
-      }, 500);
-    }, 3000);
-  };
-  
-  // Store processed elements in window variables
-  window.markElementAsProcessed = (elementId) => {
-    if (!window.archiveBoxProcessedElements) window.archiveBoxProcessedElements = new Set();
-    window.archiveBoxProcessedElements.add(elementId);
-    localLog('Marked as processed:', elementId);
-  };
-  
-  // Check if element is processed
-  window.isElementProcessed = (elementId) => {
-    if (!window.archiveBoxProcessedElements) return false;
-    const isProcessed = window.archiveBoxProcessedElements.has(elementId);
-    if (isProcessed) {
-      localLog('Element already processed, skipping:', elementId);
-    }
-    return isProcessed;
-  };
-  
-  // Improved scroll event listener with throttling
-  let scrollTimeout = null;
-  window.addEventListener('scroll', () => {
-    // Cancel any pending scan
-    if (scrollTimeout) clearTimeout(scrollTimeout);
-    
-    // Schedule a new scan after user stops scrolling for 300ms
-    scrollTimeout = setTimeout(() => {
-      localLog('Scroll detected, scanning visible posts');
-      scanVisiblePosts();
-    }, 300);
-  });
-  
-  // Handle window resize events to capture posts that become visible
-  window.addEventListener('resize', () => {
-    if (window.archiveBoxResizeTimer) clearTimeout(window.archiveBoxResizeTimer);
-    window.archiveBoxResizeTimer = setTimeout(() => {
-      localLog('Window resized, scanning for newly visible posts');
-      scanVisiblePosts();
-    }, 500);
-  });
-  
-  // Add mutation observer to detect new Reddit posts dynamically added to the page
-  const observeNewContent = () => {
-    const targetNode = document.body;
-    
-    // Observer configuration
-    const config = { 
-      childList: true, 
-      subtree: true,
-      attributes: false 
-    };
-    
-    // Callback to be executed when mutations are observed
-    const callback = function(mutationsList, observer) {
-      let hasNewPosts = false;
-      
-      for (const mutation of mutationsList) {
-        if (mutation.type === 'childList' && mutation.addedNodes.length) {
-          // Check if any added nodes contain potential Reddit posts
-          for (const node of mutation.addedNodes) {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              // Check for new content: either the node is a post or contains posts
-              if (
-                (node.tagName === 'SHREDDIT-POST') || 
-                (node.querySelector && (
-                  node.querySelector('shreddit-post') || 
-                  node.querySelector('.thing.link')
-                ))
-              ) {
-                hasNewPosts = true;
-                break;
-              }
-            }
-          }
-        }
-        
-        if (hasNewPosts) break;
-      }
-      
-      // Only scan if we detected new posts being added
-      if (hasNewPosts) {
-        // Use a small delay to ensure the DOM is fully updated
-        setTimeout(() => {
-          localLog('Mutation observer detected new posts');
-          scanVisiblePosts();
-        }, 100);
-      }
-    };
-    
-    // Create an observer instance linked to the callback function
-    const observer = new MutationObserver(callback);
-    
-    // Start observing the target node for configured mutations
-    observer.observe(targetNode, config);
-    localLog('Mutation observer started');
-  };
-  
-  // Start the mutation observer
-  observeNewContent();
-  
-  // Do initial scan with a small delay to ensure page is fully loaded
-  localLog('Performing initial scan');
-  setTimeout(() => {
-    scanVisiblePosts();
-  }, 300);
-  
-  function scanVisiblePosts() {
-    // Check enable status by sending a message to background script
-    chrome.runtime.sendMessage({type: 'getEnableStatus'}, (response) => {
-      const isEnabled = response && response.enableScrollCapture;
-      
-      if (!isEnabled) {
-        localLog('Automatic content capture disabled, not scanning posts');
-        return;
-      }
-      
-      localLog('Scanning visible posts, window size:', window.innerWidth, 'x', window.innerHeight);
-      
-      // Process shreddit-post elements (new Reddit)
-      scanElements('shreddit-post', (post) => {
-        const permalink = post.getAttribute('permalink');
-        const postTitle = post.getAttribute('post-title');
-        const subredditName = post.getAttribute('subreddit-prefixed-name');
-        
-        if (permalink) {
-          const fullUrl = permalink.startsWith('http') ? 
-            permalink : `https://www.reddit.com${permalink}`;
-          
-          // Extract subreddit from prefixed name (r/subreddit)
-          let subreddit = '';
-          if (subredditName && subredditName.startsWith('r/')) {
-            subreddit = subredditName.substring(2);
-          }
-          
-          localLog('Found Reddit post:', {
-            title: postTitle,
-            subreddit: subreddit,
-            url: fullUrl
-          });
-          
-          return {
-            url: fullUrl,
-            title: postTitle || document.title,
-            tags: ['reddit', subreddit]
-          };
-        }
-        return null;
-      });
-      
-      // Process .thing.link elements (old Reddit)
-      scanElements('.thing.link', (post) => {
-        const permalink = post.getAttribute('data-permalink');
-        if (permalink) {
-          const fullUrl = `https://www.reddit.com${permalink}`;
-          const title = post.querySelector('.title a')?.textContent || '';
-          const subreddit = post.getAttribute('data-subreddit') || '';
-          
-          localLog('Found Old Reddit post:', {
-            title: title,
-            subreddit: subreddit,
-            url: fullUrl
-          });
-          
-          return {
-            url: fullUrl,
-            title: title,
-            tags: ['reddit', subreddit]
-          };
-        }
-        return null;
-      });
-    });
-  }
-  
-  function scanElements(selector, extractFn) {
-    const elements = document.querySelectorAll(selector);
-    if (elements.length > 0) {
-      localLog(`Found ${elements.length} elements matching '${selector}'`);
-    } else {
-      localLog(`No elements found matching '${selector}'`);
-    }
-    
-    Array.from(elements).forEach(element => {
-      // Generate a unique ID for this element if it doesn't have one
-      const elementId = element.id || `archivebox-${selector}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      if (!element.id) {
-        element.id = elementId;
-        localLog('Assigned ID to element:', elementId);
-      }
-      
-      // Skip already processed elements
-      if (window.isElementProcessed(elementId)) return;
-      
-      // Check if element is at least partially visible in viewport
-      const rect = element.getBoundingClientRect();
-      
-      // New visibility check: ANY part of the element is visible
-      const isPartiallyVisible = (
-        rect.bottom > 0 &&
-        rect.right > 0 &&
-        rect.top < (window.innerHeight || document.documentElement.clientHeight) &&
-        rect.left < (window.innerWidth || document.documentElement.clientWidth)
-      );
-      
-      // Only process partially visible elements
-      if (!isPartiallyVisible) {
-        localLog('Element not visible in viewport, skipping:', elementId);
-        return;
-      }
-      
-      localLog('Element visible in viewport:', elementId);
-      
-      // Extract entry data
-      const entry = extractFn(element);
-      if (!entry) {
-        localLog('Failed to extract entry data from element:', elementId);
-        return;
-      }
-      
-      // Mark as processed using new method
-      window.markElementAsProcessed(elementId);
-      
-      // Add to throttled queue
-      window.queueCaptureEntry(entry);
-      
-      // Show status with improved status indicator
-      window.showArchiveBoxStatus(`${entry.title.substring(0, 40)}...`);
-      
-      localLog(`Queued for capture: ${entry.url} (window size: ${window.innerWidth}x${window.innerHeight})`);
-    });
+    // Initialize status queue
+    window.archiveBoxStatusQueue = [];
   }
 }
 
-// This global event listener ensures we capture Reddit posts after page load
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  // Only process complete loads on Reddit
-  if (changeInfo.status !== 'complete' || !tab.url.includes('reddit.com')) return;
-  
-  debugLog('Reddit tab updated to complete:', tab.url);
-  
-  // Wait a moment for the page to fully render
-  setTimeout(() => {
-    debugLog('Executing setupPageCapture after delay');
-    chrome.scripting.executeScript({
-      target: {tabId: tabId},
-      function: setupPageCapture
-    }).catch(err => {
-      console.error('Error setting up page capture:', err);
-      debugLog('Error setting up page capture:', {
-        message: err.message,
-        tabId: tabId,
-        url: tab.url
-      });
-    });
-  }, 1500);
+// Initialize on startup
+chrome.runtime.onStartup.addListener(() => {
+  debugLog('Extension started');
+  initialize();
 });
 
-// Handle existing Reddit tabs on startup or install
-function setupExistingTabs() {
-  debugLog('Checking for existing Reddit tabs');
-  
-  chrome.tabs.query({url: "*://*.reddit.com/*"}, (tabs) => {
-    debugLog(`Found ${tabs.length} existing Reddit tabs`);
-    
-    tabs.forEach(tab => {
-      debugLog(`Setting up Reddit capture on existing tab: ${tab.id} - ${tab.url}`);
-      chrome.scripting.executeScript({
-        target: {tabId: tab.id},
-        function: setupPageCapture
-      }).catch(err => {
-        console.error('Error setting up page capture on existing tab:', err);
-        debugLog('Error details:', {
-          message: err.message,
-          tabId: tab.id,
-          url: tab.url
-        });
-      });
-    });
-  });
-}
-
-// Call this function when the extension starts or is installed
-chrome.runtime.onStartup.addListener(setupExistingTabs);
-chrome.runtime.onInstalled.addListener(setupExistingTabs);
