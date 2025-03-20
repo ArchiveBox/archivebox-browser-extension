@@ -1,4 +1,38 @@
 import { filterEntries, addToArchiveBox, downloadCsv, downloadJson, syncToArchiveBox, updateStatusIndicator, getArchiveBoxServerUrl } from './utils.js';
+import { getAllHandlers, shouldCaptureUrl } from './site-handlers.js';
+
+/**
+ * Get site handler information for an entry
+ * @param {Object} entry - The entry to get handler info for
+ * @return {Object|null} Handler info if found
+ */
+async function getSiteHandlerForEntry(entry) {
+  if (!entry || !entry.url) return null;
+  
+  try {
+    // Send message to background script
+    return new Promise(resolve => {
+      chrome.runtime.sendMessage(
+        { type: 'getSiteHandlerForUrl', url: entry.url },
+        response => resolve(response?.handler || null)
+      );
+    });
+  } catch (error) {
+    console.error('Error getting site handler for entry:', error);
+    return null;
+  }
+}
+
+function getSiteHandlerIcon(handlerId) {
+  const icons = {
+    reddit: '💬',
+    twitter: '🐦',
+    youtube: '▶️',
+    default: '🌐'
+  };
+  
+  return icons[handlerId] || icons.default;
+}
 
 export async function renderEntries(filterText = '', tagFilter = '') {
   const { entries = [] } = await chrome.storage.local.get('entries');
@@ -16,23 +50,85 @@ export async function renderEntries(filterText = '', tagFilter = '') {
 
   // Display filtered entries
   const entriesList = document.getElementById('entriesList');
-  entriesList.innerHTML = filteredEntries.map(entry => `
-    <div class="list-group-item">
-      <div class="row">
-        <small class="col-lg-2" style="display: block;">
-          ${new Date(entry.timestamp).toISOString().replace('T', ' ').split('.')[0]}
-        </small>
-        <h5 class="col-lg-7">
-          <a href="${entry.url}" target="_blank" name="${entry.id}" id="${entry.id}"><img src="${entry.favicon}" class="favicon"/><code>${entry.url}</code></a>
-        </h5>
-        <div class="col-lg-3">
-          ${entry.tags.length ? `
-            <p class="mb-1">
-              ${entry.tags.map(tag => 
-                `<span class="badge bg-secondary me-1 tag-filter" role="button" data-tag="${tag}">${tag}</span>`
-              ).join('')}
-            </p>
-          ` : ''}
+  // Add a custom style for site handler badges if not already present
+  if (!document.getElementById('siteHandlerStyles')) {
+    const style = document.createElement('style');
+    style.id = 'siteHandlerStyles';
+    style.textContent = `
+      .site-handler-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 6px;
+        font-size: 0.7rem;
+        background-color: #e3f2fd;
+        color: #0d6efd;
+        border-radius: 4px;
+        margin-right: 8px;
+      }
+      
+      .site-handler-icon {
+        margin-right: 2px;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  // Get site handler info for each entry
+  const entryHandlers = await Promise.all(
+    filteredEntries.map(async entry => {
+      return {
+        entry,
+        handler: await getSiteHandlerForEntry(entry)
+      };
+    })
+  );
+
+  entriesList.innerHTML = entryHandlers.map(({ entry, handler }) => `
+    <div class="list-group-item d-flex align-items-start gap-2">
+      <input type="checkbox" 
+             class="entry-checkbox form-check-input mt-2" 
+             value="${entry.id}"
+             ${selectedEntries.has(entry.id) ? 'checked' : ''}>
+      <div class="entry-content flex-grow-1">
+        <div class="entry-title-line">
+          <div class="entry-title">
+            ${handler ? 
+              `<span class="site-handler-badge">
+                <span class="site-handler-icon">${getSiteHandlerIcon(handler.id)}</span>
+                ${handler.name}
+              </span>` : ''
+            }
+            ${entry.title || 'Untitled'}
+          </div>
+          ${(()=>{
+            return archivebox_server_url ?
+              `<div class="entry-link-to-archivebox btn-group" role="group">
+                 <a href=${entry.url} target="_blank" class="btn btn-sm btn-outline-primary">
+                   🔗 Original
+                 </a>
+                 <a href=${archivebox_server_url}/archive/${entry.url} target="_blank" class="btn btn-sm btn-outline-primary">
+                   📦 ArchiveBox
+                 </a>
+                 <a href="https://web.archive.org/web/${entry.url}" target="_blank" class="btn btn-sm btn-outline-primary">
+                   🏛️ Archive.org
+                 </a>
+               </div>`
+              : '' })()
+          }
+        </div>
+        <div class="entry-url-line">
+          <img class="favicon" src="${entry.favicon || '128.png'}"
+               onerror="this.src='128.png'"
+               width="16" height="16">
+          <code class="entry-url">${entry.url}</code>
+          <span class="entry-timestamp">
+            ${new Date(entry.timestamp).toLocaleString()}
+          </span>
+        </div>
+        <div class="small text-muted mt-1">
+          ${entry.tags.map(tag => 
+            `<span class="badge bg-secondary me-1">${tag}</span>`
+          ).join('')}
         </div>
       </div>
     </div>
@@ -330,8 +426,57 @@ export function initializeEntriesTab() {
     window.history.pushState({}, '', newUrl);
   }
 
+  /**
+   * Render the tags list sidebar with frequency counts and site filters
+   * @param {Array} filteredEntries - The currently filtered entries
+   */
   async function renderTagsList(filteredEntries) {
     const tagsList = document.getElementById('tagsList');
+    
+    // Add site handler filters
+    const handlers = getAllHandlers();
+    
+    // Check if we have entries from supported sites
+    const siteCount = {};
+    
+    filteredEntries.forEach(entry => {
+      Object.entries(handlers).forEach(([id, handler]) => {
+        if (handler.domains.some(domain => entry.url.includes(domain))) {
+          siteCount[id] = (siteCount[id] || 0) + 1;
+        }
+      });
+    });
+    
+    // Start with site filters if we have entries from supported sites
+    let tagsListHTML = '';
+    
+    if (Object.keys(siteCount).length > 0) {
+      tagsListHTML += '<h5>Sites</h5>';
+      
+      // Get current filter to highlight active site if any
+      const currentFilter = document.getElementById('filterInput').value.toLowerCase();
+      
+      // Add site filters sorted by count
+      tagsListHTML += Object.entries(siteCount)
+        .sort(([, countA], [, countB]) => countB - countA)
+        .map(([siteId, count]) => {
+          const handler = handlers[siteId];
+          const isActive = currentFilter === `site:${siteId}`;
+          
+          return `
+            <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center site-filter ${
+              isActive ? 'active' : ''
+            }" data-site="${siteId}">
+              <span>
+                ${getSiteHandlerIcon(siteId)} ${handler.name}
+              </span>
+              <span class="badge bg-primary rounded-pill">${count}</span>
+            </a>
+          `;
+        }).join('');
+      
+      tagsListHTML += '<h5 class="mt-4">Tags</h5>';
+    }
     
     // Count occurrences of each tag in filtered entries only
     const tagCounts = filteredEntries.reduce((acc, entry) => {
@@ -340,19 +485,19 @@ export function initializeEntriesTab() {
       });
       return acc;
     }, {});
-
+  
     // Sort tags by frequency (descending) then alphabetically
     const sortedTags = Object.entries(tagCounts)
       .sort(([tagA, countA], [tagB, countB]) => {
         if (countB !== countA) return countB - countA;
         return tagA.localeCompare(tagB);
       });
-
+  
     // Get current filter to highlight active tag if any
     const currentFilter = document.getElementById('filterInput').value.toLowerCase();
-
-    // Render tags list with counts
-    tagsList.innerHTML = sortedTags.map(([tag, count]) => `
+  
+    // Add tags with counts
+    tagsListHTML += sortedTags.map(([tag, count]) => `
       <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center tag-filter ${
         tag.toLowerCase() === currentFilter ? 'active' : ''
       }" data-tag="${tag}">
@@ -360,7 +505,10 @@ export function initializeEntriesTab() {
         <span class="badge bg-secondary rounded-pill">${count}</span>
       </a>
     `).join('');
-
+  
+    // Set the HTML
+    tagsList.innerHTML = tagsListHTML;
+  
     // Add click handlers for tag filtering
     tagsList.querySelectorAll('.tag-filter').forEach(tagElement => {
       tagElement.addEventListener('click', (e) => {
@@ -373,6 +521,24 @@ export function initializeEntriesTab() {
           filterInput.value = ''; // Clear filter if clicking active tag
         } else {
           filterInput.value = tag;
+        }
+        
+        renderEntries();
+      });
+    });
+    
+    // Add click handlers for site filtering
+    tagsList.querySelectorAll('.site-filter').forEach(siteElement => {
+      siteElement.addEventListener('click', (e) => {
+        e.preventDefault();
+        const site = siteElement.dataset.site;
+        const filterInput = document.getElementById('filterInput');
+        
+        // Toggle site filter
+        if (filterInput.value.toLowerCase() === `site:${site}`) {
+          filterInput.value = ''; // Clear filter if clicking active site
+        } else {
+          filterInput.value = `site:${site}`;
         }
         
         renderEntries();

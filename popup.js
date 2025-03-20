@@ -3,6 +3,8 @@
 const IS_IN_POPUP = window.location.href.startsWith('chrome-extension://') && window.location.href.endsWith('/popup.html');
 const IS_ON_WEBSITE = !window.location.href.startsWith('chrome-extension://');
 
+window.handler_stats = null;  // Global stats reference
+
 window.popup_element = null;  // Global reference to popup element
 window.hide_timer = null;
 
@@ -63,6 +65,33 @@ async function sendToArchiveBox(url, tags) {
     ${status}
   `;
   return { ok: ok, status: status};
+}
+
+async function getSiteHandlerInfo(url) {
+  try {
+    if (!url) return null;
+    
+    const response = await chrome.runtime.sendMessage({ 
+      type: 'getSiteHandlerForUrl',
+      url
+    });
+    
+    return response?.handler || null;
+  } catch (error) {
+    console.log('Failed to get site handler info:', error);
+    return null;
+  }
+}
+
+async function getHandlerStats() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'getStats' });
+    window.handler_stats = response?.stats || {};
+    return window.handler_stats;
+  } catch (error) {
+    console.log('Failed to get handler stats:', error);
+    return {};
+  }
 }
 
 window.getCurrentEntry = async function() {
@@ -411,6 +440,7 @@ window.createPopup = async function() {
     <a href="#" class="options-link" title="Open in ArchiveBox">🏛️</a> <input type="search" placeholder="Add tags + press ⏎   |   ⎋ to close">
     <br/>
     <div class="ARCHIVEBOX__current-tags"></div><div class="ARCHIVEBOX__tag-suggestions"></div><br/>
+    <div class="site-handler-info"></div>
     <small class="fade-out">
       <span class="status-indicator"></span>
       Saved locally...
@@ -603,6 +633,56 @@ window.createPopup = async function() {
       selectedIndex = -1;
     }
   });
+  // Check if this URL has a specific handler and show info
+  const siteHandlerInfo = await getSiteHandlerInfo(current_entry.url);
+  const statsContainer = popup.querySelector('.site-handler-info');
+  
+  if (siteHandlerInfo) {
+    // Update the style for the handler info
+    const style = doc.createElement('style');
+    style.textContent += `
+      .site-handler-info {
+        font-size: 12px;
+        margin-bottom: 8px;
+        color: #f0f0f0;
+      }
+      
+      .handler-stats {
+        display: flex;
+        gap: 8px;
+        margin-top: 4px;
+      }
+      
+      .stat-item {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 10px;
+      }
+    `;
+    doc.head.appendChild(style);
+    
+    // Show handler info
+    statsContainer.innerHTML = `
+      <div>This page uses the <strong>${siteHandlerInfo.name}</strong> handler for enhanced capture.</div>
+      <div class="handler-stats">
+        ${siteHandlerInfo.id === 'reddit' ? '<span class="stat-item">Reddit-specific options available in settings</span>' : ''}
+      </div>
+    `;
+    
+    // Get stats if available
+    const stats = await getHandlerStats();
+    const handlerStats = stats[siteHandlerInfo.id];
+    
+    if (handlerStats) {
+      const statsRow = statsContainer.querySelector('.handler-stats');
+      if (handlerStats.captureCount) {
+        statsRow.innerHTML += `<span class="stat-item">Captured: ${handlerStats.captureCount}</span>`;
+      }
+    }
+  } else {
+    statsContainer.style.display = 'none';
+  }
 
   input.focus();
   console.log('+ Showed ArchiveBox popup in iframe');
@@ -657,6 +737,22 @@ window.createPopup = async function() {
 
   // Initial resize
   setTimeout(resizeIframe, 0);
+
+  notifyUrlVisit(current_entry.url);
 }
 
 window.createPopup();
+
+// Function to notify background script about URL visit
+async function notifyUrlVisit(url) {
+  if (!url) return;
+  
+  try {
+    await chrome.runtime.sendMessage({
+      type: 'urlVisited',
+      url
+    });
+  } catch (error) {
+    // Ignore any errors
+  }
+}

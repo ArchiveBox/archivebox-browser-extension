@@ -8,15 +8,24 @@
     "scripting",
     "activeTab",
     "contextMenus",
-    "unlimitedStorage"
+    "unlimitedStorage",
+    "webRequest",
+    "tabs",
+    "webNavigation"
   ],
   "optional_permissions": [
     "cookies",
     "history",
     "bookmarks"
   ],
-  "optional_host_permissions": [
-    "*://*\/*"
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.reddit.com/*"],
+      "js": ["reddit-content.js"]
+    }
   ],
   "icons": {
     "16": "16.png",
@@ -39,8 +48,8 @@
     "type": "module"
   },
   "web_accessible_resources": [{
-    "resources": ["popup.css", "popup.js"],
-    "matches": ["*://*\/*"]
+    "resources": ["popup.css", "popup.js", "site-handlers.js", "reddit-handler.js"],
+    "matches": ["*://*/*"]
   }],
   "commands": {
     "save-to-archivebox-action": {

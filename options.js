@@ -3,14 +3,19 @@ import { initializeImport } from './import-tab.js';
 import { initializePersonasTab } from './personas-tab.js';
 import { initializeCookiesTab } from './cookies-tab.js';
 import { initializeConfigTab } from './config-tab.js';
+import { initializeAll as initializeAllSiteHandlers } from './site-handlers.js';
 
 // Initialize all tabs when options page loads
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  // Initialize all tabs
   initializeEntriesTab();
   initializeImport();
   initializePersonasTab();
   initializeCookiesTab();
   initializeConfigTab();
+
+  // Initialize site handlers
+  await initializeAllSiteHandlers();
 
   function changeTab() {
     if (window.location.hash && window.location.hash !== document.querySelector('a.nav-link.active').id) {

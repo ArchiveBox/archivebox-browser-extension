@@ -299,6 +299,35 @@
           </form>
         </div>
       </div>
+
+    <div class="mb-3" style="background-color: #f0f8ff; padding: 15px; border-radius: 6px;">
+      <h5>Content Capture Settings</h5>
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="enableScrollCapture">
+        <label class="form-check-label" for="enableScrollCapture">
+          Automatically capture content as you browse
+        </label>
+      </div>
+      <div class="form-text">
+        When enabled, the extension will automatically detect and save content from supported sites as you browse them.
+      </div>
+      
+      <div class="mt-3">
+        <label for="scrollCaptureTags" class="form-label">Additional tags for captured content</label>
+        <input type="text" class="form-control" id="scrollCaptureTags" 
+               placeholder="Comma-separated tags (e.g., auto,archive,important)">
+      </div>
+      
+      <!-- This div will be populated by the config-tab.js -->
+      <div id="redditSettingsContainer" class="mt-4"></div>
+      
+      <!-- This div will contain site handler information -->
+      <div id="siteHandlersContainer" class="mt-4"></div>
+      
+      <!-- This div will contain capture statistics -->
+      <div id="captureStatsContainer" class="mt-4"></div>
+    </div>
+
     </div>
 
     <!-- Personas Tab -->
