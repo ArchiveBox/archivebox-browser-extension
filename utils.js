@@ -40,7 +40,14 @@ export function updateStatusIndicator(indicator, textElement, success, message) 
   textElement.className = success ? 'text-success' : 'text-danger';
 }
 
-export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
+/**
+ * Adds URLs to ArchiveBox using the modern API (v0.8.0+) or falls back to legacy API.
+ * The tags string should be comma-separated.
+ * @param {string} addCommandArgs - JSON string with {urls: string[], tags: string}
+ * @param {function({ok: boolean, status: number, statusText: string})} onComplete
+ * @param {function({ok: false, errorMessage: string})} onError
+ */
+ export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
   console.log('i addToArchiveBox', addCommandArgs);
   try {
     const archivebox_server_url = await getArchiveBoxServerUrl();
@@ -66,7 +73,6 @@ export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
         if (response.ok) {
           console.log('i addToArchiveBox using v0.8.5 REST API succeeded', response.status, response.statusText);
           onComplete({ok: response.ok, status: response.status, statusText: response.statusText});
-          return true;
         } else {
           console.warn(`! addToArchiveBox using v0.8.5 REST API failed with status ${response.status} ${response.statusText}`);
           // Fall through to legacy API
@@ -114,8 +120,6 @@ export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
     console.error('! addToArchiveBox failed', e.message);
     onError({ok: false, errorMessage: e.message});
   }
-
-  return true;
 }
 
 export function downloadCsv(entries) {
