@@ -254,7 +254,16 @@
             <br/>
             <hr/>
             <br/>
-            <h5>Advanced Users Only: Auto-archive URLs</h5><br/>
+            <h5>Advanced Users Only: Auto-archive URLs</h5>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" id="enable_auto_archive">
+              <label class="form-check-label" for="enable_auto_archive">
+                Enable automatic archiving
+              </label>
+              <div class="form-text">
+                When enabled, the extension will automatically archive URLs that match the patterns below.
+              </div>
+            </div>
             <div class="mb-3">
               <label for="match_urls" class="form-label">➕ Auto-archive all visited URLs that match this <code>regex</code> pattern</label>
               <div class="form-text">

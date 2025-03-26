@@ -7,26 +7,31 @@ export async function initializeConfigTab() {
   const apiKey = document.getElementById('archivebox_api_key');
   const matchUrls = document.getElementById('match_urls');
   const excludeUrls = document.getElementById('exclude_urls');
-  
+
   // Load saved values
   const archivebox_server_url = await getArchiveBoxServerUrl();
-  const { archivebox_api_key, match_urls, exclude_urls } = await chrome.storage.local.get([
+  const { archivebox_api_key, match_urls, exclude_urls, enable_auto_archive } = await chrome.storage.local.get([
     'archivebox_api_key',
     'match_urls',
     'exclude_urls',
+    'enable_auto_archive',
   ]);
-  console.log('Got config values from storage:', archivebox_server_url, archivebox_api_key, match_urls, exclude_urls);
+  console.log('Got config values from storage:', archivebox_server_url, archivebox_api_key, match_urls, exclude_urls, enable_auto_archive);
 
   // migrate old config_archiveboxBaseUrl to archivebox_server_url
   const {config_archiveBoxBaseUrl} = await chrome.storage.sync.get('config_archiveboxBaseUrl', );
   if (config_archiveBoxBaseUrl) {
     await chrome.storage.local.set({ archivebox_server_url: config_archiveBoxBaseUrl });
   }
-  
+
   serverUrl.value = archivebox_server_url || '';
   apiKey.value = archivebox_api_key || '';
   matchUrls.value = typeof match_urls === 'string' ? match_urls : '';
   excludeUrls.value = typeof exclude_urls === 'string' ? exclude_urls : '';
+
+  // Set the auto-archive toggle state
+  const enableAutoArchive = document.getElementById('enable_auto_archive');
+  enableAutoArchive.checked = !!enable_auto_archive;
 
   // Server test button handler
   document.getElementById('testServer').addEventListener('click', async () => {
@@ -50,7 +55,7 @@ export async function initializeConfigTab() {
         mode: 'cors',
         credentials: 'omit'
       });
-      
+
       // fall back to pre-v0.8.0 endpoint for backwards compatibility
       if (response.status === 404) {
         response = await fetch(`${serverUrl.value}`, {
@@ -74,7 +79,7 @@ export async function initializeConfigTab() {
   document.getElementById('testApiKey').addEventListener('click', async () => {
     const statusIndicator = document.getElementById('apiKeyStatus');
     const statusText = document.getElementById('apiKeyStatusText');
-    
+
     try {
       const response = await fetch(`${serverUrl.value}/api/v1/auth/check_api_token`, {
         method: 'POST',
@@ -85,7 +90,7 @@ export async function initializeConfigTab() {
         })
       });
       const data = await response.json();
-      
+
       if (data.user_id) {
         updateStatusIndicator(statusIndicator, statusText, true, `✓ API key is valid: user_id = ${data.user_id}`);
       } else {
@@ -122,7 +127,22 @@ export async function initializeConfigTab() {
     }
   });
 
-  // Save changes when inputs change
+  // Special handler for the auto-archive toggle
+  enableAutoArchive.addEventListener('change', async () => {
+    if (enableAutoArchive.checked) {
+      const granted = await chrome.permissions.request({ permissions: ['tabs'] });
+      if (!granted) {
+        enableAutoArchive.checked = false;
+        alert('The "tabs" permission is required for auto-archiving. Auto-archiving has been disabled.');
+      }
+    }
+
+    await chrome.storage.local.set({
+      enable_auto_archive: enableAutoArchive.checked
+    });
+  });
+
+  // Other inputs
   [serverUrl, apiKey, matchUrls, excludeUrls].forEach(input => {
     input.addEventListener('change', async () => {
       await chrome.storage.local.set({
@@ -242,5 +262,3 @@ export async function initializeConfigTab() {
     }
   });
 }
-
-// Using shared syncToArchiveBox function from utils.js

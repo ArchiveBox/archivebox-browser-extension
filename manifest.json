@@ -13,10 +13,11 @@
   "optional_permissions": [
     "cookies",
     "history",
-    "bookmarks"
+    "bookmarks",
+    "tabs"
   ],
   "optional_host_permissions": [
-    "*://*\/*"
+    "<all_urls>"
   ],
   "icons": {
     "16": "16.png",
