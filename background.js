@@ -1,6 +1,6 @@
 // background.js
 
-import { addToArchiveBox, syncToArchiveBox } from "./utils.js";
+import { addToArchiveBox } from "./utils.js";
 
 chrome.runtime.onMessage.addListener(async (message) => {
     const options_url = chrome.runtime.getURL('options.html') + `?search=${message.id}`;
@@ -85,8 +85,12 @@ async function setupAutoArchiving() {
             entries.push(entry);
             await chrome.storage.local.set({ entries });
 
-            const result = await syncToArchiveBox(entry);
-            console.log('Auto-archive result:', result);
+            try {
+              await addToArchiveBox([entry.url], entry.tags.join(','));
+              console.log(`Automatically archived ${entry.url}`);
+            } catch (error) {
+              console.error(`Failed to automatically archive ${entry.url}: ${error.message}`);
+            }
           }
         }
       };
@@ -137,10 +141,18 @@ chrome.action.onClicked.addListener(async (tab) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'archivebox_add') {
-    addToArchiveBox(message.body, sendResponse, sendResponse);
+    const args = JSON.parse(message.body);
+    addToArchiveBox(args.urls, args.tags)
+      .then(sendResponse({ok: true}))
+      .catch((error) => {
+          console.error(`Failed to archive ${args.urls}: ${error.message}`);
+          sendResponse({ok: false, errorMessage: error.message});
+        }
+      );
+    console.log(`Successfully archived ${args.urls}`);
   }
   return true;
-
+});
 
 
 chrome.contextMenus.onClicked.addListener(onClickContextMenuSave);

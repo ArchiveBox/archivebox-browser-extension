@@ -9,10 +9,10 @@ window.hide_timer = null;
 window.closePopup = function () {
   document.querySelector(".archive-box-iframe")?.remove();
   window.popup_element = null;
-  console.log("close popup");
+  console.log("i Closed popup.");
 };
 
-// handle escape key when popup doesn't have focus
+// Handle escape key when popup doesn't have focus
 document.addEventListener('keydown', (e) => {
   if (e.key == 'Escape') {
     closePopup();
@@ -31,16 +31,13 @@ async function sendToArchiveBox(url, tags) {
 
   try {
     console.log('i Sending to ArchiveBox', { url, tags });
-
-    const addCommandArgs = JSON.stringify({
-      urls: [url],
-      tags: tags.join(','),
-    });
-
-    const addResponse = await new Promise((resolve, reject) => {
+    await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
         type: 'archivebox_add',
-        body: addCommandArgs
+        body: JSON.stringify({
+          urls: [url],
+          tags: tags.join(','),
+        })
       }, (response) => {
         if (!response.ok) {
           reject(`${response.errorMessage}`);
@@ -62,7 +59,6 @@ async function sendToArchiveBox(url, tags) {
     <span class="status-indicator ${ok ? 'success' : 'error'}"></span>
     ${status}
   `;
-  return { ok: ok, status: status};
 }
 
 window.getCurrentEntry = async function() {

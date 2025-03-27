@@ -1,4 +1,4 @@
-import { filterEntries, addToArchiveBox, downloadCsv, downloadJson, syncToArchiveBox, updateStatusIndicator, getArchiveBoxServerUrl } from './utils.js';
+import { filterEntries, addToArchiveBox, downloadCsv, downloadJson, updateStatusIndicator, getArchiveBoxServerUrl } from './utils.js';
 
 export async function renderEntries(filterText = '', tagFilter = '') {
   const { entries = [] } = await chrome.storage.local.get('entries');
@@ -607,17 +607,20 @@ export function initializeEntriesTab() {
       statusIndicator.style.animation = 'pulse 1s infinite';
 
       // Send to ArchiveBox
-      const addCommandArgs = JSON.stringify({urls: [item.url], tag: item.tags.join(',')});
-
-      const onResponse = (response) => {
-        // Update status indicator
-        statusIndicator.className = `sync-status status-indicator status-${response.ok ? 'success' : 'error'}`;
-        statusIndicator.style.backgroundColor = response.ok ? '#28a745' : '#dc3545';
-        statusIndicator.title = response.status;
-        statusIndicator.style.animation = 'none';
+      let success = true, status = 'success';
+      try {
+        await addToArchiveBox([item.url], item.tags.join(','));
+        success = true;
+        status = 'success';
+      } catch (error) {
+        success = false;
+        status = error.message;
       }
 
-      addToArchiveBox(addCommandArgs, onResponse, onResponse);
+      statusIndicator.className = `sync-status status-indicator status-${success ? 'success' : 'error'}`;
+      statusIndicator.style.backgroundColor = success ? '#28a745' : '#dc3545';
+      statusIndicator.title = status;
+      statusIndicator.style.animation = 'none';
 
       // Wait 0.5s before next request
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -628,5 +631,3 @@ export function initializeEntriesTab() {
     syncBtn.textContent = '⬆️ Sync to ArchiveBox';  
   });
 }
-
-// Using syncToArchiveBox from utils.js 

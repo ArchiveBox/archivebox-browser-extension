@@ -40,85 +40,54 @@ export function updateStatusIndicator(indicator, textElement, success, message) 
   textElement.className = success ? 'text-success' : 'text-danger';
 }
 
-/**
- * Adds URLs to ArchiveBox using the modern API (v0.8.0+) or falls back to legacy API.
- * The tags string should be comma-separated.
- * @param {string} addCommandArgs - JSON string with {urls: string[], tags: string}
- * @param {function({ok: boolean, status: number, statusText: string})} onComplete
- * @param {function({ok: false, errorMessage: string})} onError
- */
- export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
-  console.log('i addToArchiveBox', addCommandArgs);
-  try {
-    const archivebox_server_url = await getArchiveBoxServerUrl();
-    const { archivebox_api_key } = await chrome.storage.local.get(['archivebox_api_key']);
+export async function addToArchiveBox(urls, tags, depth = 0, update = false, update_all = false) {
+  console.log(`i Adding urls ${urls} and tags ${tags} to ArchiveBox`);
 
-    console.log('i addToArchiveBox server url', archivebox_server_url);
-    if (!archivebox_server_url) {
-      throw new Error('Server not configured.');
+  const archivebox_server_url = await getArchiveBoxServerUrl();
+  const { archivebox_api_key } = await chrome.storage.local.get(['archivebox_api_key']);
+
+  if (!archivebox_server_url) {
+    throw new Error(`Server not configured`);
+  }
+  console.log('i Server url', archivebox_server_url);
+
+  // try ArchiveBox v0.8.0+ API endpoint first
+  if (archivebox_api_key) {
+    console.log('i Using v0.8.5 REST API');
+    const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
+      headers: {
+        'x-archivebox-api-key': `${archivebox_api_key}`
+      },
+      method: 'post',
+      credentials: 'include',
+      body: JSON.stringify({ urls, tags, depth, update, update_all })
+    });
+
+    if (response.ok) {
+      console.log(`i Successfully added ${urls} to ArchiveBox using v0.8.5 REST API`);
+      return
+    } else {
+      console.warn(`! Failed to add ${urls} to ArchiveBox using v0.8.5 REST API. HTTP ${response.status} ${response.statusText}. Falling back to legacy API.`);
     }
+  }
 
-    if (archivebox_api_key) {
-      // try ArchiveBox v0.8.0+ API endpoint first
-      try {
-        const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
-          headers: {
-            'x-archivebox-api-key': `${archivebox_api_key}`
-          },
-          method: 'post',
-          credentials: 'include',
-          body: addCommandArgs
-        });
+  // Fall back to pre-v0.8.0 endpoint for backwards compatibility
+  console.log(`i Using legacy /add POST method`);
 
-        if (response.ok) {
-          console.log('i addToArchiveBox using v0.8.5 REST API succeeded', response.status, response.statusText);
-          onComplete({ok: response.ok, status: response.status, statusText: response.statusText});
-        } else {
-          console.warn(`! addToArchiveBox using v0.8.5 REST API failed with status ${response.status} ${response.statusText}`);
-          // Fall through to legacy API
-        }
-      } catch (error) {
-        console.warn('! addToArchiveBox using v0.8.5 REST API failed with error:', error.message);
-        // Fall through to legacy API
-      }
-    }
+  const body = new FormData();
+  body.append("url", urls.join("\n"));
+  body.append("tag", tags);
+  body.append("parser", "auto")
+  body.append("depth", depth)
 
-    // fall back to pre-v0.8.0 endpoint for backwards compatibility
-    console.log('i addToArchiveBox using legacy /add POST method');
+  const response = await fetch(`${archivebox_server_url}/add/`, {
+    method: "post",
+    credentials: "include",
+    body: body
+  });
 
-    const parsedAddCommandArgs = JSON.parse(addCommandArgs);
-    const urls = parsedAddCommandArgs && parsedAddCommandArgs.urls
-      ? parsedAddCommandArgs.urls.join("\n") : "";
-    const tags = parsedAddCommandArgs && parsedAddCommandArgs.tags
-      ? parsedAddCommandArgs.tags : "";
-
-    const body = new FormData();
-    body.append("url", urls);
-    body.append("tag", tags);
-    body.append("parser", "auto")
-    body.append("depth", 0)
-
-    try {
-      const response = await fetch(`${archivebox_server_url}/add/`, {
-        method: "post",
-        credentials: "include",
-        body: body
-      });
-
-      if (response.ok) {
-        console.log('i addToArchiveBox using legacy /add POST method succeeded', response.status, response.statusText);
-        onComplete({ok: response.ok, status: response.status, statusText: response.statusText});
-      } else {
-        console.error(`! addToArchiveBox using legacy /add POST method failed: ${response.status} ${response.statusText}`);
-        onError({ok: false, errorMessage: `HTTP ${response.status}: ${response.statusText}`});
-      }
-    } catch (error) {
-      console.error('! addToArchiveBox using legacy /add POST method failed with error:', error.message);
-      onError({ok: false, errorMessage: error.message});
-    }
-  } catch (e) {
-    console.error('! addToArchiveBox failed', e.message);
-    onError({ok: false, errorMessage: e.message});
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
 }
 
@@ -159,55 +128,4 @@ export function downloadJson(entries) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-}
-
-// Shared syncToArchiveBox function for config-tab and entries-tab
-export async function syncToArchiveBox(entry) {
-  const archivebox_server_url = await getArchiveBoxServerUrl();
-  const { archivebox_api_key } = await chrome.storage.local.get(['archivebox_api_key']);
-  
-  if (!archivebox_server_url || !archivebox_api_key) {
-    return { 
-      ok: false, 
-      status: 'Server URL and API key must be configured and saved first' 
-    };
-  }
-
-  try {
-    const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
-      method: 'POST',
-      mode: 'cors',
-      credentials: 'omit',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'x-archivebox-api-key': archivebox_api_key,
-      },
-      body: JSON.stringify({
-        urls: [entry.url],
-        tag: entry.tags.join(','),
-        depth: 0,
-        update: false,
-        update_all: false,
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      return { 
-        ok: false, 
-        status: `Server returned ${response.status}: ${text}`
-      };
-    }
-
-    return {
-      ok: true,
-      status: 'Success'
-    };
-  } catch (err) {
-    return { 
-      ok: false, 
-      status: `Connection failed: ${err.message}` 
-    };
-  }
 }

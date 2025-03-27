@@ -1,5 +1,5 @@
 // Config tab initialization and handlers
-import { updateStatusIndicator, syncToArchiveBox, getArchiveBoxServerUrl } from './utils.js';
+import { updateStatusIndicator, getArchiveBoxServerUrl, addToArchiveBox } from './utils.js';
 
 export async function initializeConfigTab() {
   const configForm = document.getElementById('configForm');
@@ -38,17 +38,14 @@ export async function initializeConfigTab() {
     const statusIndicator = document.getElementById('serverStatus');
     const statusText = document.getElementById('serverStatusText');
 
-    // check if we have permission to access the server
+    // Check if we have permission to access the server
     const permission = await chrome.permissions.request({permissions: ['cookies'], origins: [`${serverUrl.value}/*`]});
     if (!permission) {
       alert('Permission denied.');
       return;
     }
 
-    const updateStatus = (success, message) => {
-      updateStatusIndicator(statusIndicator, statusText, success, message);
-    };
-
+    // Test request to server.
     try {
       let response = await fetch(`${serverUrl.value}/api/`, {
         method: 'GET',
@@ -66,12 +63,12 @@ export async function initializeConfigTab() {
       }
 
       if (response.ok) {
-        updateStatus(true, '✓ Server is reachable');
+        updateStatusIndicator(statusIndicator, statusText, true, '✓ Server is reachable');
       } else {
-        updateStatus(false, `✗ Server error: ${response.status} ${response.statusText}`);
+        updateStatusIndicator(statusIndicator, statusText, false, `✗ Server error: ${response.status} ${response.statusText}`);
       }
     } catch (err) {
-      updateStatus(false, `✗ Connection failed: ${err.message}`);
+      updateStatusIndicator(statusIndicator, statusText, false, `✗ Connection failed: ${err.message}`);
     }
   });
 
@@ -228,22 +225,16 @@ export async function initializeConfigTab() {
         tags: ['test']
       };
 
-      const result = await syncToArchiveBox(testEntry);
       document.getElementById('inprogress-test').remove();
 
-      if (result.ok) {
-        testStatus.innerHTML += `
-          &nbsp; <span class="status-indicator status-success"></span>
-          🚀 URL was submitted and <a href="${serverUrl.value}/" target="_blank">✓ queued for archiving</a> on the ArchiveBox server: <a href="${serverUrl.value}/archive/${testEntry.url}" target="_blank">📦 <code>${serverUrl.value}/archive/${testEntry.url}</code></a>.
-        `;
-        // Clear the input on success
-        testUrlInput.value = '';
-      } else {
-        testStatus.innerHTML += `
-          <span class="status-indicator status-error"></span>
-          Error: ${result.status}
-        `;
-      }
+      await addToArchiveBox([testEntry.url], testEntry.tags.join(','));
+
+      testStatus.innerHTML += `
+        &nbsp; <span class="status-indicator status-success"></span>
+        🚀 URL was submitted and <a href="${serverUrl.value}/" target="_blank">✓ queued for archiving</a> on the ArchiveBox server: <a href="${serverUrl.value}/archive/${testEntry.url}" target="_blank">📦 <code>${serverUrl.value}/archive/${testEntry.url}</code></a>.
+      `;
+      // Clear the input on success
+      testUrlInput.value = '';
     } catch (error) {
       testStatus.innerHTML += `
         <span class="status-indicator status-error"></span>
