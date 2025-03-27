@@ -159,7 +159,16 @@ export async function initializeConfigTab() {
   testButton.addEventListener('click', async () => {
     const url = testUrlInput.value.trim();
 
+    if (!url) {
+      testStatus.innerHTML = `
+        <span class="status-indicator status-error"></span>
+        ⌨️ Please enter a URL to test
+      `;
+      return;
+    }
+
     // test if the URL matches the regex match patterns
+    let shouldArchive = false;
     let matchPattern;
     try {
       matchPattern = new RegExp(matchUrls.value || /^$/);
@@ -176,6 +185,7 @@ export async function initializeConfigTab() {
         <span class="status-indicator status-success"></span>
         ➕ URL would be auto-archived when visited<br/>
       `;
+      shouldArchive = true;
     } else {
       testStatus.innerHTML = `
         <span class="status-indicator status-warning"></span>
@@ -192,6 +202,7 @@ export async function initializeConfigTab() {
         <span class="status-indicator status-warning"></span>
           🚫 URL is excluded from auto-archiving (but it can still be saved manually)<br/>
         `;
+        shouldArchive = false;
       }
     } catch (error) {
       testStatus.innerHTML = `
@@ -200,48 +211,42 @@ export async function initializeConfigTab() {
       `;
     }
 
-    if (!url) {
-      testStatus.innerHTML = `
-        <span class="status-indicator status-error"></span>
-        ⌨️ Please enter a URL to test
-      `;
-      return;
-    }
-
-    // Show loading state
-    testButton.disabled = true;
-    testStatus.innerHTML += `
-      <span id="inprogress-test">
-        &nbsp; &nbsp; <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-        Submitting...
-      </span>
-    `;
-
-    try {
-      const testEntry = {
-        url,
-        title: 'Test Entry',
-        timestamp: new Date().toISOString(),
-        tags: ['test']
-      };
-
-      document.getElementById('inprogress-test').remove();
-
-      await addToArchiveBox([testEntry.url], testEntry.tags.join(','));
-
+    if (shouldArchive) {
+      // Show loading state
+      testButton.disabled = true;
       testStatus.innerHTML += `
-        &nbsp; <span class="status-indicator status-success"></span>
-        🚀 URL was submitted and <a href="${serverUrl.value}/" target="_blank">✓ queued for archiving</a> on the ArchiveBox server: <a href="${serverUrl.value}/archive/${testEntry.url}" target="_blank">📦 <code>${serverUrl.value}/archive/${testEntry.url}</code></a>.
+        <span id="inprogress-test">
+          &nbsp; &nbsp; <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+          Submitting...
+        </span>
       `;
-      // Clear the input on success
-      testUrlInput.value = '';
-    } catch (error) {
-      testStatus.innerHTML += `
-        <span class="status-indicator status-error"></span>
-        Error: ${error.message}
-      `;
-    } finally {
-      testButton.disabled = false;
+
+      try {
+        const testEntry = {
+          url,
+          title: 'Test Entry',
+          timestamp: new Date().toISOString(),
+          tags: ['test']
+        };
+
+        document.getElementById('inprogress-test').remove();
+
+        await addToArchiveBox([testEntry.url], testEntry.tags.join(','));
+
+        testStatus.innerHTML += `
+          &nbsp; <span class="status-indicator status-success"></span>
+          🚀 URL was submitted and <a href="${serverUrl.value}/" target="_blank">✓ queued for archiving</a> on the ArchiveBox server: <a href="${serverUrl.value}/archive/${testEntry.url}" target="_blank">📦 <code>${serverUrl.value}/archive/${testEntry.url}</code></a>.
+        `;
+        // Clear the input on success
+        testUrlInput.value = '';
+      } catch (error) {
+        testStatus.innerHTML += `
+          <span class="status-indicator status-error"></span>
+          Error: ${error.message}
+        `;
+      } finally {
+        testButton.disabled = false;
+      }
     }
   });
 
