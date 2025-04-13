@@ -24,26 +24,36 @@ chrome.runtime.onMessage.addListener(async (message) => {
 // Function to check if URL should be auto-archived based on regex patterns
 async function shouldAutoArchive(url) {
   try {
+    console.debug(`[Auto-Archive Debug] Checking URL: ${url}`);
+
     const { enable_auto_archive, match_urls, exclude_urls } = await chrome.storage.local.get([
       'enable_auto_archive',
       'match_urls',
       'exclude_urls',
     ]);
 
+    console.debug(`[Auto-Archive Debug] Settings: enable_auto_archive=${enable_auto_archive}, match_urls="${match_urls}", exclude_urls="${exclude_urls}"`);
+
     if (!enable_auto_archive || !match_urls || match_urls.trim() === '') {
+      console.debug('[Auto-Archive Debug] Auto-archiving disabled or match pattern empty');
       return false;
     }
 
     const matchPattern = new RegExp(match_urls);
+    const matches = matchPattern.test(url);
+    console.debug(`[Auto-Archive Debug] URL match test: ${matches} (pattern: ${matchPattern})`);
 
-    if (!matchPattern.test(url)) {
+    if (!matches) {
       return false;
     }
 
     if (exclude_urls && exclude_urls.trim() !== '') {
       try {
         const excludePattern = new RegExp(exclude_urls);
-        if (excludePattern.test(url)) {
+        const excluded = excludePattern.test(url);
+        console.debug(`[Auto-Archive Debug] URL exclude test: ${excluded} (pattern: ${excludePattern})`);
+
+        if (excluded) {
           return false;
         }
       } catch (error) {
@@ -51,6 +61,7 @@ async function shouldAutoArchive(url) {
       }
     }
 
+    console.debug(`[Auto-Archive Debug] URL ${url} should be archived: TRUE`);
     return true;
   } catch (error) {
     console.error('Error checking auto-archive patterns:', error);
@@ -62,10 +73,13 @@ async function shouldAutoArchive(url) {
 let tabUpdateListener = null;
 
 async function setupAutoArchiving() {
+  console.debug('[Auto-Archive Debug] Setting up auto-archiving...');
   const { enable_auto_archive } = await chrome.storage.local.get(['enable_auto_archive']);
+  console.debug(`[Auto-Archive Debug] enable_auto_archive setting: ${enable_auto_archive}`);
 
   if (tabUpdateListener) {
     try {
+      console.debug('[Auto-Archive Debug] Removing existing tab update listener');
       chrome.tabs.onUpdated.removeListener(tabUpdateListener);
       tabUpdateListener = null;
     } catch (error) {
@@ -74,13 +88,22 @@ async function setupAutoArchiving() {
   }
 
   if (enable_auto_archive) {
+    console.debug('[Auto-Archive Debug] Auto-archive is enabled, checking permissions');
     const hasPermission = await chrome.permissions.contains({ permissions: ['tabs'] });
+    console.debug(`[Auto-Archive Debug] Has tabs permission: ${hasPermission}`);
 
     if (hasPermission) {
       tabUpdateListener = async (tabId, changeInfo, tab) => {
+        console.debug(`[Auto-Archive Debug] Tab updated - tabId: ${tabId}, status: ${changeInfo.status}, url: ${tab?.url}`);
+
         // Only process when the page has completed loading
         if (changeInfo.status === 'complete' && tab.url) {
-          if (await shouldAutoArchive(tab.url)) {
+          console.debug(`[Auto-Archive Debug] Tab load complete, checking if URL should be archived: ${tab.url}`);
+
+          const shouldArchive = await shouldAutoArchive(tab.url);
+          console.debug(`[Auto-Archive Debug] shouldAutoArchive result: ${shouldArchive}`);
+
+          if (shouldArchive) {
             console.log('Auto-archiving URL:', tab.url);
 
             const entry = new Entry(
@@ -90,11 +113,14 @@ async function setupAutoArchiving() {
               tab.favIconUrl,
             );
 
+            console.debug('[Auto-Archive Debug] Created new entry, saving to storage');
             const { entries = [] } = await chrome.storage.local.get('entries');
             entries.push(entry);
             await chrome.storage.local.set({ entries });
+            console.debug('[Auto-Archive Debug] Entry saved to local storage');
 
             try {
+              console.debug(`[Auto-Archive Debug] Calling addToArchiveBox with URL: ${entry.url}, tags: ${entry.tags.join(',')}`);
               await addToArchiveBox([entry.url], entry.tags.join(','));
               console.log(`Automatically archived ${entry.url}`);
             } catch (error) {
@@ -104,10 +130,12 @@ async function setupAutoArchiving() {
         }
       };
 
+      console.debug('[Auto-Archive Debug] Adding tab update listener');
       chrome.tabs.onUpdated.addListener(tabUpdateListener);
       console.log('Auto-archiving enabled with tabs permission');
     } else {
       console.log('Tabs permission not granted, auto-archiving disabled');
+      console.debug('[Auto-Archive Debug] No tabs permission, disabling auto-archive setting');
       // Reset the toggle if permission was not granted
       chrome.storage.local.set({ enable_auto_archive: false });
     }
