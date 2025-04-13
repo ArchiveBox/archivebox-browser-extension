@@ -2,6 +2,17 @@
 
 import { addToArchiveBox } from "./utils.js";
 
+class Entry {
+  constructor(url, tags, title, favIconUrl) {
+    this.id = crypto.randomUUID(),
+    this.url = url,
+    this.timestamp = new Date().toISOString(),
+    this.tags = tags,
+    this.title = title,
+    this.favicon = favIconUrl
+  }
+}
+
 chrome.runtime.onMessage.addListener(async (message) => {
     const options_url = chrome.runtime.getURL('options.html') + `?search=${message.id}`;
     console.log('i ArchiveBox Collector showing options.html', options_url);
@@ -72,14 +83,12 @@ async function setupAutoArchiving() {
           if (await shouldAutoArchive(tab.url)) {
             console.log('Auto-archiving URL:', tab.url);
 
-            const entry = {
-              id: crypto.randomUUID(),
-              url: tab.url,
-              timestamp: new Date().toISOString(),
-              tags: ['auto-archived'],
-              title: tab.title,
-              favicon: tab.favIconUrl
-            };
+            const entry = new Entry(
+              tab.url,
+              ['auto-archived'],
+              tab.title,
+              tab.favIconUrl,
+            );
 
             const { entries = [] } = await chrome.storage.local.get('entries');
             entries.push(entry);
@@ -118,14 +127,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 chrome.action.onClicked.addListener(async (tab) => {
-  const entry = {
-    id: crypto.randomUUID(),
-    url: tab.url,
-    timestamp: new Date().toISOString(),
-    tags: [],
-    title: tab.title,
-    favicon: tab.favIconUrl
-  };
+  const entry = new Entry(
+    tab.url,
+    [],
+    tab.title,
+    tab.favIconUrl,
+  );
 
   // Save the entry first
   const { entries = [] } = await chrome.storage.local.get('entries');
@@ -159,14 +166,12 @@ chrome.contextMenus.onClicked.addListener(onClickContextMenuSave);
 
 // A generic onclick callback function.
 async function onClickContextMenuSave(item, tab) {
-  const entry = {
-    id: crypto.randomUUID(),
-    url: tab.url,
-    timestamp: new Date().toISOString(),
-    tags: [],
-    title: tab.title,
-    favicon: tab.favIconUrl
-  };
+  const entry = new Entry(
+    tab.url,
+    [],
+    tab.title,
+    tab.favIconUrl,
+  );
 
   // Save the entry first
   const { entries = [] } = await chrome.storage.local.get('entries');
