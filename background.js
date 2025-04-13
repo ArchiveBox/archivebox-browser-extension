@@ -212,7 +212,9 @@ async function onClickContextMenuSave(item, tab) {
     files: ['popup.js']
   });
 }
+
 chrome.runtime.onInstalled.addListener(function () {
+  chrome.contextMenus.removeAll();
   chrome.contextMenus.create({
     id: 'save_to_archivebox_ctxmenu',
     title: 'Save to ArchiveBox',
