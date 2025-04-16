@@ -2,14 +2,14 @@
 
 import { addToArchiveBox } from "./utils.js";
 
-class Entry {
+class Snapshot {
   constructor(url, tags, title, favIconUrl) {
-    this.id = crypto.randomUUID(),
-    this.url = url,
-    this.timestamp = new Date().toISOString(),
-    this.tags = tags,
-    this.title = title,
-    this.favicon = favIconUrl
+    this.id = crypto.randomUUID();
+    this.url = url;
+    this.timestamp = new Date().toISOString();
+    this.tags = tags;
+    this.title = title;
+    this.favicon = favIconUrl;
   }
 }
 
@@ -106,25 +106,25 @@ async function setupAutoArchiving() {
           if (shouldArchive) {
             console.log('Auto-archiving URL:', tab.url);
 
-            const entry = new Entry(
+            const snapshot = new Snapshot(
               tab.url,
               ['auto-archived'],
               tab.title,
               tab.favIconUrl,
             );
 
-            console.debug('[Auto-Archive Debug] Created new entry, saving to storage');
-            const { entries = [] } = await chrome.storage.local.get('entries');
-            entries.push(entry);
-            await chrome.storage.local.set({ entries });
-            console.debug('[Auto-Archive Debug] Entry saved to local storage');
+            console.debug('[Auto-Archive Debug] Created new snapshot, saving to storage');
+            const { snapshots = [] } = await chrome.storage.local.get('snapshots');
+            snapshots.push(snapshot);
+            await chrome.storage.local.set({ snapshots });
+            console.debug('[Auto-Archive Debug] Snapshot saved to local storage');
 
             try {
-              console.debug(`[Auto-Archive Debug] Calling addToArchiveBox with URL: ${entry.url}, tags: ${entry.tags.join(',')}`);
-              await addToArchiveBox([entry.url], entry.tags.join(','));
-              console.log(`Automatically archived ${entry.url}`);
+              console.debug(`[Auto-Archive Debug] Calling addToArchiveBox with URL: ${snapshot.url}, tags: ${snapshot.tags.join(',')}`);
+              await addToArchiveBox([snapshot.url], snapshot.tags.join(','));
+              console.log(`Automatically archived ${snapshot.url}`);
             } catch (error) {
-              console.error(`Failed to automatically archive ${entry.url}: ${error.message}`);
+              console.error(`Failed to automatically archive ${snapshot.url}: ${error.message}`);
             }
           }
         }
@@ -155,17 +155,17 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 chrome.action.onClicked.addListener(async (tab) => {
-  const entry = new Entry(
+  const snapshot = new Snapshot(
     tab.url,
     [],
     tab.title,
     tab.favIconUrl,
   );
 
-  // Save the entry first
-  const { entries = [] } = await chrome.storage.local.get('entries');
-  entries.push(entry);
-  await chrome.storage.local.set({ entries });
+  // Save the snapshot first
+  const { snapshots = [] } = await chrome.storage.local.get('snapshots');
+  snapshots.push(snapshot);
+  await chrome.storage.local.set({ snapshots });
 
   // Inject scripts - CSS now handled in popup.js
   await chrome.scripting.executeScript({
@@ -194,17 +194,17 @@ chrome.contextMenus.onClicked.addListener(onClickContextMenuSave);
 
 // A generic onclick callback function.
 async function onClickContextMenuSave(item, tab) {
-  const entry = new Entry(
+  const snapshot = new Snapshot(
     tab.url,
     [],
     tab.title,
     tab.favIconUrl,
   );
 
-  // Save the entry first
-  const { entries = [] } = await chrome.storage.local.get('entries');
-  entries.push(entry);
-  await chrome.storage.local.set({ entries });
+  // Save the snapshot first
+  const { snapshots = [] } = await chrome.storage.local.get('snapshots');
+  snapshots.push(snapshot);
+  await chrome.storage.local.set({ snapshots });
 
   // Inject scripts - CSS now handled in popup.js
   await chrome.scripting.executeScript({

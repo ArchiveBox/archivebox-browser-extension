@@ -20,8 +20,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 async function getAllTags() {
-  const { entries = [] } = await chrome.storage.local.get('entries');
-  return [...new Set(entries.flatMap(entry => entry.tags))]
+  const { snapshots = [] } = await chrome.storage.local.get('snapshots');
+  return [...new Set(snapshots.flatMap(snapshot => snapshot.tags))]
     .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 }
 
@@ -61,12 +61,12 @@ async function sendToArchiveBox(url, tags) {
   `;
 }
 
-window.getCurrentEntry = async function() {
-  const { entries = [] } = await chrome.storage.local.get('entries');
-  let current_entry = entries.find(entry => entry.url === window.location.href);
+window.getCurrentSnapshot = async function() {
+  const { snapshots = [] } = await chrome.storage.local.get('snapshots');
+  let current_snapshot = snapshots.find(snapshot => snapshot.url === window.location.href);
   
-  if (!current_entry) {
-    current_entry = {
+  if (!current_snapshot) {
+    current_snapshot = {
       id: crypto.randomUUID(),
       url: String(window.location.href),
       timestamp: new Date().toISOString(),
@@ -74,33 +74,33 @@ window.getCurrentEntry = async function() {
       title: document.title,
       notes: '',
     };
-    entries.push(current_entry);
-    await chrome.storage.local.set({ entries });  // Save immediately
+    snapshots.push(current_snapshot);
+    await chrome.storage.local.set({ snapshots });  // Save immediately
   }
-  current_entry.id = current_entry.id || crypto.randomUUID();
-  current_entry.url = current_entry.url || window.location.href;
-  current_entry.timestamp = current_entry.timestamp || new Date().toISOString();
-  current_entry.tags = current_entry.tags || [];
-  current_entry.title = current_entry.title || document.title;
-  current_entry.notes = current_entry.notes || '';
+  current_snapshot.id = current_snapshot.id || crypto.randomUUID();
+  current_snapshot.url = current_snapshot.url || window.location.href;
+  current_snapshot.timestamp = current_snapshot.timestamp || new Date().toISOString();
+  current_snapshot.tags = current_snapshot.tags || [];
+  current_snapshot.title = current_snapshot.title || document.title;
+  current_snapshot.notes = current_snapshot.notes || '';
 
-  console.log('i Loaded current ArchiveBox snapshot', current_entry);
-  return { current_entry, entries };  // Return both for atomic updates
+  console.log('i Loaded current ArchiveBox snapshot', current_snapshot);
+  return { current_snapshot, snapshots };  // Return both for atomic updates
 }
 
 window.getSuggestedTags = async function() {
-  const { current_entry, entries } = await getCurrentEntry();
-  // Get all unique tags sorted by recency, excluding current entry's tags
+  const { current_snapshot, snapshots } = await getCurrentSnapshot();
+  // Get all unique tags sorted by recency, excluding the current snapshot's tags
   return ['⭐️', ...new Set(
     [
       window.location.hostname.replace('www.', '').replace('.com', ''),
-      ...entries
-          .filter(entry => entry.url !== current_entry.url)  // Better way to exclude current
+      ...snapshots
+          .filter(snapshot => snapshot.url !== current_snapshot.url)  // Better way to exclude current
           .reverse()
-          .flatMap(entry => entry.tags),
+          .flatMap(snapshot => snapshot.tags),
     ]
   )]
-  .filter(tag => !current_entry.tags.includes(tag))
+  .filter(tag => !current_snapshot.tags.includes(tag))
   .slice(0, 5);
 }
 
@@ -110,7 +110,7 @@ window.updateSuggestions = async function() {
   const suggestions_div = popup_element.querySelector('.ARCHIVEBOX__tag-suggestions');
   const suggested_tags = await getSuggestedTags();
   // console.log('Got suggestions', suggested_tags);
-  suggestions_div.innerHTML = suggested_tags.length 
+  suggestions_div.innerHTML = suggested_tags.length
     ? `${suggested_tags
         .map(tag => `<span class="ARCHIVEBOX__tag-badge suggestion">${tag}</span>`)
         .join(' ')}`
@@ -121,10 +121,10 @@ window.updateCurrentTags = async function() {
   if (!popup_element) return;
   const current_tags_div = popup_element.querySelector('.ARCHIVEBOX__current-tags');
   const status_div = popup_element.querySelector('small');
-  const { current_entry } = await getCurrentEntry();
+  const { current_snapshot } = await getCurrentSnapshot();
 
-  current_tags_div.innerHTML = current_entry.tags.length 
-    ? `${current_entry.tags
+  current_tags_div.innerHTML = current_snapshot.tags.length
+    ? `${current_snapshot.tags
         .map(tag => `<span class="ARCHIVEBOX__tag-badge current" data-tag="${tag}">${tag}</span>`)
         .join(' ')}`
     : '';
@@ -133,22 +133,22 @@ window.updateCurrentTags = async function() {
   current_tags_div.querySelectorAll('.ARCHIVEBOX__tag-badge.current').forEach(badge => {
     badge.addEventListener('click', async (e) => {
       if (e.target.classList.contains('current')) {
-        const { current_entry, entries } = await getCurrentEntry();
+        const { current_snapshot, snapshots } = await getCurrentSnapshot();
         const tag_to_remove = e.target.dataset.tag;
-        current_entry.tags = current_entry.tags.filter(tag => tag !== tag_to_remove);
-        await chrome.storage.local.set({ entries });
+        current_snapshot.tags = current_snapshot.tags.filter(tag => tag !== tag_to_remove);
+        await chrome.storage.local.set({ snapshots });
         await updateCurrentTags();
         await updateSuggestions();
       }
     });
   });
 
-  sendToArchiveBox(current_entry.url, current_entry.tags);
+  sendToArchiveBox(current_snapshot.url, current_snapshot.tags);
 }
 
 
 window.createPopup = async function() {
-  const { current_entry } = await getCurrentEntry();
+  const { current_snapshot } = await getCurrentSnapshot();
 
   // Create iframe container
   document.querySelector('.archive-box-iframe')?.remove();
@@ -419,7 +419,7 @@ window.createPopup = async function() {
   // Add message passing for options link
   popup.querySelector('.options-link').addEventListener('click', (e) => {
     e.preventDefault();
-    chrome.runtime.sendMessage({ action: 'openOptionsPage', id: current_entry.id });
+    chrome.runtime.sendMessage({ action: 'openOptionsPage', id: current_snapshot.id });
   });
 
   const input = popup.querySelector('input');
@@ -435,11 +435,11 @@ window.createPopup = async function() {
   // Add click handlers for suggestion badges
   suggestions_div.addEventListener('click', async (e) => {
     if (e.target.classList.contains('suggestion')) {
-      const { current_entry, entries } = await getCurrentEntry();
+      const { current_snapshot, snapshots } = await getCurrentSnapshot();
       const tag = e.target.textContent.replace(' +', '');
-      if (!current_entry.tags.includes(tag)) {
-        current_entry.tags.push(tag);
-        await chrome.storage.local.set({ entries });
+      if (!current_snapshot.tags.includes(tag)) {
+        current_snapshot.tags.push(tag);
+        await chrome.storage.local.set({ snapshots });
         await updateCurrentTags();
         await updateSuggestions();
       }
@@ -449,9 +449,9 @@ window.createPopup = async function() {
     if (e.target.classList.contains('current')) {
       const tag = e.target.dataset.tag;
       console.log('Removing tag', tag);
-      const { current_entry, entries } = await getCurrentEntry();
-      current_entry.tags = current_entry.tags.filter(t => t !== tag);
-      await chrome.storage.local.set({ entries });
+      const { current_snapshot, snapshots } = await getCurrentSnapshot();
+      current_snapshot.tags = current_snapshot.tags.filter(t => t !== tag);
+      await chrome.storage.local.set({ snapshots });
       await updateCurrentTags();
       await updateSuggestions();
     }
@@ -471,11 +471,11 @@ window.createPopup = async function() {
     const allTags = await getAllTags();
     
     // Filter tags that match input and aren't already used
-    const { current_entry } = await getCurrentEntry();
+    const { current_snapshot } = await getCurrentSnapshot();
     filteredTags = allTags
       .filter(tag => 
         tag.toLowerCase().includes(inputValue) && 
-        !current_entry.tags.includes(tag) &&
+        !current_snapshot.tags.includes(tag) &&
         inputValue
       )
       .slice(0, 5);  // Limit to 5 suggestions
@@ -518,11 +518,11 @@ window.createPopup = async function() {
     if (!filteredTags.length) {
       if (e.key === 'Enter' && input.value.trim()) {
         e.preventDefault();
-        const { current_entry, entries } = await getCurrentEntry();
+        const { current_snapshot, snapshots } = await getCurrentSnapshot();
         const newTag = input.value.trim();
-        if (!current_entry.tags.includes(newTag)) {
-          current_entry.tags.push(newTag);
-          await chrome.storage.local.set({ entries });
+        if (!current_snapshot.tags.includes(newTag)) {
+          current_snapshot.tags.push(newTag);
+          await chrome.storage.local.set({ snapshots });
           input.value = '';
           await updateCurrentTags();
           await updateSuggestions();
@@ -548,10 +548,10 @@ window.createPopup = async function() {
         e.preventDefault();
         if (selectedIndex >= 0) {
           const selectedTag = filteredTags[selectedIndex];
-          const { current_entry, entries } = await getCurrentEntry();
-          if (!current_entry.tags.includes(selectedTag)) {
-            current_entry.tags.push(selectedTag);
-            await chrome.storage.local.set({ entries });
+          const { current_snapshot, snapshots } = await getCurrentSnapshot();
+          if (!current_snapshot.tags.includes(selectedTag)) {
+            current_snapshot.tags.push(selectedTag);
+            await chrome.storage.local.set({ snapshots});
           }
           input.value = '';
           dropdownContainer.style.display = 'none';
@@ -578,10 +578,10 @@ window.createPopup = async function() {
     const item = e.target.closest('.ARCHIVEBOX__autocomplete-item');
     if (item) {
       const selectedTag = item.dataset.tag;
-      const { current_entry, entries } = await getCurrentEntry();
-      if (!current_entry.tags.includes(selectedTag)) {
-        current_entry.tags.push(selectedTag);
-        await chrome.storage.local.set({ entries });
+      const { current_snapshot, snapshots } = await getCurrentSnapshot();
+      if (!current_snapshot.tags.includes(selectedTag)) {
+        current_snapshot.tags.push(selectedTag);
+        await chrome.storage.local.set({ snapshots });
       }
       input.value = '';
       dropdownContainer.style.display = 'none';
@@ -622,11 +622,11 @@ window.createPopup = async function() {
     const allTags = await getAllTags();
     
     // Filter tags that match input and aren't already used
-    const { current_entry } = await getCurrentEntry();
+    const { current_snapshot } = await getCurrentSnapshot();
     filteredTags = allTags
       .filter(tag => 
         tag.toLowerCase().includes(inputValue) && 
-        !current_entry.tags.includes(tag) &&
+        !current_snapshot.tags.includes(tag) &&
         inputValue
       )
       .slice(0, 5);  // Limit to 5 suggestions

@@ -7,17 +7,17 @@ export async function getArchiveBoxServerUrl() {
   return archivebox_server_url || config_archiveBoxBaseUrl || '';
 }
 
-export function filterEntries(entries, filterText) {
-  if (!filterText) return entries;
+export function filterSnapshots(snapshots, filterText) {
+  if (!filterText) return snapshots;
   
   const searchTerms = filterText.toLowerCase().split(' ');
-  return entries.filter(entry => {
+  return snapshots.filter(snapshot => {
     const searchableText = [
-      entry.url,
-      entry.title,
-      entry.id,
-      new Date(entry.timestamp).toISOString(),
-      ...entry.tags
+      snapshot.url,
+      snapshot.title,
+      snapshot.id,
+      new Date(snapshot.timestamp).toISOString(),
+      ...snapshot.tags
     ].join(' ').toLowerCase();
     
     return searchTerms.every(term => searchableText.includes(term));
@@ -91,18 +91,18 @@ export async function addToArchiveBox(urls, tags, depth = 0, update = false, upd
   }
 }
 
-export function downloadCsv(entries) {
+export function downloadCsv(snapshots) {
   const headers = ['id', 'timestamp', 'url', 'title', 'tags', 'notes'];
   const csvRows = [
     headers.join(','),
-    ...entries.map(entry => {
+    ...snapshots.map(snapshot => {
       return [
-        entry.id,
-        entry.timestamp,
-        `"${entry.url}"`,
-        `"${entry.title || ''}"`,
-        `"${entry.tags.join(';')}"`,
-        `"${entry.notes || ''}"` 
+        snapshot.id,
+        snapshot.timestamp,
+        `"${snapshot.url}"`,
+        `"${snapshot.title || ''}"`,
+        `"${snapshot.tags.join(';')}"`,
+        `"${snapshot.notes || ''}"`
       ].join(',');
     })
   ];
@@ -118,8 +118,8 @@ export function downloadCsv(entries) {
   document.body.removeChild(link);
 }
 
-export function downloadJson(entries) {
-  const jsonContent = JSON.stringify(entries, null, 2);
+export function downloadJson(snapshots) {
+  const jsonContent = JSON.stringify(snapshots, null, 2);
   const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

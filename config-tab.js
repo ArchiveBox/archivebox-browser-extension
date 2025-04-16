@@ -222,20 +222,20 @@ export async function initializeConfigTab() {
       `;
 
       try {
-        const testEntry = {
+        const testSnapshot = {
           url,
-          title: 'Test Entry',
+          title: 'Test Snapshot',
           timestamp: new Date().toISOString(),
           tags: ['test']
         };
 
         document.getElementById('inprogress-test').remove();
 
-        await addToArchiveBox([testEntry.url], testEntry.tags.join(','));
+        await addToArchiveBox([testSnapshot.url], testSnapshot.tags.join(','));
 
         testStatus.innerHTML += `
           &nbsp; <span class="status-indicator status-success"></span>
-          🚀 URL was submitted and <a href="${serverUrl.value}/" target="_blank">✓ queued for archiving</a> on the ArchiveBox server: <a href="${serverUrl.value}/archive/${testEntry.url}" target="_blank">📦 <code>${serverUrl.value}/archive/${testEntry.url}</code></a>.
+          🚀 URL was submitted and <a href="${serverUrl.value}/" target="_blank">✓ queued for archiving</a> on the ArchiveBox server: <a href="${serverUrl.value}/archive/${testSnapshot.url}" target="_blank">📦 <code>${serverUrl.value}/archive/${testSnapshot.url}</code></a>.
         `;
         // Clear the input on success
         testUrlInput.value = '';
