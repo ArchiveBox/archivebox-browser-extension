@@ -74,7 +74,7 @@ let tabUpdateListener = null;
 
 async function setupAutoArchiving() {
   console.debug('[Auto-Archive Debug] Setting up auto-archiving...');
-  const { enable_auto_archive } = await chrome.storage.local.get(['enable_auto_archive']);
+  const { enable_auto_archive=false } = await chrome.storage.local.get(['enable_auto_archive']);
   console.debug(`[Auto-Archive Debug] enable_auto_archive setting: ${enable_auto_archive}`);
 
   if (tabUpdateListener) {

@@ -10,7 +10,7 @@ export async function initializeConfigTab() {
 
   // Load saved values
   const archivebox_server_url = await getArchiveBoxServerUrl();
-  const { archivebox_api_key, match_urls, exclude_urls, enable_auto_archive } = await chrome.storage.local.get([
+  const { archivebox_api_key='', match_urls='', exclude_urls='', enable_auto_archive=false } = await chrome.storage.local.get([
     'archivebox_api_key',
     'match_urls',
     'exclude_urls',
