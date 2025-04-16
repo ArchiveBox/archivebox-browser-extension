@@ -19,7 +19,7 @@ export async function initializeConfigTab() {
   console.log('Got config values from storage:', archivebox_server_url, archivebox_api_key, match_urls, exclude_urls, enable_auto_archive);
 
   // migrate old config_archiveboxBaseUrl to archivebox_server_url
-  const {config_archiveBoxBaseUrl} = await chrome.storage.sync.get('config_archiveboxBaseUrl', );
+  const {config_archiveBoxBaseUrl} = await chrome.storage.sync.get('config_archiveboxBaseUrl');
   if (config_archiveBoxBaseUrl) {
     await chrome.storage.local.set({ archivebox_server_url: config_archiveBoxBaseUrl });
   }
@@ -30,8 +30,8 @@ export async function initializeConfigTab() {
   excludeUrls.value = typeof exclude_urls === 'string' ? exclude_urls : '';
 
   // Set the auto-archive toggle state
-  const enableAutoArchive = document.getElementById('enable_auto_archive');
-  enableAutoArchive.checked = !!enable_auto_archive;
+  const autoArchiveCheckbox = document.getElementById('enable_auto_archive');
+  autoArchiveCheckbox.checked = !!enable_auto_archive;
 
   // Server test button handler
   document.getElementById('testServer').addEventListener('click', async () => {
@@ -125,17 +125,17 @@ export async function initializeConfigTab() {
   });
 
   // Special handler for the auto-archive toggle
-  enableAutoArchive.addEventListener('change', async () => {
-    if (enableAutoArchive.checked) {
+  autoArchiveCheckbox.addEventListener('change', async () => {
+    if (autoArchiveCheckbox.checked) {
       const granted = await chrome.permissions.request({ permissions: ['tabs'] });
       if (!granted) {
-        enableAutoArchive.checked = false;
+        autoArchiveCheckbox.checked = false;
         alert('The "tabs" permission is required for auto-archiving. Auto-archiving has been disabled.');
       }
     }
 
     await chrome.storage.local.set({
-      enable_auto_archive: enableAutoArchive.checked
+      enable_auto_archive: autoArchiveCheckbox.checked
     });
   });
 

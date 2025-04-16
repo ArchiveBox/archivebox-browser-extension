@@ -74,71 +74,70 @@ let tabUpdateListener = null;
 
 async function setupAutoArchiving() {
   console.debug('[Auto-Archive Debug] Setting up auto-archiving...');
-  const { enable_auto_archive=false } = await chrome.storage.local.get(['enable_auto_archive']);
-  console.debug(`[Auto-Archive Debug] enable_auto_archive setting: ${enable_auto_archive}`);
+
+  const hasPermission = await chrome.permissions.contains({ permissions: ['tabs'] });
+  console.debug(`[Auto-Archive Debug] Has tabs permission: ${hasPermission}`);
+
+  if (!hasPermission) {
+    console.log('Tabs permission not granted, auto-archiving disabled');
+    // Reset the toggle if permission was not granted
+    chrome.storage.local.set({ enable_auto_archive: false });
+    return;
+  }
 
   if (tabUpdateListener) {
-    console.debug('[Auto-Archive Debug] Removing existing tab update listener');
     try {
       chrome.tabs.onUpdated.removeListener(tabUpdateListener);
       tabUpdateListener = null;
     } catch (error) {
-      console.error('Error removing listener:', error);
+      // ignore
     }
   }
 
+  const { enable_auto_archive=false } = await chrome.storage.local.get(['enable_auto_archive']);
+  console.debug(`[Auto-Archive Debug] enable_auto_archive setting: ${enable_auto_archive}`);
+
   if (enable_auto_archive) {
-    console.debug('[Auto-Archive Debug] Auto-archive is enabled, checking permissions');
-    const hasPermission = await chrome.permissions.contains({ permissions: ['tabs'] });
-    console.debug(`[Auto-Archive Debug] Has tabs permission: ${hasPermission}`);
+    tabUpdateListener = async (tabId, changeInfo, tab) => {
+      console.debug(`[Auto-Archive Debug] Tab updated - tabId: ${tabId}, status: ${changeInfo.status}, url: ${tab?.url}`);
 
-    if (hasPermission) {
-      tabUpdateListener = async (tabId, changeInfo, tab) => {
-        console.debug(`[Auto-Archive Debug] Tab updated - tabId: ${tabId}, status: ${changeInfo.status}, url: ${tab?.url}`);
+      // Only process when the page has completed loading
+      if (changeInfo.status === 'complete' && tab.url) {
+        console.debug(`[Auto-Archive Debug] Tab load complete, checking if URL should be archived: ${tab.url}`);
 
-        // Only process when the page has completed loading
-        if (changeInfo.status === 'complete' && tab.url) {
-          console.debug(`[Auto-Archive Debug] Tab load complete, checking if URL should be archived: ${tab.url}`);
+        const shouldArchive = await shouldAutoArchive(tab.url);
+        console.debug(`[Auto-Archive Debug] shouldAutoArchive result: ${shouldArchive}`);
 
-          const shouldArchive = await shouldAutoArchive(tab.url);
-          console.debug(`[Auto-Archive Debug] shouldAutoArchive result: ${shouldArchive}`);
+        if (shouldArchive) {
+          console.log('Auto-archiving URL:', tab.url);
 
-          if (shouldArchive) {
-            console.log('Auto-archiving URL:', tab.url);
+          const snapshot = new Snapshot(
+            tab.url,
+            ['auto-archived'],
+            tab.title,
+            tab.favIconUrl,
+          );
 
-            const snapshot = new Snapshot(
-              tab.url,
-              ['auto-archived'],
-              tab.title,
-              tab.favIconUrl,
-            );
+          console.debug('[Auto-Archive Debug] Created new snapshot, saving to storage');
+          const { snapshots = [] } = await chrome.storage.local.get('snapshots');
+          snapshots.push(snapshot);
+          await chrome.storage.local.set({ snapshots });
+          console.debug('[Auto-Archive Debug] Snapshot saved to local storage');
 
-            console.debug('[Auto-Archive Debug] Created new snapshot, saving to storage');
-            const { snapshots = [] } = await chrome.storage.local.get('snapshots');
-            snapshots.push(snapshot);
-            await chrome.storage.local.set({ snapshots });
-            console.debug('[Auto-Archive Debug] Snapshot saved to local storage');
-
-            try {
-              console.debug(`[Auto-Archive Debug] Calling addToArchiveBox with URL: ${snapshot.url}, tags: ${snapshot.tags.join(',')}`);
-              await addToArchiveBox([snapshot.url], snapshot.tags.join(','));
-              console.log(`Automatically archived ${snapshot.url}`);
-            } catch (error) {
-              console.error(`Failed to automatically archive ${snapshot.url}: ${error.message}`);
-            }
+          try {
+            console.debug(`[Auto-Archive Debug] Calling addToArchiveBox with URL: ${snapshot.url}, tags: ${snapshot.tags.join(',')}`);
+            await addToArchiveBox([snapshot.url], snapshot.tags.join(','));
+            console.log(`Automatically archived ${snapshot.url}`);
+          } catch (error) {
+            console.error(`Failed to automatically archive ${snapshot.url}: ${error.message}`);
           }
         }
-      };
+      }
+    };
 
-      console.debug('[Auto-Archive Debug] Adding tab update listener');
-      chrome.tabs.onUpdated.addListener(tabUpdateListener);
-      console.log('Auto-archiving enabled with tabs permission');
-    } else {
-      console.log('Tabs permission not granted, auto-archiving disabled');
-      console.debug('[Auto-Archive Debug] No tabs permission, disabling auto-archive setting');
-      // Reset the toggle if permission was not granted
-      chrome.storage.local.set({ enable_auto_archive: false });
-    }
+    console.debug('[Auto-Archive Debug] Adding tab update listener');
+    chrome.tabs.onUpdated.addListener(tabUpdateListener);
+    console.log('Auto-archiving enabled with tabs permission');
   } else {
     console.log('Auto-archiving disabled');
   }
@@ -176,15 +175,15 @@ chrome.action.onClicked.addListener(async (tab) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'archivebox_add') {
-    const args = JSON.parse(message.body);
-    addToArchiveBox(args.urls, args.tags)
+    const { urls, tags }= JSON.parse(message.body);
+    addToArchiveBox(urls, tags)
       .then(sendResponse({ok: true}))
       .catch((error) => {
-          console.error(`Failed to archive ${args.urls}: ${error.message}`);
+          console.error(`Failed to archive ${urls}: ${error.message}`);
           sendResponse({ok: false, errorMessage: error.message});
         }
       );
-    console.log(`Successfully archived ${args.urls}`);
+    console.log(`Successfully archived ${urls}`);
   }
   return true;
 });
