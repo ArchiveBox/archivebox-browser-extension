@@ -21,7 +21,7 @@ chrome.runtime.onMessage.addListener(async (message) => {
     }
   });
 
-// Function to check if URL should be auto-archived based on regex patterns
+// Checks if URL should be auto-archived based on regex patterns and configuration settings.
 async function shouldAutoArchive(url) {
   try {
     console.debug(`[Auto-Archive Debug] Checking URL: ${url}`);
@@ -105,6 +105,15 @@ async function setupAutoArchiving() {
       if (changeInfo.status === 'complete' && tab.url) {
         console.debug(`[Auto-Archive Debug] Tab load complete, checking if URL should be archived: ${tab.url}`);
 
+        // Check if URL is already archived locally
+        const { snapshots = [] } = await chrome.storage.local.get('snapshots');
+        const isAlreadyArchived = snapshots.some(s => s.url.trim() === tab.url.trim());
+
+        if (isAlreadyArchived) {
+          console.debug(`[Auto-Archive Debug] URL already archived, skipping: ${tab.url}`);
+          return;
+        }
+
         const shouldArchive = await shouldAutoArchive(tab.url);
         console.debug(`[Auto-Archive Debug] shouldAutoArchive result: ${shouldArchive}`);
 
@@ -119,7 +128,6 @@ async function setupAutoArchiving() {
           );
 
           console.debug('[Auto-Archive Debug] Created new snapshot, saving to storage');
-          const { snapshots = [] } = await chrome.storage.local.get('snapshots');
           snapshots.push(snapshot);
           await chrome.storage.local.set({ snapshots });
           console.debug('[Auto-Archive Debug] Snapshot saved to local storage');
@@ -175,16 +183,23 @@ chrome.action.onClicked.addListener(async (tab) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'archivebox_add') {
-    const { urls, tags }= JSON.parse(message.body);
-    addToArchiveBox(urls, tags)
-      .then(sendResponse({ok: true}))
-      .catch((error) => {
-          console.error(`Failed to archive ${urls}: ${error.message}`);
-          sendResponse({ok: false, errorMessage: error.message});
-        }
-      );
-    console.log(`Successfully archived ${urls}`);
+    try {
+      const { urls = [], tags='' } = JSON.parse(message.body);
+
+      addToArchiveBox(urls, tags)
+        .then(() => {
+            console.log(`Successfully archived ${urls}`);
+            sendResponse({ok: true});
+          }
+        )
+        .catch((error) =>  sendResponse({ok: false, errorMessage: error.message}));
+    } catch (error) {
+      console.error(`Failed to parse archivebox_add message, no URLs sent to ArchiveBox server: ${error.message}`);
+      sendResponse({ok: false, errorMessage: error.message});
+      return true;
+    }
   }
+
   return true;
 });
 
