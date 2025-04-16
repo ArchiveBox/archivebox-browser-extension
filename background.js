@@ -26,7 +26,7 @@ async function shouldAutoArchive(url) {
   try {
     console.debug(`[Auto-Archive Debug] Checking URL: ${url}`);
 
-    const { enable_auto_archive, match_urls, exclude_urls } = await chrome.storage.local.get([
+    const { enable_auto_archive=false, match_urls=[], exclude_urls=[] } = await chrome.storage.local.get([
       'enable_auto_archive',
       'match_urls',
       'exclude_urls',
@@ -47,7 +47,7 @@ async function shouldAutoArchive(url) {
       return false;
     }
 
-    if (exclude_urls && exclude_urls.trim() !== '') {
+    if (exclude_urls.trim()) {
       try {
         const excludePattern = new RegExp(exclude_urls);
         const excluded = excludePattern.test(url);
@@ -78,8 +78,8 @@ async function setupAutoArchiving() {
   console.debug(`[Auto-Archive Debug] enable_auto_archive setting: ${enable_auto_archive}`);
 
   if (tabUpdateListener) {
+    console.debug('[Auto-Archive Debug] Removing existing tab update listener');
     try {
-      console.debug('[Auto-Archive Debug] Removing existing tab update listener');
       chrome.tabs.onUpdated.removeListener(tabUpdateListener);
       tabUpdateListener = null;
     } catch (error) {

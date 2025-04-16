@@ -9,7 +9,7 @@ window.hide_timer = null;
 window.closePopup = function () {
   document.querySelector(".archive-box-iframe")?.remove();
   window.popup_element = null;
-  console.log("i Closed popup.");
+  console.debug("Closed ArchiveBox popup");
 };
 
 // Handle escape key when popup doesn't have focus
