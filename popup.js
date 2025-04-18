@@ -45,7 +45,7 @@ async function sendToArchiveBox(url, tags) {
         type: 'archivebox_add',
         body: JSON.stringify({
           urls: [url],
-          tags: tags.join(','),
+          tags: tags,
         })
       }, (response) => {
         if (!response.ok) {

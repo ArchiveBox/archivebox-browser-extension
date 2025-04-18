@@ -227,7 +227,7 @@ export async function initializeConfigTab() {
 
         document.getElementById('inprogress-test').remove();
 
-        await addToArchiveBox([testSnapshot.url], testSnapshot.tags.join(','));
+        await addToArchiveBox([testSnapshot.url], testSnapshot.tags);
 
         testStatus.innerHTML += `
           &nbsp; <span class="status-indicator status-success"></span>

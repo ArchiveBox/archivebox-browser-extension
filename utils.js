@@ -51,8 +51,9 @@ export function updateStatusIndicator(indicator, textElement, success, message) 
   textElement.className = success ? 'text-success' : 'text-danger';
 }
 
-export async function addToArchiveBox(urls, tags, depth = 0, update = false, update_all = false) {
-  console.log(`i Adding urls ${urls} and tags ${tags} to ArchiveBox`);
+export async function addToArchiveBox(urls, tags = [], depth = 0, update = false, update_all = false) {
+  const formattedTags = tags.join(',');
+  console.log(`i Adding urls ${urls} and tags ${formattedTags} to ArchiveBox`);
 
   const archivebox_server_url = await getArchiveBoxServerUrl();
   const { archivebox_api_key } = await chrome.storage.local.get(['archivebox_api_key']);
@@ -71,7 +72,7 @@ export async function addToArchiveBox(urls, tags, depth = 0, update = false, upd
       },
       method: 'post',
       credentials: 'include',
-      body: JSON.stringify({ urls, tags, depth, update, update_all })
+      body: JSON.stringify({ urls, formattedTags, depth, update, update_all })
     });
 
     if (response.ok) {
@@ -87,7 +88,7 @@ export async function addToArchiveBox(urls, tags, depth = 0, update = false, upd
 
   const body = new FormData();
   body.append("url", urls.join("\n"));
-  body.append("tag", tags);
+  body.append("tag", formattedTags);
   body.append("parser", "auto")
   body.append("depth", depth)
 

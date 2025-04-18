@@ -204,4 +204,4 @@ async function importSelected() {
 
   // redirect back to the URLs tab
   window.location.reload();
-} 
+}

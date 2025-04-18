@@ -168,7 +168,7 @@ async function setupAutoArchiving() {
 
           try {
             console.debug(`[Auto-Archive Debug] Calling addToArchiveBox with URL: ${snapshot.url}, tags: ${snapshot.tags.join(',')}`);
-            await addToArchiveBox([snapshot.url], snapshot.tags.join(','));
+            await addToArchiveBox([snapshot.url], snapshot.tags);
             console.log(`Automatically archived ${snapshot.url}`);
           } catch (error) {
             console.error(`Failed to automatically archive ${snapshot.url}: ${error.message}`);
@@ -218,7 +218,7 @@ chrome.action.onClicked.addListener(async (tab) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'archivebox_add') {
     try {
-      const { urls = [], tags='' } = JSON.parse(message.body);
+      const { urls = [], tags=[] } = JSON.parse(message.body);
 
       addToArchiveBox(urls, tags)
         .then(() => {

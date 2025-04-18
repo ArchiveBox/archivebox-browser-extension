@@ -560,7 +560,7 @@ export function initializeSnapshotsTab() {
       // Send to ArchiveBox
       let success = true, status = 'success';
       try {
-        await addToArchiveBox([item.url], item.tags.join(','));
+        await addToArchiveBox([item.url], item.tags);
         success = true;
         status = 'success';
       } catch (error) {
