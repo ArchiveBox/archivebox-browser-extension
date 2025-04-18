@@ -2,7 +2,7 @@ let importItems = [];
 let existingUrls = new Set();
 
 export async function initializeImport() {
-  const { snapshots = [] } = await chrome.storage.local.get('snapshots');
+  const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
   existingUrls = new Set(snapshots.map(e => e.url));
   
   // Set default dates for history
@@ -176,7 +176,7 @@ async function importSelected() {
     .map(tag => tag.trim())
     .filter(tag => tag);
   
-  const { snapshots = [] } = await chrome.storage.local.get('snapshots');
+  const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
   
   const newSnapshots = selectedItems.map(item => ({
     id: crypto.randomUUID(),
@@ -188,7 +188,7 @@ async function importSelected() {
   }));
   
   snapshots.push(...newSnapshots);
-  await chrome.storage.local.set({ snapshots });
+  await chrome.storage.local.set({ entries: snapshots });
   
   // Update existingUrls
   newSnapshots.forEach(snapshot => existingUrls.add(snapshot.url));

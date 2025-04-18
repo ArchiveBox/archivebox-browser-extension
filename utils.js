@@ -1,5 +1,16 @@
 // Common utility functions
 
+export class Snapshot {
+  constructor(url, tags, title, favIconUrl) {
+    this.id = crypto.randomUUID();
+    this.url = url;
+    this.timestamp = new Date().toISOString();
+    this.tags = tags;
+    this.title = title;
+    this.favicon = favIconUrl;
+  }
+}
+
 // Helper to get server URL with fallback to legacy config name
 export async function getArchiveBoxServerUrl() {
   const { archivebox_server_url } = await chrome.storage.local.get(['archivebox_server_url']);    // new ArchiveBox Extension v2.1.3 location

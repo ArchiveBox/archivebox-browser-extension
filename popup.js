@@ -1,4 +1,13 @@
-// popup.js
+class Snapshot {
+  constructor(url, tags = [], title = '', favIconUrl = null) {
+    this.id = crypto.randomUUID();
+    this.url = url;
+    this.timestamp = new Date().toISOString();
+    this.tags = tags;
+    this.title = title;
+    this.favIconUrl = favIconUrl;
+  }
+}
 
 const IS_IN_POPUP = window.location.href.startsWith('chrome-extension://') && window.location.href.endsWith('/popup.html');
 const IS_ON_WEBSITE = !window.location.href.startsWith('chrome-extension://');
@@ -20,7 +29,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 async function getAllTags() {
-  const { snapshots = [] } = await chrome.storage.local.get('snapshots');
+  const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
   return [...new Set(snapshots.flatMap(snapshot => snapshot.tags))]
     .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 }
@@ -62,20 +71,13 @@ async function sendToArchiveBox(url, tags) {
 }
 
 window.getCurrentSnapshot = async function() {
-  const { snapshots = [] } = await chrome.storage.local.get('snapshots');
+  const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
   let current_snapshot = snapshots.find(snapshot => snapshot.url === window.location.href);
   
   if (!current_snapshot) {
-    current_snapshot = {
-      id: crypto.randomUUID(),
-      url: String(window.location.href),
-      timestamp: new Date().toISOString(),
-      tags: [],
-      title: document.title,
-      notes: '',
-    };
+    current_snapshot = new Snapshot(String(window.location.href), [], document.title);
     snapshots.push(current_snapshot);
-    await chrome.storage.local.set({ snapshots });  // Save immediately
+    await chrome.storage.local.set({ entries: snapshots });
   }
   current_snapshot.id = current_snapshot.id || crypto.randomUUID();
   current_snapshot.url = current_snapshot.url || window.location.href;
@@ -136,7 +138,7 @@ window.updateCurrentTags = async function() {
         const { current_snapshot, snapshots } = await getCurrentSnapshot();
         const tag_to_remove = e.target.dataset.tag;
         current_snapshot.tags = current_snapshot.tags.filter(tag => tag !== tag_to_remove);
-        await chrome.storage.local.set({ snapshots });
+        await chrome.storage.local.set({ entries: snapshots });
         await updateCurrentTags();
         await updateSuggestions();
       }
@@ -439,7 +441,7 @@ window.createPopup = async function() {
       const tag = e.target.textContent.replace(' +', '');
       if (!current_snapshot.tags.includes(tag)) {
         current_snapshot.tags.push(tag);
-        await chrome.storage.local.set({ snapshots });
+        await chrome.storage.local.set({ entries: snapshots });
         await updateCurrentTags();
         await updateSuggestions();
       }
@@ -451,7 +453,7 @@ window.createPopup = async function() {
       console.log('Removing tag', tag);
       const { current_snapshot, snapshots } = await getCurrentSnapshot();
       current_snapshot.tags = current_snapshot.tags.filter(t => t !== tag);
-      await chrome.storage.local.set({ snapshots });
+      await chrome.storage.local.set({ entries: snapshots });
       await updateCurrentTags();
       await updateSuggestions();
     }
@@ -522,7 +524,7 @@ window.createPopup = async function() {
         const newTag = input.value.trim();
         if (!current_snapshot.tags.includes(newTag)) {
           current_snapshot.tags.push(newTag);
-          await chrome.storage.local.set({ snapshots });
+          await chrome.storage.local.set({ entries: snapshots });
           input.value = '';
           await updateCurrentTags();
           await updateSuggestions();
@@ -551,7 +553,7 @@ window.createPopup = async function() {
           const { current_snapshot, snapshots } = await getCurrentSnapshot();
           if (!current_snapshot.tags.includes(selectedTag)) {
             current_snapshot.tags.push(selectedTag);
-            await chrome.storage.local.set({ snapshots});
+            await chrome.storage.local.set({ entries: snapshots});
           }
           input.value = '';
           dropdownContainer.style.display = 'none';
@@ -581,7 +583,7 @@ window.createPopup = async function() {
       const { current_snapshot, snapshots } = await getCurrentSnapshot();
       if (!current_snapshot.tags.includes(selectedTag)) {
         current_snapshot.tags.push(selectedTag);
-        await chrome.storage.local.set({ snapshots });
+        await chrome.storage.local.set({ entries: snapshots });
       }
       input.value = '';
       dropdownContainer.style.display = 'none';

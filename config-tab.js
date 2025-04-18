@@ -1,5 +1,6 @@
 // Config tab initialization and handlers
-import { updateStatusIndicator, getArchiveBoxServerUrl, addToArchiveBox } from './utils.js';
+
+import { Snapshot, updateStatusIndicator, getArchiveBoxServerUrl, addToArchiveBox } from './utils.js';
 
 export async function initializeConfigTab() {
   const configForm = document.getElementById('configForm');
@@ -222,12 +223,7 @@ export async function initializeConfigTab() {
       `;
 
       try {
-        const testSnapshot = {
-          url,
-          title: 'Test Snapshot',
-          timestamp: new Date().toISOString(),
-          tags: ['test']
-        };
+        const testSnapshot = new Snapshot(url, ['test'], 'Test Snapshot');
 
         document.getElementById('inprogress-test').remove();
 

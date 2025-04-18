@@ -1,17 +1,4 @@
-// background.js
-
-import { addToArchiveBox } from "./utils.js";
-
-class Snapshot {
-  constructor(url, tags, title, favIconUrl) {
-    this.id = crypto.randomUUID();
-    this.url = url;
-    this.timestamp = new Date().toISOString();
-    this.tags = tags;
-    this.title = title;
-    this.favicon = favIconUrl;
-  }
-}
+import { Snapshot, addToArchiveBox } from "./utils.js";
 
 chrome.runtime.onMessage.addListener(async (message) => {
     const options_url = chrome.runtime.getURL('options.html') + `?search=${message.id}`;
@@ -69,7 +56,54 @@ async function shouldAutoArchive(url) {
   }
 }
 
-// Global reference to the listener so we can remove it properly
+// Archives the specified tab. Meant to be used as a listener for tab updates.
+async function autoArchive(tabId, changeInfo, tab) {
+  console.debug(`[Auto-Archive Debug] Tab updated - tabId: ${tabId}, status: ${changeInfo.status}, url: ${tab?.url}`);
+
+  // Only process when the page has completed loading
+  if (changeInfo.status === 'complete' && tab.url) {
+    console.debug(`[Auto-Archive Debug] Tab load complete, checking if URL should be archived: ${tab.url}`);
+
+    // Check if URL is already archived locally
+    const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
+    const isAlreadyArchived = snapshots.some(s => s.url === tab.url);
+
+    if (isAlreadyArchived) {
+      console.debug(`[Auto-Archive Debug] URL already archived, skipping: ${tab.url}`);
+      return;
+    }
+
+    const shouldArchive = await shouldAutoArchive(tab.url);
+    console.debug(`[Auto-Archive Debug] shouldAutoArchive result: ${shouldArchive}`);
+
+    if (shouldArchive) {
+      console.log('Auto-archiving URL:', tab.url);
+
+      const snapshot = new Snapshot(
+        tab.url,
+        ['auto-archived'],
+        tab.title,
+        tab.favIconUrl,
+      );
+
+      console.debug('[Auto-Archive Debug] Created new snapshot, saving to storage');
+      snapshots.push(snapshot);
+      await chrome.storage.local.set({ entries: snapshots });
+      console.debug('[Auto-Archive Debug] Snapshot saved to local storage');
+
+      try {
+        console.debug(`[Auto-Archive Debug] Calling addToArchiveBox with URL: ${snapshot.url}, tags: ${snapshot.tags.join(',')}`);
+        await addToArchiveBox([snapshot.url], snapshot.tags);
+        console.log(`Automatically archived ${snapshot.url}`);
+      } catch (error) {
+        console.error(`Failed to automatically archive ${snapshot.url}: ${error.message}`);
+      }
+    }
+  }
+}
+
+// Global reference so the listener can be added and removed as auto-archiving is
+// enabled and disabled
 let tabUpdateListener = null;
 
 async function setupAutoArchiving() {
