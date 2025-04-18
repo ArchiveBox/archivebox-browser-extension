@@ -19,7 +19,7 @@ export async function initializeConfigTab() {
   ]);
   console.log('Got config values from storage:', archivebox_server_url, archivebox_api_key, match_urls, exclude_urls, enable_auto_archive);
 
-  // migrate old config_archiveboxBaseUrl to archivebox_server_url
+  // Migrate old config_archiveboxBaseUrl to archivebox_server_url
   const {config_archiveBoxBaseUrl} = await chrome.storage.sync.get('config_archiveboxBaseUrl');
   if (config_archiveBoxBaseUrl) {
     await chrome.storage.local.set({ archivebox_server_url: config_archiveBoxBaseUrl });

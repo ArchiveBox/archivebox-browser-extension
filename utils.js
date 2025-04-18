@@ -1,13 +1,13 @@
 // Common utility functions
 
 export class Snapshot {
-  constructor(url, tags, title, favIconUrl) {
+  constructor(url, tags = [], title = '', favIconUrl = null) {
     this.id = crypto.randomUUID();
     this.url = url;
     this.timestamp = new Date().toISOString();
     this.tags = tags;
     this.title = title;
-    this.favicon = favIconUrl;
+    this.favIconUrl = favIconUrl;
   }
 }
 
@@ -103,7 +103,7 @@ export async function addToArchiveBox(urls, tags, depth = 0, update = false, upd
 }
 
 export function downloadCsv(snapshots) {
-  const headers = ['id', 'timestamp', 'url', 'title', 'tags', 'notes'];
+  const headers = ['id', 'timestamp', 'url', 'title', 'tags'];
   const csvRows = [
     headers.join(','),
     ...snapshots.map(snapshot => {
@@ -113,7 +113,6 @@ export function downloadCsv(snapshots) {
         `"${snapshot.url}"`,
         `"${snapshot.title || ''}"`,
         `"${snapshot.tags.join(';')}"`,
-        `"${snapshot.notes || ''}"`
       ].join(',');
     })
   ];

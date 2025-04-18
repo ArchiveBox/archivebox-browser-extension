@@ -184,7 +184,6 @@ async function importSelected() {
     title: item.title,
     timestamp: new Date().toISOString(),
     tags: [...tags],
-    notes: ''
   }));
   
   snapshots.push(...newSnapshots);

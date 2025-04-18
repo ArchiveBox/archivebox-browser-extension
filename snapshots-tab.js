@@ -422,7 +422,7 @@ export function initializeSnapshotsTab() {
             }
           </div>
           <div class="snapshot-url-line">
-            <img class="favicon" src="${snapshot.favicon || '128.png'}"
+            <img class="favicon" src="${snapshot.favIconUrl || '128.png'}"
                  onerror="this.src='128.png'"
                  width="16" height="16">
             <code class="snapshot-url">${snapshot.url}</code>

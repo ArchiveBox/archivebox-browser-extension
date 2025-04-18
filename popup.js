@@ -79,12 +79,6 @@ window.getCurrentSnapshot = async function() {
     snapshots.push(current_snapshot);
     await chrome.storage.local.set({ entries: snapshots });
   }
-  current_snapshot.id = current_snapshot.id || crypto.randomUUID();
-  current_snapshot.url = current_snapshot.url || window.location.href;
-  current_snapshot.timestamp = current_snapshot.timestamp || new Date().toISOString();
-  current_snapshot.tags = current_snapshot.tags || [];
-  current_snapshot.title = current_snapshot.title || document.title;
-  current_snapshot.notes = current_snapshot.notes || '';
 
   console.log('i Loaded current ArchiveBox snapshot', current_snapshot);
   return { current_snapshot, snapshots };  // Return both for atomic updates
