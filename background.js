@@ -107,7 +107,7 @@ async function setupAutoArchiving() {
 
         // Check if URL is already archived locally
         const { snapshots = [] } = await chrome.storage.local.get('snapshots');
-        const isAlreadyArchived = snapshots.some(s => s.url.trim() === tab.url.trim());
+        const isAlreadyArchived = snapshots.some(s => s.url === tab.url);
 
         if (isAlreadyArchived) {
           console.debug(`[Auto-Archive Debug] URL already archived, skipping: ${tab.url}`);
