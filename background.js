@@ -238,28 +238,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 
-chrome.contextMenus.onClicked.addListener(onClickContextMenuSave);
-
-// A generic onclick callback function.
-async function onClickContextMenuSave(item, tab) {
-  const snapshot = new Snapshot(
-    tab.url,
-    [],
-    tab.title,
-    tab.favIconUrl,
-  );
-
-  // Save the snapshot first
-  const { snapshots = [] } = await chrome.storage.local.get('snapshots');
-  snapshots.push(snapshot);
-  await chrome.storage.local.set({ snapshots });
-
-  // Inject scripts - CSS now handled in popup.js
-  await chrome.scripting.executeScript({
+chrome.contextMenus.onClicked.addListener((item, tab) =>
+  chrome.scripting.executeScript({
     target: { tabId: tab.id },
     files: ['popup.js']
-  });
-}
+  })
+);
 
 chrome.runtime.onInstalled.addListener(function () {
   chrome.contextMenus.removeAll();
