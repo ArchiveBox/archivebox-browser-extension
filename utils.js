@@ -51,6 +51,7 @@ export function updateStatusIndicator(indicator, textElement, success, message) 
   textElement.className = success ? 'text-success' : 'text-danger';
 }
 
+// Archive URLs on the configured ArchiveBox server instance.
 export async function addToArchiveBox(urls, tags = [], depth = 0, update = false, update_all = false) {
   const formattedTags = tags.join(',');
   console.log(`i Adding urls ${urls} and tags ${formattedTags} to ArchiveBox`);
