@@ -109,7 +109,6 @@ async function configureAutoArchiving() {
 
   if (!hasPermission) {
     console.log('Tabs permission not granted, auto-archiving disabled');
-    chrome.storage.local.set({ enable_auto_archive: false });
     return;
   }
 
