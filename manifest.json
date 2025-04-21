@@ -35,7 +35,11 @@
     }
   },
   "options_page": "options.html",
+  "options_ui": {
+    "page": "options.html"
+  },
   "background": {
+    "scripts": ["background.js"],
     "service_worker": "background.js",
     "type": "module"
   },
@@ -50,6 +54,11 @@
         "default": "Ctrl+Shift+X",
         "mac": "Command+Shift+X"
       }
+    }
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "archivebox@example.com"
     }
   }
 }
