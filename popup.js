@@ -40,20 +40,14 @@ async function sendToArchiveBox(url, tags) {
 
   try {
     console.log('i Sending to ArchiveBox', { url, tags });
-    await new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({
-        type: 'archivebox_add',
-        body: JSON.stringify({
-          urls: [url],
-          tags: tags,
-        })
-      }, (response) => {
-        if (!response.ok) {
-          reject(`${response.errorMessage}`);
-        }
-        resolve(response);
-      });
-    })
+
+    await chrome.runtime.sendMessage({
+      type: 'archivebox_add',
+      body: JSON.stringify({
+        urls: [url],
+        tags: tags,
+      })
+    });
 
     ok = true;
     status = 'Saved to ArchiveBox Server'
