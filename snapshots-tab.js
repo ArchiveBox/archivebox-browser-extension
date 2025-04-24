@@ -423,7 +423,6 @@ export function initializeSnapshotsTab() {
           </div>
           <div class="snapshot-url-line">
             <img class="favicon" src="${snapshot.favIconUrl || '128.png'}"
-                 onerror="this.src='128.png'"
                  width="16" height="16">
             <code class="snapshot-url">${snapshot.url}</code>
             <span class="snapshot-timestamp">
@@ -442,6 +441,13 @@ export function initializeSnapshotsTab() {
     // Update selection count and action buttons
     updateSelectionCount();
     updateActionButtonStates();
+
+    // Show the ArchiveBox favicon if an entry doesn't have one
+    document.querySelectorAll('.favicon').forEach(img => {
+      img.addEventListener('error', function() {
+        this.src = '128.png';
+      });
+    });
 
     // Update tags list with filtered snapshots
     await renderTagsList(filteredSnapshots);
