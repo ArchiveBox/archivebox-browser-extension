@@ -41,13 +41,17 @@ async function sendToArchiveBox(url, tags) {
   try {
     console.log('i Sending to ArchiveBox', { url, tags });
 
-    await chrome.runtime.sendMessage({
+    const response = await chrome.runtime.sendMessage({
       type: 'archivebox_add',
-      body: JSON.stringify({
+      body: {
         urls: [url],
         tags: tags,
-      })
+      }
     });
+
+    if (response && !response.ok) {
+      throw new Error(`${response.errorMessage}`)
+    }
 
     ok = true;
     status = 'Saved to ArchiveBox Server'
@@ -409,7 +413,7 @@ window.createPopup = async function() {
   // Add message passing for options link
   popup.querySelector('.options-link').addEventListener('click', (e) => {
     e.preventDefault();
-    chrome.runtime.sendMessage({ action: 'openOptionsPage', id: current_snapshot.id });
+    chrome.runtime.sendMessage({ type: 'open_options', id: current_snapshot.id });
   });
 
   const input = popup.querySelector('input');

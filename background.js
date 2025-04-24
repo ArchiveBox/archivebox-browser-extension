@@ -136,33 +136,38 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'archivebox_add') {
-    try {
-      const { urls = [], tags=[] } = JSON.parse(message.body);
+  switch (message.type) {
+    case 'archivebox_add':
+      (async () => {
+        try {
+          const { urls = [], tags=[] } = message.body;
+          await addToArchiveBox(urls, tags);
+          console.log(`Successfully archived ${urls}`);
+          sendResponse({ok: true});
+        } catch (error) {
+          console.error(`Failed send to ArchiveBox server: ${error.message}`);
+          sendResponse({ok: false, errorMessage: error.message});
+        }
+      })();
+      break;
 
-      addToArchiveBox(urls, tags)
-        .then(() => {
-            console.log(`Successfully archived ${urls}`);
-            sendResponse({ok: true});
-          }
-        )
-        .catch((error) =>  sendResponse({ok: false, errorMessage: error.message}));
-    } catch (error) {
-      console.error(`Failed to parse archivebox_add message, no URLs sent to ArchiveBox server: ${error.message}`);
-      sendResponse({ok: false, errorMessage: error.message});
-      return true;
-    }
+    case 'open_options':
+      (async () => {
+        try {
+          const options_url = chrome.runtime.getURL('options.html') + `?search=${message.id}`;
+          console.log('i ArchiveBox Collector showing options.html', options_url);
+          await chrome.tabs.create({ url: options_url });
+        } catch (error) {
+          console.error(`Failed to open options page: ${error.message}`);
+        }
+      })();
+      break;
+
+    default:
+      console.error('Invalid message: ', message);
   }
 
   return true;
-});
-
-chrome.runtime.onMessage.addListener(async (message) => {
-  const options_url = chrome.runtime.getURL('options.html') + `?search=${message.id}`;
-  console.log('i ArchiveBox Collector showing options.html', options_url);
-  if (message.action === 'openOptionsPage') {
-    await chrome.tabs.create({ url: options_url });
-  }
 });
 
 chrome.runtime.onInstalled.addListener(function () {
