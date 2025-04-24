@@ -94,10 +94,6 @@ async function autoArchive(tabId, changeInfo, tab) {
   }
 }
 
-// Global reference so the listener can be added and removed as auto-archiving is
-// enabled and disabled
-let tabUpdateListener = null;
-
 // Checks if we should be auto-archiving, and manages the listener accordingly. If the user has
 // given the required permissions and enabled it through the UI, then we'll listen for tab updates
 // and attempt to automatically archive the desired URLs.
@@ -112,26 +108,19 @@ async function configureAutoArchiving() {
     return;
   }
 
-  // To prevent extra listeners being registered every time the auto-archiving checkbox is toggled,
-  // we remove any existing listener first.
-  if (tabUpdateListener) {
-    try {
-      chrome.tabs.onUpdated.removeListener(tabUpdateListener);
-      tabUpdateListener = null;
-    } catch {
-      // ignore
-    }
-  }
-
   const { enable_auto_archive=false } = await chrome.storage.local.get(['enable_auto_archive']);
   console.debug(`[Auto-Archive Debug] enable_auto_archive setting: ${enable_auto_archive}`);
 
+  const hasListener = chrome.tabs.onUpdated.hasListener(autoArchive)
   if (enable_auto_archive) {
-    tabUpdateListener = autoArchive;
-    console.debug('[Auto-Archive Debug] Adding tab update listener');
-    chrome.tabs.onUpdated.addListener(tabUpdateListener);
-    console.log('Auto-archiving enabled with tabs permission');
+    if (!hasListener) {
+      chrome.tabs.onUpdated.addListener(autoArchive);
+    }
+    console.log('Auto-archiving enabled');
   } else {
+    if (hasListener) {
+      chrome.tabs.onUpdated.removeListener(autoArchive);
+    }
     console.log('Auto-archiving disabled');
   }
 }
