@@ -16,9 +16,12 @@
     "bookmarks",
     "tabs"
   ],
-  "optional_host_permissions": [
+  "host_permissions": [
     "<all_urls>"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
   "icons": {
     "16": "16.png",
     "32": "32.png",
@@ -42,7 +45,7 @@
   },
   "web_accessible_resources": [{
     "resources": ["popup.css", "popup.js"],
-    "matches": ["*://*\/*"]
+    "matches": ["<all_urls>"]
   }],
   "commands": {
     "save-to-archivebox-action": {

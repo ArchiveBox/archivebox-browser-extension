@@ -48,25 +48,15 @@ export async function initializeConfigTab() {
 
     // Test request to server.
     try {
-      let response = await fetch(`${serverUrl.value}/api/`, {
-        method: 'GET',
-        mode: 'cors',
-        credentials: 'omit'
+      const testResult = await chrome.runtime.sendMessage({
+        type: 'test_server_url',
+        serverUrl: serverUrl.value
       });
 
-      // fall back to pre-v0.8.0 endpoint for backwards compatibility
-      if (response.status === 404) {
-        response = await fetch(`${serverUrl.value}`, {
-          method: 'GET',
-          mode: 'cors',
-          credentials: 'omit'
-        });
-      }
-
-      if (response.ok) {
+      if (testResult.ok) {
         updateStatusIndicator(statusIndicator, statusText, true, '✓ Server is reachable');
       } else {
-        updateStatusIndicator(statusIndicator, statusText, false, `✗ Server error: ${response.status} ${response.statusText}`);
+        updateStatusIndicator(statusIndicator, statusText, false, `✗ Server error: ${testResult.error}`);
       }
     } catch (err) {
       updateStatusIndicator(statusIndicator, statusText, false, `✗ Connection failed: ${err.message}`);
@@ -79,20 +69,17 @@ export async function initializeConfigTab() {
     const statusText = document.getElementById('apiKeyStatusText');
 
     try {
-      const response = await fetch(`${serverUrl.value}/api/v1/auth/check_api_token`, {
-        method: 'POST',
-        mode: 'cors',
-        credentials: 'omit',
-        body: JSON.stringify({
-          token: apiKey.value,
-        })
+      // Use the background script to avoid CORS issues
+      const testResult = await chrome.runtime.sendMessage({
+        type: 'test_api_key',
+        serverUrl: serverUrl.value,
+        apiKey: apiKey.value
       });
-      const data = await response.json();
 
-      if (data.user_id) {
-        updateStatusIndicator(statusIndicator, statusText, true, `✓ API key is valid: user_id = ${data.user_id}`);
+      if (testResult.ok) {
+        updateStatusIndicator(statusIndicator, statusText, true, `✓ API key is valid: user_id = ${testResult.user_id}`);
       } else {
-        updateStatusIndicator(statusIndicator, statusText, false, `✗ API key error: ${response.status} ${response.statusText} ${JSON.stringify(data)}`);
+        updateStatusIndicator(statusIndicator, statusText, false, `✗ API key error: ${testResult.error}`);
       }
     } catch (err) {
       updateStatusIndicator(statusIndicator, statusText, false, `✗ API test failed: ${err.message}`);

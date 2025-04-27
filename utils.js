@@ -69,10 +69,12 @@ export async function addToArchiveBox(urls, tags = [], depth = 0, update = false
     console.log('i Using v0.8.5 REST API');
     const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
       headers: {
+        'Content-Type': 'application/json',
         'x-archivebox-api-key': `${archivebox_api_key}`
       },
       method: 'post',
       credentials: 'include',
+      mode: 'cors',
       body: JSON.stringify({ urls, formattedTags, depth, update, update_all })
     });
 
@@ -96,6 +98,7 @@ export async function addToArchiveBox(urls, tags = [], depth = 0, update = false
   const response = await fetch(`${archivebox_server_url}/add/`, {
     method: "post",
     credentials: "include",
+    mode: "cors",
     body: body
   });
 

@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
   var tabEls = document.querySelectorAll('a.nav-link[data-bs-toggle="tab"]')
   for (const tabEl of tabEls) {
     tabEl.addEventListener('shown.bs.tab', function (event) {
-      console.log('ArchiveBox tab switched to:', event.target);
+      console.debug('ArchiveBox tab switched to:', event.target);
       event.target // newly activated tab
       event.relatedTarget // previous active tab
       // window.location.hash = event.target.id;
