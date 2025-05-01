@@ -9,11 +9,7 @@ class Snapshot {
   }
 }
 
-const IS_IN_POPUP = window.location.href.startsWith('chrome-extension://') && window.location.href.endsWith('/popup.html');
-const IS_ON_WEBSITE = !window.location.href.startsWith('chrome-extension://');
-
 window.popup_element = null;  // Global reference to popup element
-window.hide_timer = null;
 
 window.closePopup = function () {
   document.querySelector(".archive-box-iframe")?.remove();
@@ -184,13 +180,7 @@ window.createPopup = async function() {
 
   // Function to create iframe content that works for both browsers
   async function initializeIframeContent() {
-    console.log('Initializing iframe content');
-    const doc = iframe.contentDocument || iframe.contentWindow.document;
-
-    // Write minimal HTML structure to ensure we have access to document
-    if (!doc.body) {
-      doc.write('<!DOCTYPE html><html><head></head><body></body></html>');
-    }
+    const doc = iframe.contentDocument;
 
     // Add styles to iframe
     const style = doc.createElement('style');
@@ -504,7 +494,7 @@ window.createPopup = async function() {
 
     // Handle keyboard navigation
 
-    // handle escape key when popup has focus
+    // Handle escape key when popup has focus
     input.addEventListener("keydown", async (e) => {
       if (e.key === "Escape") {
         e.stopPropagation();
@@ -652,21 +642,35 @@ window.createPopup = async function() {
 
     // Initial resize
     setTimeout(resizeIframe, 0);
-
-    console.log("Initialized successfully");
   }
 
   // Handle both Firefox and Chrome differences with initialization
   // Chrome doesn't always fire onload for newly created iframes, while
-  // Firefox requires onload event to initialize it
+  // Firefox requires an onload event to correctly initialize the popup.
 
-  iframe.onload = initializeIframeContent;
+  // Prevent double initialization
+  let initialized = false;
+  iframe.onload = () => {
+    if (!initialized) {
+      initialized = true;
+      initializeIframeContent();
+    }
+  };
 
-  // Try to initialize directly (for Chrome)
-  try {
-    await initializeIframeContent();
-  } catch (error) {
-    console.error('Direct iframe initialization failed: ', error);
+  // Manually check that iframe is loaded and initialize directly (for Chrome)
+  if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+    if (!initialized) {
+      initialized = true;
+      initializeIframeContent();
+    }
+  } else {
+    // We can do something smarter here, but empirically this seems to work
+    setTimeout(() => {
+      if (!initialized) {
+        initialized = true;
+        initializeIframeContent();
+      }
+    }, 100);
   }
 }
 
