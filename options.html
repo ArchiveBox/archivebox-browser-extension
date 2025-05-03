@@ -159,7 +159,7 @@
           </div>
           <div class="d-flex gap-2 mb-3">
           </div>
-          <div id="entriesList" class="list-group"></div>
+          <div id="snapshotsList" class="list-group"></div>
         </div>
         
         <div class="col-md-2">
@@ -190,7 +190,7 @@
               </div>
             </div>
             <small class="text-muted">
-              Selected entries: <span id="selectedUrlCountModal">0</span>
+              Selected snapshots: <span id="selectedUrlCountModal">0</span>
             </small>
           </div>
           <div class="modal-footer">
@@ -254,7 +254,16 @@
             <br/>
             <hr/>
             <br/>
-            <h5>Advanced Users Only: Auto-archive URLs</h5><br/>
+            <h5>Advanced Users Only: Auto-archive URLs</h5>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" id="enable_auto_archive">
+              <label class="form-check-label" for="enable_auto_archive">
+                Enable automatic archiving
+              </label>
+              <div class="form-text">
+                When enabled, the extension will automatically archive URLs that match the patterns below.
+              </div>
+            </div>
             <div class="mb-3">
               <label for="match_urls" class="form-label">➕ Auto-archive all visited URLs that match this <code>regex</code> pattern</label>
               <div class="form-text">
@@ -504,7 +513,7 @@ archivebox config --set <a href="https://github.com/ArchiveBox/ArchiveBox/wiki/C
   <script src="bootstrap.bundle.min.js"></script>
   <link rel="stylesheet" href="bootstrap-icons.css">
   <!-- <script type="module" src="options.js"></script> -->
-  <!-- <script type="module" src="entries-tab.js"></script>
+  <!-- <script type="module" src="snapshots-tab.js"></script>
   <script type="module" src="import-tab.js"></script>
   <script type="module" src="personas-tab.js"></script>
   <script type="module" src="cookies-tab.js"></script> -->

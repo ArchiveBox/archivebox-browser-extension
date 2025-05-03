@@ -1,5 +1,16 @@
 // Common utility functions
 
+export class Snapshot {
+  constructor(url, tags = [], title = '', favIconUrl = null) {
+    this.id = crypto.randomUUID();
+    this.url = url;
+    this.timestamp = new Date().toISOString();
+    this.tags = tags;
+    this.title = title;
+    this.favIconUrl = favIconUrl;
+  }
+}
+
 // Helper to get server URL with fallback to legacy config name
 export async function getArchiveBoxServerUrl() {
   const { archivebox_server_url } = await chrome.storage.local.get(['archivebox_server_url']);    // new ArchiveBox Extension v2.1.3 location
@@ -7,17 +18,17 @@ export async function getArchiveBoxServerUrl() {
   return archivebox_server_url || config_archiveBoxBaseUrl || '';
 }
 
-export function filterEntries(entries, filterText) {
-  if (!filterText) return entries;
+export function filterSnapshots(snapshots, filterText) {
+  if (!filterText) return snapshots;
   
   const searchTerms = filterText.toLowerCase().split(' ');
-  return entries.filter(entry => {
+  return snapshots.filter(snapshot => {
     const searchableText = [
-      entry.url,
-      entry.title,
-      entry.id,
-      new Date(entry.timestamp).toISOString(),
-      ...entry.tags
+      snapshot.url,
+      snapshot.title,
+      snapshot.id,
+      new Date(snapshot.timestamp).toISOString(),
+      ...snapshot.tags
     ].join(' ').toLowerCase();
     
     return searchTerms.every(term => searchableText.includes(term));
@@ -40,96 +51,70 @@ export function updateStatusIndicator(indicator, textElement, success, message) 
   textElement.className = success ? 'text-success' : 'text-danger';
 }
 
-export async function addToArchiveBox(addCommandArgs, onComplete, onError) {
-  console.log('i addToArchiveBox', addCommandArgs);
-  try {
-    const archivebox_server_url = await getArchiveBoxServerUrl();
-    const { archivebox_api_key } = await chrome.storage.local.get(['archivebox_api_key']);
+// Archive URLs on the configured ArchiveBox server instance.
+export async function addToArchiveBox(urls, tags = [], depth = 0, update = false, update_all = false) {
+  const formattedTags = tags.join(',');
+  console.log(`i Adding urls ${urls} and tags ${formattedTags} to ArchiveBox`);
 
-    console.log('i addToArchiveBox server url', archivebox_server_url);
-    if (!archivebox_server_url) {
-      throw new Error('Server not configured.');
+  const archivebox_server_url = await getArchiveBoxServerUrl();
+  const { archivebox_api_key } = await chrome.storage.local.get(['archivebox_api_key']);
+
+  if (!archivebox_server_url) {
+    throw new Error(`Server not configured`);
+  }
+  console.log('i Server url', archivebox_server_url);
+
+  // try ArchiveBox v0.8.0+ API endpoint first
+  if (archivebox_api_key) {
+    console.log('i Using v0.8.5 REST API');
+    const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
+      headers: {
+        'x-archivebox-api-key': `${archivebox_api_key}`
+      },
+      method: 'post',
+      credentials: 'include',
+      body: JSON.stringify({ urls, formattedTags, depth, update, update_all })
+    });
+
+    if (response.ok) {
+      console.log(`i Successfully added ${urls} to ArchiveBox using v0.8.5 REST API`);
+      return
+    } else {
+      console.warn(`! Failed to add ${urls} to ArchiveBox using v0.8.5 REST API. HTTP ${response.status} ${response.statusText}. Falling back to legacy API.`);
     }
-
-    if (archivebox_api_key) {
-      // try ArchiveBox v0.8.0+ API endpoint first
-      try {
-        const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
-          headers: {
-            'x-archivebox-api-key': `${archivebox_api_key}`
-          },
-          method: 'post',
-          credentials: 'include',
-          body: addCommandArgs
-        });
-
-        if (response.ok) {
-          console.log('i addToArchiveBox using v0.8.5 REST API succeeded', response.status, response.statusText);
-          onComplete({ok: response.ok, status: response.status, statusText: response.statusText});
-          return true;
-        } else {
-          console.warn(`! addToArchiveBox using v0.8.5 REST API failed with status ${response.status} ${response.statusText}`);
-          // Fall through to legacy API
-        }
-      } catch (error) {
-        console.warn('! addToArchiveBox using v0.8.5 REST API failed with error:', error.message);
-        // Fall through to legacy API
-      }
-    }
-
-    // fall back to pre-v0.8.0 endpoint for backwards compatibility
-    console.log('i addToArchiveBox using legacy /add POST method');
-
-    const parsedAddCommandArgs = JSON.parse(addCommandArgs);
-    const urls = parsedAddCommandArgs && parsedAddCommandArgs.urls
-      ? parsedAddCommandArgs.urls.join("\n") : "";
-    const tags = parsedAddCommandArgs && parsedAddCommandArgs.tags
-      ? parsedAddCommandArgs.tags : "";
-
-    const body = new FormData();
-    body.append("url", urls);
-    body.append("tag", tags);
-    body.append("parser", "auto")
-    body.append("depth", 0)
-
-    try {
-      const response = await fetch(`${archivebox_server_url}/add/`, {
-        method: "post",
-        credentials: "include",
-        body: body
-      });
-
-      if (response.ok) {
-        console.log('i addToArchiveBox using legacy /add POST method succeeded', response.status, response.statusText);
-        onComplete({ok: response.ok, status: response.status, statusText: response.statusText});
-      } else {
-        console.error(`! addToArchiveBox using legacy /add POST method failed: ${response.status} ${response.statusText}`);
-        onError({ok: false, errorMessage: `HTTP ${response.status}: ${response.statusText}`});
-      }
-    } catch (error) {
-      console.error('! addToArchiveBox using legacy /add POST method failed with error:', error.message);
-      onError({ok: false, errorMessage: error.message});
-    }
-  } catch (e) {
-    console.error('! addToArchiveBox failed', e.message);
-    onError({ok: false, errorMessage: e.message});
   }
 
-  return true;
+  // Fall back to pre-v0.8.0 endpoint for backwards compatibility
+  console.log(`i Using legacy /add POST method`);
+
+  const body = new FormData();
+  body.append("url", urls.join("\n"));
+  body.append("tag", formattedTags);
+  body.append("parser", "auto")
+  body.append("depth", depth)
+
+  const response = await fetch(`${archivebox_server_url}/add/`, {
+    method: "post",
+    credentials: "include",
+    body: body
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
 }
 
-export function downloadCsv(entries) {
-  const headers = ['id', 'timestamp', 'url', 'title', 'tags', 'notes'];
+export function downloadCsv(snapshots) {
+  const headers = ['id', 'timestamp', 'url', 'title', 'tags'];
   const csvRows = [
     headers.join(','),
-    ...entries.map(entry => {
+    ...snapshots.map(snapshot => {
       return [
-        entry.id,
-        entry.timestamp,
-        `"${entry.url}"`,
-        `"${entry.title || ''}"`,
-        `"${entry.tags.join(';')}"`,
-        `"${entry.notes || ''}"` 
+        snapshot.id,
+        snapshot.timestamp,
+        `"${snapshot.url}"`,
+        `"${snapshot.title || ''}"`,
+        `"${snapshot.tags.join(';')}"`,
       ].join(',');
     })
   ];
@@ -145,8 +130,8 @@ export function downloadCsv(entries) {
   document.body.removeChild(link);
 }
 
-export function downloadJson(entries) {
-  const jsonContent = JSON.stringify(entries, null, 2);
+export function downloadJson(snapshots) {
+  const jsonContent = JSON.stringify(snapshots, null, 2);
   const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -155,55 +140,4 @@ export function downloadJson(entries) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-}
-
-// Shared syncToArchiveBox function for config-tab and entries-tab
-export async function syncToArchiveBox(entry) {
-  const archivebox_server_url = await getArchiveBoxServerUrl();
-  const { archivebox_api_key } = await chrome.storage.local.get(['archivebox_api_key']);
-  
-  if (!archivebox_server_url || !archivebox_api_key) {
-    return { 
-      ok: false, 
-      status: 'Server URL and API key must be configured and saved first' 
-    };
-  }
-
-  try {
-    const response = await fetch(`${archivebox_server_url}/api/v1/cli/add`, {
-      method: 'POST',
-      mode: 'cors',
-      credentials: 'omit',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'x-archivebox-api-key': archivebox_api_key,
-      },
-      body: JSON.stringify({
-        urls: [entry.url],
-        tag: entry.tags.join(','),
-        depth: 0,
-        update: false,
-        update_all: false,
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      return { 
-        ok: false, 
-        status: `Server returned ${response.status}: ${text}`
-      };
-    }
-
-    return {
-      ok: true,
-      status: 'Success'
-    };
-  } catch (err) {
-    return { 
-      ok: false, 
-      status: `Connection failed: ${err.message}` 
-    };
-  }
 }

@@ -1,5 +1,6 @@
 // Config tab initialization and handlers
-import { updateStatusIndicator, syncToArchiveBox, getArchiveBoxServerUrl } from './utils.js';
+
+import { Snapshot, updateStatusIndicator, getArchiveBoxServerUrl, addToArchiveBox } from './utils.js';
 
 export async function initializeConfigTab() {
   const configForm = document.getElementById('configForm');
@@ -7,50 +8,52 @@ export async function initializeConfigTab() {
   const apiKey = document.getElementById('archivebox_api_key');
   const matchUrls = document.getElementById('match_urls');
   const excludeUrls = document.getElementById('exclude_urls');
-  
+
   // Load saved values
   const archivebox_server_url = await getArchiveBoxServerUrl();
-  const { archivebox_api_key, match_urls, exclude_urls } = await chrome.storage.local.get([
+  const { archivebox_api_key='', match_urls='', exclude_urls='', enable_auto_archive=false } = await chrome.storage.local.get([
     'archivebox_api_key',
     'match_urls',
     'exclude_urls',
+    'enable_auto_archive',
   ]);
-  console.log('Got config values from storage:', archivebox_server_url, archivebox_api_key, match_urls, exclude_urls);
+  console.log('Got config values from storage:', archivebox_server_url, archivebox_api_key, match_urls, exclude_urls, enable_auto_archive);
 
-  // migrate old config_archiveboxBaseUrl to archivebox_server_url
-  const {config_archiveBoxBaseUrl} = await chrome.storage.sync.get('config_archiveboxBaseUrl', );
+  // Migrate old config_archiveboxBaseUrl to archivebox_server_url
+  const {config_archiveBoxBaseUrl} = await chrome.storage.sync.get('config_archiveboxBaseUrl');
   if (config_archiveBoxBaseUrl) {
     await chrome.storage.local.set({ archivebox_server_url: config_archiveBoxBaseUrl });
   }
-  
+
   serverUrl.value = archivebox_server_url || '';
   apiKey.value = archivebox_api_key || '';
   matchUrls.value = typeof match_urls === 'string' ? match_urls : '';
   excludeUrls.value = typeof exclude_urls === 'string' ? exclude_urls : '';
+
+  // Set the auto-archive toggle state
+  const autoArchiveCheckbox = document.getElementById('enable_auto_archive');
+  autoArchiveCheckbox.checked = !!enable_auto_archive;
 
   // Server test button handler
   document.getElementById('testServer').addEventListener('click', async () => {
     const statusIndicator = document.getElementById('serverStatus');
     const statusText = document.getElementById('serverStatusText');
 
-    // check if we have permission to access the server
+    // Check if we have permission to access the server
     const permission = await chrome.permissions.request({permissions: ['cookies'], origins: [`${serverUrl.value}/*`]});
     if (!permission) {
       alert('Permission denied.');
       return;
     }
 
-    const updateStatus = (success, message) => {
-      updateStatusIndicator(statusIndicator, statusText, success, message);
-    };
-
+    // Test request to server.
     try {
       let response = await fetch(`${serverUrl.value}/api/`, {
         method: 'GET',
         mode: 'cors',
         credentials: 'omit'
       });
-      
+
       // fall back to pre-v0.8.0 endpoint for backwards compatibility
       if (response.status === 404) {
         response = await fetch(`${serverUrl.value}`, {
@@ -61,12 +64,12 @@ export async function initializeConfigTab() {
       }
 
       if (response.ok) {
-        updateStatus(true, '✓ Server is reachable');
+        updateStatusIndicator(statusIndicator, statusText, true, '✓ Server is reachable');
       } else {
-        updateStatus(false, `✗ Server error: ${response.status} ${response.statusText}`);
+        updateStatusIndicator(statusIndicator, statusText, false, `✗ Server error: ${response.status} ${response.statusText}`);
       }
     } catch (err) {
-      updateStatus(false, `✗ Connection failed: ${err.message}`);
+      updateStatusIndicator(statusIndicator, statusText, false, `✗ Connection failed: ${err.message}`);
     }
   });
 
@@ -74,7 +77,7 @@ export async function initializeConfigTab() {
   document.getElementById('testApiKey').addEventListener('click', async () => {
     const statusIndicator = document.getElementById('apiKeyStatus');
     const statusText = document.getElementById('apiKeyStatusText');
-    
+
     try {
       const response = await fetch(`${serverUrl.value}/api/v1/auth/check_api_token`, {
         method: 'POST',
@@ -85,7 +88,7 @@ export async function initializeConfigTab() {
         })
       });
       const data = await response.json();
-      
+
       if (data.user_id) {
         updateStatusIndicator(statusIndicator, statusText, true, `✓ API key is valid: user_id = ${data.user_id}`);
       } else {
@@ -122,7 +125,22 @@ export async function initializeConfigTab() {
     }
   });
 
-  // Save changes when inputs change
+  // Special handler for the auto-archive toggle
+  autoArchiveCheckbox.addEventListener('change', async () => {
+    if (autoArchiveCheckbox.checked) {
+      const granted = await chrome.permissions.request({ permissions: ['tabs'] });
+      if (!granted) {
+        autoArchiveCheckbox.checked = false;
+        alert('The "tabs" permission is required for auto-archiving. Auto-archiving has been disabled.');
+      }
+    }
+
+    await chrome.storage.local.set({
+      enable_auto_archive: autoArchiveCheckbox.checked
+    });
+  });
+
+  // Other inputs
   [serverUrl, apiKey, matchUrls, excludeUrls].forEach(input => {
     input.addEventListener('change', async () => {
       await chrome.storage.local.set({
@@ -142,7 +160,16 @@ export async function initializeConfigTab() {
   testButton.addEventListener('click', async () => {
     const url = testUrlInput.value.trim();
 
+    if (!url) {
+      testStatus.innerHTML = `
+        <span class="status-indicator status-error"></span>
+        ⌨️ Please enter a URL to test
+      `;
+      return;
+    }
+
     // test if the URL matches the regex match patterns
+    let shouldArchive = false;
     let matchPattern;
     try {
       matchPattern = new RegExp(matchUrls.value || /^$/);
@@ -159,6 +186,7 @@ export async function initializeConfigTab() {
         <span class="status-indicator status-success"></span>
         ➕ URL would be auto-archived when visited<br/>
       `;
+      shouldArchive = true;
     } else {
       testStatus.innerHTML = `
         <span class="status-indicator status-warning"></span>
@@ -175,6 +203,7 @@ export async function initializeConfigTab() {
         <span class="status-indicator status-warning"></span>
           🚫 URL is excluded from auto-archiving (but it can still be saved manually)<br/>
         `;
+        shouldArchive = false;
       }
     } catch (error) {
       testStatus.innerHTML = `
@@ -183,54 +212,37 @@ export async function initializeConfigTab() {
       `;
     }
 
-    if (!url) {
-      testStatus.innerHTML = `
-        <span class="status-indicator status-error"></span>
-        ⌨️ Please enter a URL to test
+    if (shouldArchive) {
+      // Show loading state
+      testButton.disabled = true;
+      testStatus.innerHTML += `
+        <span id="inprogress-test">
+          &nbsp; &nbsp; <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+          Submitting...
+        </span>
       `;
-      return;
-    }
 
-    // Show loading state
-    testButton.disabled = true;
-    testStatus.innerHTML += `
-      <span id="inprogress-test">
-        &nbsp; &nbsp; <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-        Submitting...
-      </span>
-    `;
+      try {
+        const testSnapshot = new Snapshot(url, ['test'], 'Test Snapshot');
 
-    try {
-      const testEntry = {
-        url,
-        title: 'Test Entry',
-        timestamp: new Date().toISOString(),
-        tags: ['test']
-      };
+        document.getElementById('inprogress-test').remove();
 
-      const result = await syncToArchiveBox(testEntry);
-      document.getElementById('inprogress-test').remove();
+        await addToArchiveBox([testSnapshot.url], testSnapshot.tags);
 
-      if (result.ok) {
         testStatus.innerHTML += `
           &nbsp; <span class="status-indicator status-success"></span>
-          🚀 URL was submitted and <a href="${serverUrl.value}/" target="_blank">✓ queued for archiving</a> on the ArchiveBox server: <a href="${serverUrl.value}/archive/${testEntry.url}" target="_blank">📦 <code>${serverUrl.value}/archive/${testEntry.url}</code></a>.
+          🚀 URL was submitted and <a href="${serverUrl.value}/" target="_blank">✓ queued for archiving</a> on the ArchiveBox server: <a href="${serverUrl.value}/archive/${testSnapshot.url}" target="_blank">📦 <code>${serverUrl.value}/archive/${testSnapshot.url}</code></a>.
         `;
         // Clear the input on success
         testUrlInput.value = '';
-      } else {
+      } catch (error) {
         testStatus.innerHTML += `
           <span class="status-indicator status-error"></span>
-          Error: ${result.status}
+          Error: ${error.message}
         `;
+      } finally {
+        testButton.disabled = false;
       }
-    } catch (error) {
-      testStatus.innerHTML += `
-        <span class="status-indicator status-error"></span>
-        Error: ${error.message}
-      `;
-    } finally {
-      testButton.disabled = false;
     }
   });
 
@@ -242,5 +254,3 @@ export async function initializeConfigTab() {
     }
   });
 }
-
-// Using shared syncToArchiveBox function from utils.js

@@ -2,8 +2,8 @@ let importItems = [];
 let existingUrls = new Set();
 
 export async function initializeImport() {
-  const { entries = [] } = await chrome.storage.local.get('entries');
-  existingUrls = new Set(entries.map(e => e.url));
+  const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
+  existingUrls = new Set(snapshots.map(e => e.url));
   
   // Set default dates for history
   const endDate = new Date();
@@ -176,22 +176,21 @@ async function importSelected() {
     .map(tag => tag.trim())
     .filter(tag => tag);
   
-  const { entries = [] } = await chrome.storage.local.get('entries');
+  const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
   
-  const newEntries = selectedItems.map(item => ({
+  const newSnapshots = selectedItems.map(item => ({
     id: crypto.randomUUID(),
     url: item.url,
     title: item.title,
     timestamp: new Date().toISOString(),
     tags: [...tags],
-    notes: ''
   }));
   
-  entries.push(...newEntries);
-  await chrome.storage.local.set({ entries });
+  snapshots.push(...newSnapshots);
+  await chrome.storage.local.set({ entries: snapshots });
   
   // Update existingUrls
-  newEntries.forEach(entry => existingUrls.add(entry.url));
+  newSnapshots.forEach(snapshot => existingUrls.add(snapshot.url));
   
   // Clear selections and re-render
   importItems.forEach(item => item.selected = false);
@@ -201,8 +200,8 @@ async function importSelected() {
   document.getElementById('importTags').value = '';
   
   // Show success message
-  alert(`Successfully imported ${newEntries.length} items`);
+  alert(`Successfully imported ${newSnapshots.length} items`);
 
   // redirect back to the URLs tab
   window.location.reload();
-} 
+}

@@ -1,56 +1,7 @@
-import { filterEntries, addToArchiveBox, downloadCsv, downloadJson, syncToArchiveBox, updateStatusIndicator, getArchiveBoxServerUrl } from './utils.js';
+import { filterSnapshots, addToArchiveBox, downloadCsv, downloadJson, updateStatusIndicator, getArchiveBoxServerUrl } from './utils.js';
 
-export async function renderEntries(filterText = '', tagFilter = '') {
-  const { entries = [] } = await chrome.storage.local.get('entries');
-  
-  if (!window.location.search.includes(filterText)) {
-    window.history.pushState({}, '', `?search=${filterText}`);
-  }
-
-  // Apply filters
-  let filteredEntries = entries;
-  if (tagFilter) {
-    filteredEntries = entries.filter(entry => entry.tags.includes(tagFilter));
-  }
-  filteredEntries = filterEntries(filteredEntries, filterText);
-
-  // Display filtered entries
-  const entriesList = document.getElementById('entriesList');
-  entriesList.innerHTML = filteredEntries.map(entry => `
-    <div class="list-group-item">
-      <div class="row">
-        <small class="col-lg-2" style="display: block;">
-          ${new Date(entry.timestamp).toISOString().replace('T', ' ').split('.')[0]}
-        </small>
-        <h5 class="col-lg-7">
-          <a href="${entry.url}" target="_blank" name="${entry.id}" id="${entry.id}"><img src="${entry.favicon}" class="favicon"/><code>${entry.url}</code></a>
-        </h5>
-        <div class="col-lg-3">
-          ${entry.tags.length ? `
-            <p class="mb-1">
-              ${entry.tags.map(tag => 
-                `<span class="badge bg-secondary me-1 tag-filter" role="button" data-tag="${tag}">${tag}</span>`
-              ).join('')}
-            </p>
-          ` : ''}
-        </div>
-      </div>
-    </div>
-  `).join('');
-
-  // Add click handlers for tag filtering
-  document.querySelectorAll('.tag-filter').forEach(tag => {
-    tag.addEventListener('click', () => {
-      const tagText = tag.dataset.tag;
-      const filterInput = document.getElementById('filterInput');
-      filterInput.value = tagText;
-      renderEntries(tagText);
-    });
-  });
-}
-
-export function initializeEntriesTab() {
-  let selectedEntries = new Set();
+export function initializeSnapshotsTab() {
+  let selectedSnapshots = new Set();
   let filteredTags = [];
   let selectedTagIndex = -1;
 
@@ -153,28 +104,28 @@ export function initializeEntriesTab() {
 
     // Save changes button
     document.getElementById('saveTagChanges').addEventListener('click', async () => {
-      const { entries = [] } = await chrome.storage.local.get('entries');
+      const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
       const newTags = getCurrentModalTags();
       
-      // Update tags for all selected entries
-      entries.forEach(entry => {
-        if (selectedEntries.has(entry.id)) {
-          entry.tags = [...newTags];
+      // Update tags for all selected snapshots
+      snapshots.forEach(snapshot => {
+        if (selectedSnapshots.has(snapshot.id)) {
+          snapshot.tags = [...newTags];
         }
       });
       
-      await chrome.storage.local.set({ entries });
+      await chrome.storage.local.set({ entries: snapshots });
       
       // Close modal and refresh view
       const modalInstance = bootstrap.Modal.getInstance(modal);
       modalInstance.hide();
-      await renderEntries();
+      await renderSnapshots();
     });
   }
 
   async function getAllUniqueTags() {
-    const { entries = [] } = await chrome.storage.local.get('entries');
-    return [...new Set(entries.flatMap(entry => entry.tags))]
+    const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
+    return [...new Set(snapshots.flatMap(snapshot => snapshot.tags))]
       .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
   }
 
@@ -193,13 +144,13 @@ export function initializeEntriesTab() {
   }
 
   async function updateCurrentTagsList() {
-    const { entries = [] } = await chrome.storage.local.get('entries');
-    const selectedEntriesArray = entries.filter(e => selectedEntries.has(e.id));
+    const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
+    const selectedSnapshotsArray = snapshots.filter(e => selectedSnapshots.has(e.id));
     
-    // Get tags that exist in ALL selected entries
-    const commonTags = selectedEntriesArray.reduce((acc, entry) => {
-      if (!acc) return new Set(entry.tags);
-      return new Set([...acc].filter(tag => entry.tags.includes(tag)));
+    // Get tags that exist in ALL selected snapshots
+    const commonTags = selectedSnapshotsArray.reduce((acc, snapshot) => {
+      if (!acc) return new Set(snapshot.tags);
+      return new Set([...acc].filter(tag => snapshot.tags.includes(tag)));
     }, null);
 
     const tagsList = document.getElementById('currentTagsList');
@@ -236,7 +187,7 @@ export function initializeEntriesTab() {
   }
 
   function updateSelectionCount() {
-    const count = selectedEntries.size;
+    const count = selectedSnapshots.size;
     // Update count in main view
     document.getElementById('selectedUrlCount').textContent = count;
     // Update count in modal
@@ -244,7 +195,7 @@ export function initializeEntriesTab() {
   }
 
   function updateActionButtonStates() {
-    const hasSelection = selectedEntries.size > 0;
+    const hasSelection = selectedSnapshots.size > 0;
     
     // Update all action buttons based on selection state
     [
@@ -267,30 +218,30 @@ export function initializeEntriesTab() {
   const selectAllCheckbox = document.getElementById('selectAllUrls');
   if (selectAllCheckbox) {
     selectAllCheckbox.addEventListener('click', async () => {
-      const { entries = [] } = await chrome.storage.local.get('entries');
+      const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
       const filterText = document.getElementById('filterInput').value.toLowerCase();
       
-      // Get currently filtered entries
-      const filteredEntries = filterEntries(entries, filterText);
+      // Get currently filtered snapshots
+      const filteredSnapshots = filterSnapshots(snapshots, filterText);
 
-      // If all filtered entries are selected, deselect all
-      const allFilteredSelected = filteredEntries.every(entry => 
-        selectedEntries.has(entry.id)
+      // If all filtered snapshots are selected, deselect all
+      const allFilteredSelected = filteredSnapshots.every(snapshot => 
+        selectedSnapshots.has(snapshot.id)
       );
 
       if (allFilteredSelected) {
-        // Deselect only the filtered entries
-        filteredEntries.forEach(entry => {
-          selectedEntries.delete(entry.id);
+        // Deselect only the filtered snapshots
+        filteredSnapshots.forEach(snapshot => {
+          selectedSnapshots.delete(snapshot.id);
         });
       } else {
-        // Select all filtered entries
-        filteredEntries.forEach(entry => {
-          selectedEntries.add(entry.id);
+        // Select all filtered snapshot
+        filteredSnapshots.forEach(snapshot => {
+          selectedSnapshots.add(snapshot.id);
         });
       }
 
-      await renderEntries();
+      await renderSnapshots();
     });
   }
 
@@ -298,18 +249,18 @@ export function initializeEntriesTab() {
   const deselectAllButton = document.getElementById('deselectAllUrls');
   if (deselectAllButton) {
     deselectAllButton.addEventListener('click', () => {
-      selectedEntries.clear();
-      renderEntries();
+      selectedSnapshots.clear();
+      renderSnapshots();
     });
   }
 
   // Add handler for individual checkbox changes
-  document.getElementById('entriesList').addEventListener('change', (e) => {
-    if (e.target.classList.contains('entry-checkbox')) {
+  document.getElementById('snapshotsList').addEventListener('change', (e) => {
+    if (e.target.classList.contains('snapshot-checkbox')) {
       if (e.target.checked) {
-        selectedEntries.add(e.target.value);
+        selectedSnapshots.add(e.target.value);
       } else {
-        selectedEntries.delete(e.target.value);
+        selectedSnapshots.delete(e.target.value);
       }
       updateSelectionCount();
       updateActionButtonStates();
@@ -330,12 +281,12 @@ export function initializeEntriesTab() {
     window.history.pushState({}, '', newUrl);
   }
 
-  async function renderTagsList(filteredEntries) {
+  async function renderTagsList(filteredSnapshots) {
     const tagsList = document.getElementById('tagsList');
     
-    // Count occurrences of each tag in filtered entries only
-    const tagCounts = filteredEntries.reduce((acc, entry) => {
-      entry.tags.forEach(tag => {
+    // Count occurrences of each tag in filtered snapshots only
+    const tagCounts = filteredSnapshots.reduce((acc, snapshot) => {
+      snapshot.tags.forEach(tag => {
         acc[tag] = (acc[tag] || 0) + 1;
       });
       return acc;
@@ -375,67 +326,67 @@ export function initializeEntriesTab() {
           filterInput.value = tag;
         }
         
-        renderEntries();
+        renderSnapshots();
       });
     });
   }
 
-  // Modify existing renderEntries function
-  async function renderEntries() {
-    const { entries = [] } = await chrome.storage.local.get(['entries']);
+  // Modify existing renderSnapshots function
+  async function renderSnapshots() {
+    const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
     const archivebox_server_url = await getArchiveBoxServerUrl();
 
     const filterText = document.getElementById('filterInput').value.toLowerCase();
-    const entriesList = document.getElementById('entriesList');
+    const snapshotsList = document.getElementById('snapshotsList');
     
     // Update URL when filter changes
     updateFilterUrl(filterText);
     
-    // Filter entries based on search text
-    const filteredEntries = filterEntries(entries, filterText);
+    // Filter snapshots based on search text
+    const filteredSnapshots = filterSnapshots(snapshots, filterText);
 
-    // sort entries by timestamp, newest first
-    filteredEntries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    // sort snapshots by timestamp, newest first
+    filteredSnapshots.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
     // Add CSS for URL truncation if not already present
-    if (!document.getElementById('entriesListStyles')) {
+    if (!document.getElementById('snapshotsListStyles')) {
       const style = document.createElement('style');
-      style.id = 'entriesListStyles';
+      style.id = 'snapshotsListStyles';
       style.textContent = `
-        .entry-url {
+        .snapshot-url {
           max-width: 800px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
           display: inline-block;
         }
-        .entry-title-line {
+        .snapshot-title-line {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 8px;
         }
-        .entry-title {
+        .snapshot-title {
           font-size: 0.9em;
           color: #666;
           margin-bottom: 4px;
         }
-        .entry-link-to-archivebox {
+        .snapshot-link-to-archivebox {
           font-size: 0.7em;
           color: #888;
           min-width: 330px;
         }
-        .entry-timestamp {
+        .snapshot-timestamp {
           font-size: 0.8em;
           color: #888;
           margin-left: 8px;
         }
-        .entry-content {
+        .snapshot-content {
           display: flex;
           flex-direction: column;
           gap: 2px;
         }
-        .entry-url-line {
+        .snapshot-url-line {
           display: flex;
           align-items: center;
           gap: 8px;
@@ -444,43 +395,43 @@ export function initializeEntriesTab() {
       document.head.appendChild(style);
     }
 
-    // Render entries list
-    entriesList.innerHTML = filteredEntries.map(entry => `
+    // Render snapshots list
+    snapshotsList.innerHTML = filteredSnapshots.map(snapshot => `
       <div class="list-group-item d-flex align-items-start gap-2">
         <input type="checkbox" 
-               class="entry-checkbox form-check-input mt-2" 
-               value="${entry.id}"
-               ${selectedEntries.has(entry.id) ? 'checked' : ''}>
-        <div class="entry-content flex-grow-1">
-          <div class="entry-title-line">
-            <div class="entry-title">${entry.title || 'Untitled'}</div>
+               class="snapshot-checkbox form-check-input mt-2" 
+               value="${snapshot.id}"
+               ${selectedSnapshots.has(snapshot.id) ? 'checked' : ''}>
+        <div class="snapshot-content flex-grow-1">
+          <div class="snapshot-title-line">
+            <div class="snapshot-title">${snapshot.title || 'Untitled'}</div>
             ${(()=>{
               return archivebox_server_url ?
-                `<div class="entry-link-to-archivebox btn-group" role="group">
-                   <a href=${entry.url} target="_blank" class="btn btn-sm btn-outline-primary">
+                `<div class="snapshot-link-to-archivebox btn-group" role="group">
+                   <a href=${snapshot.url} target="_blank" class="btn btn-sm btn-outline-primary">
                      🔗 Original
                    </a>
-                   <a href=${archivebox_server_url}/archive/${entry.url} target="_blank" class="btn btn-sm btn-outline-primary">
+                   <a href=${archivebox_server_url}/archive/${snapshot.url} target="_blank" class="btn btn-sm btn-outline-primary">
                      📦 ArchiveBox
                    </a>
-                   <a href="https://web.archive.org/web/${entry.url}" target="_blank" class="btn btn-sm btn-outline-primary">
+                   <a href="https://web.archive.org/web/${snapshot.url}" target="_blank" class="btn btn-sm btn-outline-primary">
                      🏛️ Archive.org
                    </a>
                  </div>`
                 : '' })()
             }
           </div>
-          <div class="entry-url-line">
-            <img class="favicon" src="${entry.favicon || '128.png'}"
+          <div class="snapshot-url-line">
+            <img class="favicon" src="${snapshot.favIconUrl || '128.png'}"
                  onerror="this.src='128.png'"
                  width="16" height="16">
-            <code class="entry-url">${entry.url}</code>
-            <span class="entry-timestamp">
-              ${new Date(entry.timestamp).toLocaleString()}
+            <code class="snapshot-url">${snapshot.url}</code>
+            <span class="snapshot-timestamp">
+              ${new Date(snapshot.timestamp).toLocaleString()}
             </span>
           </div>
           <div class="small text-muted mt-1">
-            ${entry.tags.map(tag => 
+            ${snapshot.tags.map(tag => 
               `<span class="badge bg-secondary me-1">${tag}</span>`
             ).join('')}
           </div>
@@ -492,8 +443,8 @@ export function initializeEntriesTab() {
     updateSelectionCount();
     updateActionButtonStates();
 
-    // Update tags list with filtered entries
-    await renderTagsList(filteredEntries);
+    // Update tags list with filtered snapshots
+    await renderTagsList(filteredSnapshots);
   }
 
   // Initialize filter input with URL parameter and trigger initial render
@@ -505,29 +456,29 @@ export function initializeEntriesTab() {
   filterInput.addEventListener('input', () => {
     clearTimeout(filterTimeout);
     filterTimeout = setTimeout(() => {
-      renderEntries();
+      renderSnapshots();
     }, 300);
   });
 
   // Handle browser back/forward
   window.addEventListener('popstate', () => {
     filterInput.value = getInitialFilter();
-    renderEntries();
+    renderSnapshots();
   });
 
-  // Initialize the tag modal when the entries tab is initialized
+  // Initialize the tag modal when the snapshots tab is initialized
   initializeTagModal();
 
   // Initial render
-  renderEntries();
+  renderSnapshots();
 
   // Export to CSV
   document.getElementById('downloadCsv').addEventListener('click', async () => {
-    const { entries = [] } = await chrome.storage.local.get('entries');
-    const selectedItems = entries.filter(e => selectedEntries.has(e.id));
+    const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
+    const selectedItems = snapshots.filter(e => selectedSnapshots.has(e.id));
     
     if (!selectedItems.length) {
-      alert('No entries selected');
+      alert('No snapshots selected');
       return;
     }
 
@@ -536,44 +487,44 @@ export function initializeEntriesTab() {
 
   // Export to JSON
   document.getElementById('downloadJson').addEventListener('click', async () => {
-    const { entries = [] } = await chrome.storage.local.get('entries');
-    const selectedItems = entries.filter(e => selectedEntries.has(e.id));
+    const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
+    const selectedItems = snapshots.filter(e => selectedSnapshots.has(e.id));
     
     if (!selectedItems.length) {
-      alert('No entries selected');
+      alert('No snapshots selected');
       return;
     }
 
     downloadJson(selectedItems);
   });
 
-  // Delete entries
+  // Delete snapshots
   document.getElementById('deleteFiltered').addEventListener('click', async () => {
-    const { entries = [] } = await chrome.storage.local.get('entries');
-    const selectedItems = entries.filter(e => selectedEntries.has(e.id));
+    const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
+    const selectedItems = snapshots.filter(e => selectedSnapshots.has(e.id));
     console.log(`deleting ${selectedItems.length} items from local storage`)
 
     if (!selectedItems.length) {
-      alert('No entries to delete');
+      alert('No snapshots to delete');
       return;
     }
 
-    const message = `Delete ${selectedItems.length} entries?`
+    const message = `Delete ${selectedItems.length} snapshots?`
 
     if (!confirm(message)) return;
 
     const idsToDelete = new Set(selectedItems.map(e => e.id));
-    const remainingEntries = entries.filter(e => !idsToDelete.has(e.id));
-    await chrome.storage.local.set({ entries: remainingEntries });
+    const remainingSnapshots = snapshots.filter(e => !idsToDelete.has(e.id));
+    await chrome.storage.local.set({ entries: remainingSnapshots });
 
     // Refresh the view
-    await renderEntries('');
+    await renderSnapshots();
   });
 
-  // Sync entries
+  // Sync snapshots
   document.getElementById('syncFiltered').addEventListener('click', async () => {
-    const { entries = [] } = await chrome.storage.local.get('entries');
-    const selectedItems = entries.filter(e => selectedEntries.has(e.id));
+    const { entries: snapshots = [] } = await chrome.storage.local.get('entries');
+    const selectedItems = snapshots.filter(e => selectedSnapshots.has(e.id));
     console.log(`syncing ${selectedItems.length} items to ArchiveBox server`)
 
     if (!selectedItems.length) {
@@ -589,15 +540,15 @@ export function initializeEntriesTab() {
     for (const item of selectedItems) {
       const row = document.querySelector(`input[value="${item.id}"]`);
       if (!row) continue;
-      const entryTitle = row.parentElement.querySelector('.entry-title');
+      const snapshot = row.parentElement.querySelector('.snapshot-title');
 
       // Add status indicator if it doesn't exist
-      let statusIndicator = entryTitle.querySelector('.sync-status');
+      let statusIndicator = snapshot.querySelector('.sync-status');
       if (!statusIndicator) {
         statusIndicator = document.createElement('span');
         statusIndicator.className = 'sync-status status-indicator';
         statusIndicator.style.marginLeft = '10px';
-        entryTitle.appendChild(statusIndicator);
+        snapshot.appendChild(statusIndicator);
       }
 
       // Update status to "in progress"
@@ -607,17 +558,20 @@ export function initializeEntriesTab() {
       statusIndicator.style.animation = 'pulse 1s infinite';
 
       // Send to ArchiveBox
-      const addCommandArgs = JSON.stringify({urls: [item.url], tag: item.tags.join(',')});
-
-      const onResponse = (response) => {
-        // Update status indicator
-        statusIndicator.className = `sync-status status-indicator status-${response.ok ? 'success' : 'error'}`;
-        statusIndicator.style.backgroundColor = response.ok ? '#28a745' : '#dc3545';
-        statusIndicator.title = response.status;
-        statusIndicator.style.animation = 'none';
+      let success = true, status = 'success';
+      try {
+        await addToArchiveBox([item.url], item.tags);
+        success = true;
+        status = 'success';
+      } catch (error) {
+        success = false;
+        status = error.message;
       }
 
-      addToArchiveBox(addCommandArgs, onResponse, onResponse);
+      statusIndicator.className = `sync-status status-indicator status-${success ? 'success' : 'error'}`;
+      statusIndicator.style.backgroundColor = success ? '#28a745' : '#dc3545';
+      statusIndicator.title = status;
+      statusIndicator.style.animation = 'none';
 
       // Wait 0.5s before next request
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -628,5 +582,3 @@ export function initializeEntriesTab() {
     syncBtn.textContent = '⬆️ Sync to ArchiveBox';  
   });
 }
-
-// Using syncToArchiveBox from utils.js 
