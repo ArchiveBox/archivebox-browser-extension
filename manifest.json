@@ -16,9 +16,12 @@
     "bookmarks",
     "tabs"
   ],
-  "optional_host_permissions": [
+  "host_permissions": [
     "<all_urls>"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
   "icons": {
     "16": "16.png",
     "32": "32.png",
@@ -36,12 +39,13 @@
   },
   "options_page": "options.html",
   "background": {
+    "scripts": ["background.js"],
     "service_worker": "background.js",
     "type": "module"
   },
   "web_accessible_resources": [{
     "resources": ["popup.css", "popup.js"],
-    "matches": ["*://*\/*"]
+    "matches": ["<all_urls>"]
   }],
   "commands": {
     "save-to-archivebox-action": {
@@ -50,6 +54,11 @@
         "default": "Ctrl+Shift+X",
         "mac": "Command+Shift+X"
       }
+    }
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "archivebox@example.com"
     }
   }
 }

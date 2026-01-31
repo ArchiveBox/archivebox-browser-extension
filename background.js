@@ -126,7 +126,7 @@ async function configureAutoArchiving() {
 }
 
 // Initialize auto-archiving setup on extension load
-configureAutoArchiving();
+chrome.runtime.onStartup.addListener(configureAutoArchiving);
 
 // Listen for changes to the auto-archive setting
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -136,35 +136,152 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'archivebox_add') {
-    try {
-      const { urls = [], tags=[] } = JSON.parse(message.body);
-
-      addToArchiveBox(urls, tags)
-        .then(() => {
-            console.log(`Successfully archived ${urls}`);
-            sendResponse({ok: true});
-          }
-        )
-        .catch((error) =>  sendResponse({ok: false, errorMessage: error.message}));
-    } catch (error) {
-      console.error(`Failed to parse archivebox_add message, no URLs sent to ArchiveBox server: ${error.message}`);
-      sendResponse({ok: false, errorMessage: error.message});
+  switch (message.type) {
+    case 'archivebox_add':
+      (async () => {
+        try {
+          const { urls = [], tags=[] } = message.body;
+          await addToArchiveBox(urls, tags);
+          console.log(`Successfully archived ${urls}`);
+          sendResponse({ok: true});
+        } catch (error) {
+          console.error(`Failed send to ArchiveBox server: ${error.message}`);
+          sendResponse({ok: false, errorMessage: error.message});
+        }
+      })();
       return true;
-    }
-  }
 
-  return true;
+    case 'test_server_url':
+      (async () => {
+        try {
+          const serverUrl = message.serverUrl;
+          console.log("Testing server URL:", serverUrl);
+
+          if (!serverUrl || !serverUrl.startsWith('http')) {
+            sendResponse({ok: false, error: "Invalid server URL"});
+            return;
+          }
+
+          const origin = new URL(serverUrl).origin;
+          console.log("Server origin:", origin);
+
+          // First try without credentials as Firefox is stricter
+          try {
+            console.log("Trying server API endpoint");
+            let response = await fetch(`${serverUrl}/api/`, {
+              method: 'GET',
+              mode: 'cors'
+            });
+
+            if (response.ok) {
+              console.log("API endpoint test successful");
+              sendResponse({ok: true});
+              return;
+            }
+
+            // Try the root URL for older ArchiveBox versions
+            if (response.status === 404) {
+              console.log("API endpoint not found, trying root URL");
+              response = await fetch(`${serverUrl}`, {
+                method: 'GET',
+                mode: 'cors'
+              });
+
+              if (response.ok) {
+                console.log("Root URL test successful");
+                sendResponse({ok: true});
+                return;
+              }
+            }
+
+            console.log("Server returned non-OK response:", response.status, response.statusText);
+            throw new Error(`${response.status} ${response.statusText}`);
+          } catch (fetchError) {
+            console.error("Fetch error:", fetchError);
+            throw new Error(`NetworkError: ${fetchError.message}`);
+          }
+        } catch (error) {
+          console.error("test_server_url failed:", error);
+          sendResponse({ok: false, error: error.message});
+        }
+      })();
+      return true;
+
+    case 'test_api_key':
+      (async () => {
+        try {
+          const { serverUrl, apiKey } = message;
+          console.log("Testing API key for server:", serverUrl);
+
+          if (!serverUrl || !serverUrl.startsWith('http')) {
+            sendResponse({ok: false, error: "Invalid server URL"});
+            return;
+          }
+
+          if (!apiKey) {
+            sendResponse({ok: false, error: "API key is required"});
+            return;
+          }
+
+          try {
+            console.log("Attempting to verify API key...");
+            const response = await fetch(`${serverUrl}/api/v1/auth/check_api_token`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              mode: 'cors',
+              body: JSON.stringify({
+                token: apiKey,
+              })
+            });
+
+            console.log("API key check response status:", response.status);
+
+            if (response.ok) {
+              const data = await response.json();
+              console.log("API key check response data:", data);
+
+              if (data.user_id) {
+                sendResponse({ok: true, user_id: data.user_id});
+              } else {
+                sendResponse({ok: false, error: 'Invalid API key response'});
+              }
+            } else {
+              sendResponse({ok: false, error: `${response.status} ${response.statusText}`});
+            }
+          } catch (fetchError) {
+            console.error("API key check fetch error:", fetchError);
+            sendResponse({ok: false, error: `NetworkError: ${fetchError.message}`});
+          }
+        } catch (error) {
+          console.error("test_api_key failed:", error);
+          sendResponse({ok: false, error: error.message});
+        }
+      })();
+      return true;
+
+    case 'open_options':
+      (async () => {
+        try {
+          const options_url = chrome.runtime.getURL('options.html') + `?search=${message.id}`;
+          console.log('i ArchiveBox Collector showing options.html', options_url);
+          await chrome.tabs.create({ url: options_url });
+          sendResponse({ok: true});
+        } catch (error) {
+          console.error(`Failed to open options page: ${error.message}`);
+          sendResponse({ok: false, error: error.message});
+        }
+      })();
+      return true;
+
+    default:
+      console.error('Invalid message: ', message);
+      return true;
+  }
 });
 
-chrome.runtime.onMessage.addListener(async (message) => {
-  const options_url = chrome.runtime.getURL('options.html') + `?search=${message.id}`;
-  console.log('i ArchiveBox Collector showing options.html', options_url);
-  if (message.action === 'openOptionsPage') {
-    await chrome.tabs.create({ url: options_url });
-  }
-});
-
+// Create context menus
 chrome.runtime.onInstalled.addListener(function () {
   chrome.contextMenus.removeAll();
   chrome.contextMenus.create({
