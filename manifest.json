@@ -58,7 +58,16 @@
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "archivebox@example.com"
+      "id": "archivebox@example.com",
+      "data_collection_permissions": {
+        "required": [
+          "browsingActivity"
+        ],
+        "optional": [
+          "bookmarksInfo",
+          "websiteContent"
+        ]
+      }
     }
   }
 }
