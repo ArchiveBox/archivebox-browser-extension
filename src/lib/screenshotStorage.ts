@@ -1,4 +1,4 @@
-import type { Snapshot, SnapshotMhtml, SnapshotScreenshot } from './types';
+import type { Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotSingleFile } from './types';
 
 function pathSafeSegment(value: string): string {
   return value
@@ -47,11 +47,26 @@ export function snapshotMhtmlPath(snapshot: Snapshot): string {
   ].join('/');
 }
 
+export function snapshotSingleFilePath(snapshot: Snapshot): string {
+  return [
+    'snapshots',
+    snapshotDateSegment(snapshot),
+    snapshotHostSegment(snapshot),
+    pathSafeSegment(snapshot.id),
+    'chrome_extension_singlefile',
+    'singlefile.html',
+  ].join('/');
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
 async function getDirectory(pathSegments: string[], create: boolean): Promise<FileSystemDirectoryHandle> {
+  if (typeof navigator.storage?.getDirectory !== 'function') {
+    throw new Error('Local capture storage is not available in this browser.');
+  }
+
   let directory = await navigator.storage.getDirectory();
   for (const segment of pathSegments) {
     try {
@@ -162,6 +177,30 @@ export async function writeSnapshotMhtmlBytes(
   };
 }
 
+export async function writeSnapshotSingleFileHtml(
+  snapshot: Snapshot,
+  content: string,
+  filename?: string,
+): Promise<SnapshotSingleFile> {
+  const bytes = new TextEncoder().encode(content).buffer;
+  const path = snapshotSingleFilePath(snapshot);
+  const segments = path.split('/');
+  const fileName = segments.pop();
+  if (!fileName) throw new Error('Invalid SingleFile HTML path');
+
+  const directory = await getDirectory(segments, true);
+  await writeBytesToFile(directory, fileName, bytes);
+
+  return {
+    storage: 'opfs',
+    path,
+    mimeType: 'text/html',
+    capturedAt: new Date().toISOString(),
+    size: bytes.byteLength,
+    filename,
+  };
+}
+
 export async function readSnapshotScreenshotBlob(screenshot?: SnapshotScreenshot): Promise<Blob | null> {
   if (!screenshot?.path) return null;
   const segments = screenshot.path.split('/');
@@ -180,6 +219,21 @@ export async function readSnapshotScreenshotBlob(screenshot?: SnapshotScreenshot
 export async function readSnapshotMhtmlBlob(mhtml?: SnapshotMhtml): Promise<Blob | null> {
   if (!mhtml?.path) return null;
   const segments = mhtml.path.split('/');
+  const fileName = segments.pop();
+  if (!fileName) return null;
+
+  try {
+    const directory = await getDirectory(segments, false);
+    const fileHandle = await directory.getFileHandle(fileName);
+    return await fileHandle.getFile();
+  } catch {
+    return null;
+  }
+}
+
+export async function readSnapshotSingleFileBlob(singlefile?: SnapshotSingleFile): Promise<Blob | null> {
+  if (!singlefile?.path) return null;
+  const segments = singlefile.path.split('/');
   const fileName = segments.pop();
   if (!fileName) return null;
 

@@ -355,9 +355,21 @@ button.archivebox-overlay__tag-chip {
   color: #17683a;
 }
 
+.archivebox-overlay__capture-button--disabled {
+  border-color: #d0c7bb;
+  background: #f3eee7 !important;
+  color: #74695d;
+  cursor: help;
+}
+
 .archivebox-overlay__capture-button:hover {
   border-color: #a95656;
   background: #f7eeee !important;
+}
+
+.archivebox-overlay__capture-button--disabled:hover {
+  border-color: #b9ad9f;
+  background: #eee7dd !important;
 }
 
 .archivebox-overlay__capture-button--saved:hover {

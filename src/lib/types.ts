@@ -10,6 +10,7 @@ export type Snapshot = {
   depth?: ArchiveDepth;
   screenshot?: SnapshotScreenshot;
   mhtml?: SnapshotMhtml;
+  singlefile?: SnapshotSingleFile;
 };
 
 export type SnapshotScreenshot = {
@@ -27,6 +28,15 @@ export type SnapshotMhtml = {
   mimeType: 'multipart/related';
   capturedAt: string;
   size: number;
+};
+
+export type SnapshotSingleFile = {
+  storage: 'opfs';
+  path: string;
+  mimeType: 'text/html';
+  capturedAt: string;
+  size: number;
+  filename?: string;
 };
 
 export type PersonaSettings = {
@@ -66,6 +76,8 @@ export type ConfigState = {
   enable_auto_archive: boolean;
   save_screenshots_locally: boolean;
   save_mhtml_locally: boolean;
+  save_singlefile_locally: boolean;
+  singlefile_extension_id: string;
 };
 
 export type ArchiveboxAddMessage = {
@@ -96,7 +108,7 @@ export type TestApiKeyMessage = {
 export type OpenOptionsMessage = {
   type: 'open_options';
   id?: string;
-  view?: 'highlight' | 'screenshot' | 'mhtml';
+  view?: 'highlight' | 'screenshot' | 'mhtml' | 'singlefile';
 };
 
 export type OpenArchiveBoxSnapshotMessage = {
@@ -119,6 +131,11 @@ export type CaptureSnapshotScreenshotMessage = {
 
 export type CaptureSnapshotMhtmlMessage = {
   type: 'capture_snapshot_mhtml';
+  snapshotId: string;
+};
+
+export type CaptureSnapshotSingleFileMessage = {
+  type: 'capture_snapshot_singlefile';
   snapshotId: string;
 };
 
@@ -149,6 +166,7 @@ export type RuntimeMessage =
   | HideOverlayMessage
   | CaptureSnapshotScreenshotMessage
   | CaptureSnapshotMhtmlMessage
+  | CaptureSnapshotSingleFileMessage
   | ScreenshotGetMetricsMessage
   | ScreenshotScrollMessage
   | ScreenshotRestoreScrollMessage;
@@ -160,4 +178,5 @@ export type RuntimeResponse = {
   user_id?: string | number;
   screenshot?: SnapshotScreenshot;
   mhtml?: SnapshotMhtml;
+  singlefile?: SnapshotSingleFile;
 };

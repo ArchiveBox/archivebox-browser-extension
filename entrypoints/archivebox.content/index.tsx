@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
+import { mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { createSnapshot } from '@/src/lib/snapshots';
 import { getSnapshots, setSnapshots } from '@/src/lib/storage';
 import { matchingTagSuggestions } from '@/src/lib/tags';
@@ -241,7 +242,7 @@ function ArchiveBoxOverlay() {
     }
   }
 
-  function openCaptureView(view: 'screenshot' | 'mhtml') {
+  function openCaptureView(view: 'screenshot' | 'mhtml' | 'singlefile') {
     if (!snapshot?.id) return;
     browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'open_options',
@@ -250,7 +251,13 @@ function ArchiveBoxOverlay() {
     });
   }
 
-  async function captureLocalArtifact(kind: 'screenshot' | 'mhtml') {
+  async function captureLocalArtifact(kind: 'screenshot' | 'mhtml' | 'singlefile') {
+    if (kind === 'mhtml' && !supportsMhtmlCapture) {
+      setOk(false);
+      setStatus(mhtmlUnsupportedMessage);
+      return;
+    }
+
     const { currentSnapshot } = await getCurrentSnapshot();
     if (kind === 'screenshot' && currentSnapshot.screenshot) {
       openCaptureView('screenshot');
@@ -260,20 +267,29 @@ function ArchiveBoxOverlay() {
       openCaptureView('mhtml');
       return;
     }
+    if (kind === 'singlefile' && currentSnapshot.singlefile) {
+      openCaptureView('singlefile');
+      return;
+    }
 
-    setStatus(`Saving local ${kind === 'screenshot' ? 'screenshot' : 'MHTML snapshot'}...`);
+    const artifactLabel = kind === 'screenshot' ? 'screenshot' : kind === 'mhtml' ? 'MHTML snapshot' : 'SingleFile HTML';
+    setStatus(`Saving local ${artifactLabel}...`);
     setOk(null);
     setOverlayHiddenForCapture(true);
     await waitForOverlayHiddenForCapture();
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
-      type: kind === 'screenshot' ? 'capture_snapshot_screenshot' : 'capture_snapshot_mhtml',
+      type: kind === 'screenshot'
+        ? 'capture_snapshot_screenshot'
+        : kind === 'mhtml'
+          ? 'capture_snapshot_mhtml'
+          : 'capture_snapshot_singlefile',
       snapshotId: currentSnapshot.id,
     }).finally(() => setOverlayHiddenForCapture(false));
 
     if (!response.ok) {
       const errorMessage = response.errorMessage || response.error || 'Unknown error';
       setOk(false);
-      setStatus(`Failed to save local ${kind === 'screenshot' ? 'screenshot' : 'MHTML snapshot'}: ${errorMessage}`);
+      setStatus(`Failed to save local ${artifactLabel}: ${errorMessage}`);
       await refresh();
       return;
     }
@@ -283,7 +299,7 @@ function ArchiveBoxOverlay() {
     setSnapshot({ ...nextSnapshot });
     setLocalStatus('saved');
     setOk(true);
-    setStatus(`Saved local ${kind === 'screenshot' ? 'screenshot' : 'MHTML snapshot'}`);
+    setStatus(`Saved local ${artifactLabel}`);
   }
 
   async function addTag(tag: string) {
@@ -358,12 +374,29 @@ function ArchiveBoxOverlay() {
           >
             {snapshot?.screenshot ? '✓ Screenshot' : 'Screenshot'}
           </button>
+          {supportsMhtmlCapture ? (
+            <button
+              className={`archivebox-overlay__capture-button${snapshot?.mhtml ? ' archivebox-overlay__capture-button--saved' : ''}`}
+              onClick={() => captureLocalArtifact('mhtml')}
+              title={snapshot?.mhtml ? 'Open saved MHTML snapshot' : 'Save an MHTML snapshot for this URL'}
+            >
+              {snapshot?.mhtml ? '✓ MHTML' : 'MHTML'}
+            </button>
+          ) : (
+            <button
+              className="archivebox-overlay__capture-button archivebox-overlay__capture-button--disabled"
+              onClick={() => captureLocalArtifact('mhtml')}
+              title={mhtmlUnsupportedMessage}
+            >
+              MHTML unavailable
+            </button>
+          )}
           <button
-            className={`archivebox-overlay__capture-button${snapshot?.mhtml ? ' archivebox-overlay__capture-button--saved' : ''}`}
-            onClick={() => captureLocalArtifact('mhtml')}
-            title={snapshot?.mhtml ? 'Open saved MHTML snapshot' : 'Save an MHTML snapshot for this URL'}
+            className={`archivebox-overlay__capture-button${snapshot?.singlefile ? ' archivebox-overlay__capture-button--saved' : ''}`}
+            onClick={() => captureLocalArtifact('singlefile')}
+            title={snapshot?.singlefile ? 'Open saved SingleFile HTML snapshot' : singleFileCaptureUnavailableMessage}
           >
-            {snapshot?.mhtml ? '✓ MHTML' : 'MHTML'}
+            {snapshot?.singlefile ? '✓ SingleFile' : 'SingleFile'}
           </button>
         </div>
         <div className="archivebox-overlay__crawl">

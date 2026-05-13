@@ -8,9 +8,10 @@ This is a browser extension that lets you send individual browser tabs or all UR
 
 ## Get the Extension
 
-- <a href="https://chrome.google.com/webstore/detail/habonpimjphpdnmcfkaockjnffodikoj"><img src="https://github.com/user-attachments/assets/4ee7d4fb-e676-4a75-973d-ac029f265b86" height="30px" align="top"/> Chrome / Brave / Edge / Other Chromium-based browsers</a>
+- <a href="https://chrome.google.com/webstore/detail/habonpimjphpdnmcfkaockjnffodikoj"><img src="https://github.com/user-attachments/assets/4ee7d4fb-e676-4a75-973d-ac029f265b86" height="30px" align="top"/> Chrome / Brave / Other Chromium-based browsers</a>
+- <img src="https://github.com/user-attachments/assets/4ee7d4fb-e676-4a75-973d-ac029f265b86" height="30px" align="top"/> Microsoft Edge *(supported; Edge Add-ons packaging is built from the same WXT codebase)*
 - <a href="https://addons.mozilla.org/firefox/addon/archivebox-exporter/"><img src="https://github.com/user-attachments/assets/8e2a969d-68d6-4bd6-8b10-d8b5a36757ec" height="30px" align="top"/> Firefox / Waterfox / Tor Browser / Other Firefox-based browsers</a>
-- <img src="https://github.com/user-attachments/assets/c20f8f8a-01f2-427b-ac75-ffddcb62953f" height="30px" align="top"/> Safari *(not yet supported, use [Save-to-ArchiveBox Shortcut](https://www.icloud.com/shortcuts/0d3a526e7d524447aa8c1bd63ac49014) instead)*
+- <img src="https://github.com/user-attachments/assets/c20f8f8a-01f2-427b-ac75-ffddcb62953f" height="30px" align="top"/> Safari / iOS Safari *(supported; requires Safari Web Extension packaging for distribution)*
 
 ![configuring-server](https://github.com/user-attachments/assets/308c4462-ca09-434f-89a6-3f6bac404be2)
 ![url-submission](https://github.com/user-attachments/assets/cfc8f670-562a-4c17-a533-4b1b0560c5c8)
@@ -28,11 +29,13 @@ This is a browser extension that lets you send individual browser tabs or all UR
 - [x] updated the extension to Manifest v3 using WXT, React, and TypeScript
 - [x] added a Saved URLs view where you can see, search, sort, tag, sync, delete, and export the URLs you've collected so far
 - [x] added the ability to import URLs from browser history / bookmarks by date range or filter query
-- [x] added the ability to export selected URLs as CSV/JSON, selected screenshots as PNG, selected MHTML snapshots as `.mhtml`, or a ZIP bundle containing all selected snapshot data and local artifacts
+- [x] added the ability to export selected URLs as CSV/JSON, selected screenshots as PNG, selected MHTML snapshots as `.mhtml`, selected SingleFile captures as `.html`, or a ZIP bundle containing all selected snapshot data and local artifacts
 - [x] added extension-local full-page screenshot capture for saved URLs
-- [x] added extension-local MHTML capture for saved URLs on Chrome / Chromium browsers
+- [x] added extension-local MHTML capture for saved URLs on Chrome / Edge / Chromium browsers
+- [x] added extension-local SingleFile HTML capture for saved URLs when the SingleFile extension is installed and approved
 - [x] added the ability to edit extension config options, allowlist/denylist, ArchiveBox server URL, API key, and authentication profiles from the options page
 - [x] added the ability to test the connection to your ArchiveBox server
+- [x] added build and packaging support for Chrome, Edge, Firefox, and Safari from the WXT/React codebase
 
 
 
@@ -43,10 +46,13 @@ When local capture saving is enabled in the options page, the extension stores c
 
 - Full-page screenshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_screenshot/screenshot.png`
 - MHTML snapshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_mhtml/snapshot.mhtml`
+- SingleFile HTML snapshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_singlefile/snapshot.html`
 
-Screenshots are shown as thumbnails in the Saved URLs table when at least one saved URL has a screenshot, and can be exported as PNG from the Export menu. MHTML snapshots can also be exported from the same menu. The ZIP export includes the selected CSV/JSON metadata plus local artifacts under the same `snapshots/YYYYMMDD/example.com/{uuid}/...` paths used in OPFS. When an MHTML snapshot is available, the Saved URLs table title opens an extension-local viewer for that snapshot.
+Screenshots are shown as thumbnails in the Saved URLs table when at least one saved URL has a screenshot, and can be exported as PNG from the Export menu. MHTML and SingleFile HTML snapshots can also be exported from the same menu. The ZIP export includes the selected CSV/JSON metadata plus local artifacts under the same `snapshots/YYYYMMDD/example.com/{uuid}/...` paths used in OPFS. When a SingleFile HTML or MHTML snapshot is available, the Saved URLs table title opens an extension-local framed viewer for that snapshot.
 
-MHTML capture uses Chrome's `pageCapture.saveAsMHTML()` extension API and is available in Chrome / Chromium builds. Firefox builds still save the URL and screenshot, but skip MHTML capture because the Chrome page capture API is not available there.
+MHTML capture uses Chromium's `pageCapture.saveAsMHTML()` extension API and is available in Chrome / Edge / Chromium builds. Firefox and Safari builds still save the URL and screenshot where the browser supports tab capture, but skip MHTML capture because the page capture API is not available there.
+
+SingleFile HTML capture uses the SingleFile browser extension through its external capture API. The first request opens SingleFile's options page so the user can approve or deny ArchiveBox as an allowed caller, then subsequent captures can run silently and save the returned HTML into ArchiveBox's local OPFS snapshot tree.
 
 
 ## Setup
@@ -80,30 +86,55 @@ cd archivebox-browser-extension/
 pnpm install
 pnpm compile
 pnpm build
+pnpm build:edge
 pnpm build:firefox
+pnpm build:safari
 ```
 
 For local development:
 
 ```bash
 pnpm dev           # Chrome / Chromium
+pnpm dev:edge      # Edge
 pnpm dev:firefox   # Firefox
+pnpm dev:safari    # Safari WebExtension build
 ```
 
-For a production-style local build, load `.output/chrome-mv3` into Chrome / Chromium using the [Load Unpacked Extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) UI, or load `.output/firefox-mv3` into Firefox using `about:debugging`.
+For a production-style local build, load `.output/chrome-mv3` into Chrome / Chromium using the [Load Unpacked Extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) UI, load `.output/edge-mv3` into Edge using `edge://extensions`, load `.output/firefox-mv3` into Firefox using `about:debugging`, or load `.output/safari-mv3` in Safari with Settings → Developer → Add Temporary Extension.
 
 To create store upload bundles:
 
 ```bash
 pnpm zip
+pnpm zip:edge
 pnpm zip:firefox
+pnpm zip:safari
 ```
+
+To submit store uploads with WXT, add the store credentials to `.env` using `.env.example` as the template, then run the matching submit script:
+
+```bash
+pnpm submit:chrome
+pnpm submit:edge:dry-run
+pnpm submit:edge
+pnpm submit:firefox
+```
+
+Edge publishing uses WXT's Microsoft Edge Add-ons API support. Set `EDGE_PRODUCT_ID` from the Partner Center extension dashboard, plus the API credentials in `EDGE_CLIENT_ID` and `EDGE_API_KEY`.
+
+Safari publishing is not handled by `wxt submit`. Build the Safari WebExtension output, then convert/package it for macOS and iOS/iPadOS with Apple's Safari Web Extension tooling:
+
+```bash
+pnpm convert:safari
+```
+
+For App Store/TestFlight distribution, upload the generated Xcode app project through App Store Connect, or use Apple's Safari Web Extension Packager flow.
 
 Please open an issue to discuss any proposed changes *before* starting work on any PRs.
 
 ## Changelog
 
-- 2026-05 Extension v3.0.1 migrated to WXT, React, TypeScript, Manifest v3, local screenshot capture, and Chrome MHTML capture
+- 2026-05 Extension v3.0.1 migrated to WXT, React, TypeScript, Manifest v3, local screenshot capture, Chrome / Edge MHTML capture, and SingleFile HTML capture
 - 2025-03 New Manifest v3 [Extension v2.1.3](https://github.com/ArchiveBox/archivebox-browser-extension/releases/tag/v2.1.3) Released
 - 2024-11 Development [started](https://github.com/ArchiveBox/archivebox-browser-extension/pull/31) on v2 extension with more advanced UI and tagging options
 - 2024-01 Extension repo moved from `tjhorner/archivebox-exporter` to `Archivebox/archivebox-browser-extension`

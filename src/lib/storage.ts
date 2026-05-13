@@ -8,6 +8,8 @@ const defaultConfig: ConfigState = {
   enable_auto_archive: false,
   save_screenshots_locally: false,
   save_mhtml_locally: false,
+  save_singlefile_locally: false,
+  singlefile_extension_id: '',
 };
 
 export async function getConfig(): Promise<ConfigState> {
@@ -19,6 +21,8 @@ export async function getConfig(): Promise<ConfigState> {
     'enable_auto_archive',
     'save_screenshots_locally',
     'save_mhtml_locally',
+    'save_singlefile_locally',
+    'singlefile_extension_id',
   ]);
   const sync = await browser.storage.sync.get(['config_archiveBoxBaseUrl']);
 
@@ -32,6 +36,8 @@ export async function getConfig(): Promise<ConfigState> {
     enable_auto_archive: Boolean(local.enable_auto_archive),
     save_screenshots_locally: Boolean(local.save_screenshots_locally),
     save_mhtml_locally: Boolean(local.save_mhtml_locally),
+    save_singlefile_locally: Boolean(local.save_singlefile_locally),
+    singlefile_extension_id: String(local.singlefile_extension_id || ''),
   };
 }
 

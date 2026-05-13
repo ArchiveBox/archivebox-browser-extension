@@ -11,7 +11,7 @@ export default defineConfig({
       'storage',
       'activeTab',
       'contextMenus',
-      ...(browser === 'chrome' ? ['pageCapture'] : []),
+      ...(['chrome', 'edge'].includes(browser) ? ['pageCapture'] : []),
     ],
     optional_permissions: [
       'cookies',
@@ -54,14 +54,16 @@ export default defineConfig({
         },
       },
     },
-    browser_specific_settings: {
-      gecko: {
-        id: 'archivebox@tjhorner.dev',
-        data_collection_permissions: {
-          required: ['browsingActivity'],
-          optional: ['bookmarksInfo', 'websiteContent'],
+    ...(browser === 'firefox' ? {
+      browser_specific_settings: {
+        gecko: {
+          id: 'archivebox@tjhorner.dev',
+          data_collection_permissions: {
+            required: ['browsingActivity'],
+            optional: ['bookmarksInfo', 'websiteContent'],
+          },
         },
       },
-    },
+    } : {}),
   }),
 });

@@ -18,6 +18,7 @@ import {
 import { strToU8, zipSync } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { addToArchiveBox } from '@/src/lib/archivebox';
+import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { loadBookmarkSnapshots, loadHistorySnapshots } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
 import {
@@ -28,8 +29,10 @@ import {
   snapshotJsonContent,
 } from '@/src/lib/downloads';
 import {
+  readSnapshotSingleFileBlob,
   readSnapshotMhtmlBlob,
   readSnapshotScreenshotBlob,
+  snapshotSingleFilePath,
   snapshotMhtmlPath,
   snapshotScreenshotPath,
 } from '@/src/lib/screenshotStorage';
@@ -57,7 +60,7 @@ type PersonaSettingKey = keyof Persona['settings'];
 type SavedUrlSortKey = 'date' | 'url' | 'tags' | 'sync';
 type SortDirection = 'asc' | 'desc';
 type OptionTab = { id: Tab; label: string; Icon: LucideIcon };
-type LocalCaptureConfigKey = 'save_screenshots_locally' | 'save_mhtml_locally';
+type LocalCaptureConfigKey = 'save_screenshots_locally' | 'save_mhtml_locally' | 'save_singlefile_locally';
 type MhtmlViewerState = {
   error?: string;
   html?: string;
@@ -72,6 +75,14 @@ type ScreenshotViewerState = {
   error?: string;
   loading: boolean;
   objectUrl?: string;
+  snapshot?: Snapshot;
+  title?: string;
+};
+type HtmlViewerState = {
+  blob?: Blob;
+  error?: string;
+  html?: string;
+  loading: boolean;
   snapshot?: Snapshot;
   title?: string;
 };
@@ -176,6 +187,16 @@ function snapshotMhtmlDownloadName(snapshot: Snapshot): string {
   return `${snapshot.timestamp.slice(0, 10).replaceAll('-', '')}-${safeFileSegment(host)}-${safeFileSegment(snapshot.id)}-snapshot.mhtml`;
 }
 
+function snapshotSingleFileDownloadName(snapshot: Snapshot): string {
+  let host = 'unknown';
+  try {
+    host = new URL(snapshot.url).hostname;
+  } catch {
+    host = snapshot.title || snapshot.id;
+  }
+  return snapshot.singlefile?.filename || `${snapshot.timestamp.slice(0, 10).replaceAll('-', '')}-${safeFileSegment(host)}-${safeFileSegment(snapshot.id)}-singlefile.html`;
+}
+
 function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -257,20 +278,26 @@ function SnapshotScreenshotThumb({ snapshot }: { snapshot: Snapshot }) {
   );
 }
 
-function SnapshotMhtmlTitleLink({ snapshot }: { snapshot: Snapshot }) {
+function SnapshotArchiveTitleLink({ snapshot }: { snapshot: Snapshot }) {
   const title = snapshot.title || 'Untitled';
 
-  if (!snapshot.mhtml?.path) {
+  const capture = snapshot.singlefile?.path
+    ? { view: 'singlefile', label: 'SingleFile HTML', path: snapshot.singlefile.path }
+    : snapshot.mhtml?.path
+      ? { view: 'mhtml', label: 'MHTML', path: snapshot.mhtml.path }
+      : null;
+
+  if (!capture) {
     return <strong>{title}</strong>;
   }
 
   return (
     <a
       className="saved-url-mhtml-link"
-      href={extensionUrl(`/options.html?mhtml=${encodeURIComponent(snapshot.id)}`)}
+      href={extensionUrl(`/options.html?${capture.view}=${encodeURIComponent(snapshot.id)}`)}
       target="_blank"
       rel="noopener noreferrer"
-      title={`Open local MHTML snapshot: ${snapshot.mhtml?.path || ''}`}
+      title={`Open local ${capture.label} snapshot: ${capture.path}`}
     >
       <strong>{title}</strong>
     </a>
@@ -416,6 +443,108 @@ function MhtmlViewer({ snapshotId }: { snapshotId: string }) {
   );
 }
 
+function SingleFileViewer({ snapshotId }: { snapshotId: string }) {
+  const [state, setState] = useState<HtmlViewerState>({ loading: true });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSingleFile() {
+      setState({ loading: true });
+      try {
+        const snapshots = await getSnapshots();
+        const snapshot = snapshots.find((item) => item.id === snapshotId);
+        if (!snapshot) throw new Error('Saved URL not found');
+        const blob = await readSnapshotSingleFileBlob(snapshot.singlefile);
+        if (!blob) throw new Error('Local SingleFile HTML snapshot not found');
+
+        const html = await blob.text();
+        if (!cancelled) {
+          setState({
+            blob,
+            html,
+            loading: false,
+            snapshot,
+            title: snapshot.title || 'SingleFile HTML Snapshot',
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setState({
+            error: (error as Error).message,
+            loading: false,
+          });
+        }
+      }
+    }
+
+    loadSingleFile();
+    return () => {
+      cancelled = true;
+    };
+  }, [snapshotId]);
+
+  function exportSingleFile() {
+    if (!state.blob || !state.snapshot) return;
+    downloadBlob(state.blob, snapshotSingleFileDownloadName(state.snapshot));
+  }
+
+  useEffect(() => {
+    if (!state.blob || !state.snapshot) return undefined;
+
+    function handleSaveShortcut(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return;
+      event.preventDefault();
+      exportSingleFile();
+    }
+
+    window.addEventListener('keydown', handleSaveShortcut, { capture: true });
+    return () => window.removeEventListener('keydown', handleSaveShortcut, { capture: true });
+  }, [state.blob, state.snapshot]);
+
+  const backUrl = extensionUrl(`/options.html?highlight=${encodeURIComponent(snapshotId)}`);
+  const title = state.title || state.snapshot?.title || 'SingleFile HTML Snapshot';
+  const singlefile = state.snapshot?.singlefile;
+
+  return (
+    <main className="app mhtml-viewer-page">
+      <header className="mhtml-viewer-header">
+        <div className="mhtml-viewer-header__text">
+          <p>Local SingleFile HTML Snapshot</p>
+          <h1>{title}</h1>
+          {state.snapshot ? (
+            <a href={state.snapshot.url} target="_blank" rel="noreferrer">{state.snapshot.url}</a>
+          ) : null}
+        </div>
+        <div className="mhtml-viewer-header__actions">
+          {singlefile ? <span className="status">{Math.ceil(singlefile.size / 1024)} KB</span> : null}
+          <a className="button-link" href={backUrl}>Saved URLs</a>
+          <button className="icon-button" type="button" onClick={exportSingleFile} disabled={!state.blob}>
+            <Download size={15} />
+            Export HTML
+          </button>
+        </div>
+      </header>
+
+      {state.loading ? <div className="mhtml-viewer-empty">Loading local SingleFile HTML snapshot...</div> : null}
+      {state.error ? (
+        <div className="status error">
+          <AlertTriangle size={14} />
+          {state.error}
+        </div>
+      ) : null}
+      {state.html ? (
+        <iframe
+          className="mhtml-viewer-frame"
+          sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+          srcDoc={state.html}
+          title={title}
+        />
+      ) : null}
+    </main>
+  );
+}
+
 function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
   const [state, setState] = useState<ScreenshotViewerState>({ loading: true });
 
@@ -551,6 +680,10 @@ export default function OptionsApp() {
   if (mhtmlSnapshotId) {
     return <MhtmlViewer snapshotId={mhtmlSnapshotId} />;
   }
+  const singleFileSnapshotId = params.get('singlefile');
+  if (singleFileSnapshotId) {
+    return <SingleFileViewer snapshotId={singleFileSnapshotId} />;
+  }
   return <OptionsMain />;
 }
 
@@ -670,8 +803,6 @@ function OptionsMain() {
 
   const tags = useMemo(() => uniqueTags(snapshots), [snapshots]);
   const hasSavedScreenshots = useMemo(() => snapshots.some((snapshot) => Boolean(snapshot.screenshot?.path)), [snapshots]);
-  const supportsMhtmlCapture = browser.runtime.getURL('').startsWith('chrome-extension://');
-
   const tagCounts = useMemo(() => {
     const counts = new Map<string, number>();
     visibleSnapshots.forEach((snapshot) => {
@@ -753,7 +884,7 @@ function OptionsMain() {
   }
 
   async function exportSelectedLocalArtifacts(
-    artifact: 'screenshot' | 'mhtml',
+    artifact: 'screenshot' | 'mhtml' | 'singlefile',
     readBlob: (snapshot: Snapshot) => Promise<Blob | null>,
     downloadName: (snapshot: Snapshot) => string,
   ) {
@@ -773,15 +904,17 @@ function OptionsMain() {
     }
 
     if (downloaded === 0) {
-      setSavedUrlStatus({ kind: 'warning', text: `No selected snapshots have ${artifact === 'screenshot' ? 'screenshots' : 'MHTML snapshots'}` });
+      const artifactLabel = artifact === 'screenshot' ? 'screenshots' : artifact === 'mhtml' ? 'MHTML snapshots' : 'SingleFile HTML snapshots';
+      setSavedUrlStatus({ kind: 'warning', text: `No selected snapshots have ${artifactLabel}` });
       return;
     }
 
+    const artifactLabel = artifact === 'screenshot' ? 'screenshots' : artifact === 'mhtml' ? 'MHTML snapshots' : 'SingleFile HTML snapshots';
     setSavedUrlStatus({
       kind: missing > 0 ? 'warning' : 'success',
       text: missing > 0
-        ? `Downloaded ${downloaded} ${artifact === 'screenshot' ? 'screenshots' : 'MHTML snapshots'}; ${missing} missing`
-        : `Downloaded ${downloaded} ${artifact === 'screenshot' ? 'screenshots' : 'MHTML snapshots'}`,
+        ? `Downloaded ${downloaded} ${artifactLabel}; ${missing} missing`
+        : `Downloaded ${downloaded} ${artifactLabel}`,
     });
   }
 
@@ -798,6 +931,14 @@ function OptionsMain() {
       'mhtml',
       (snapshot) => readSnapshotMhtmlBlob(snapshot.mhtml),
       snapshotMhtmlDownloadName,
+    );
+  }
+
+  async function exportSelectedSingleFile() {
+    await exportSelectedLocalArtifacts(
+      'singlefile',
+      (snapshot) => readSnapshotSingleFileBlob(snapshot.singlefile),
+      snapshotSingleFileDownloadName,
     );
   }
 
@@ -826,6 +967,14 @@ function OptionsMain() {
       const mhtmlBlob = await readSnapshotMhtmlBlob(snapshot.mhtml);
       if (mhtmlBlob) {
         files[snapshotMhtmlPath(snapshot)] = await blobToUint8Array(mhtmlBlob);
+        includedArtifacts += 1;
+      } else {
+        missingArtifacts += 1;
+      }
+
+      const singleFileBlob = await readSnapshotSingleFileBlob(snapshot.singlefile);
+      if (singleFileBlob) {
+        files[snapshotSingleFilePath(snapshot)] = await blobToUint8Array(singleFileBlob);
         includedArtifacts += 1;
       } else {
         missingArtifacts += 1;
@@ -999,7 +1148,7 @@ function OptionsMain() {
 
   async function requestMhtmlCapturePermission(): Promise<boolean> {
     if (!supportsMhtmlCapture) {
-      setLocalCaptureStatus({ kind: 'warning', text: 'MHTML capture is only available in Chrome / Chromium' });
+      setLocalCaptureStatus({ kind: 'warning', text: mhtmlUnsupportedMessage });
       return false;
     }
     return true;
@@ -1016,8 +1165,10 @@ function OptionsMain() {
 
     if (!enabled) {
       const otherLocalCaptureEnabled = key === 'save_screenshots_locally'
-        ? config.save_mhtml_locally
-        : config.save_screenshots_locally;
+        ? config.save_mhtml_locally || config.save_singlefile_locally
+        : key === 'save_mhtml_locally'
+          ? config.save_screenshots_locally || config.save_singlefile_locally
+          : config.save_screenshots_locally || config.save_mhtml_locally;
       if (!otherLocalCaptureEnabled) {
         await browser.permissions.remove({ permissions: ['unlimitedStorage'] }).catch(() => false);
       }
@@ -1337,6 +1488,7 @@ function OptionsMain() {
                     <button onClick={() => exportSelectedSnapshots('json')} role="menuitem">JSON</button>
                     <button onClick={exportSelectedScreenshots} role="menuitem">PNG</button>
                     <button onClick={exportSelectedMhtml} role="menuitem">MHTML</button>
+                    <button onClick={exportSelectedSingleFile} role="menuitem">SingleFile HTML</button>
                     <button onClick={exportSelectedZip} role="menuitem">ZIP</button>
                   </div>
                 )}
@@ -1428,7 +1580,7 @@ function OptionsMain() {
                             {hasSavedScreenshots ? <SnapshotScreenshotThumb snapshot={snapshot} /> : null}
                             <div className="saved-url-title-row">
                               <div>
-                                <SnapshotMhtmlTitleLink snapshot={snapshot} />
+                                <SnapshotArchiveTitleLink snapshot={snapshot} />
                                 <div className="saved-url-url-row">
                                   <SnapshotFavicon url={snapshot.favIconUrl} />
                                   <a className="snapshot-url" href={snapshot.url} target="_blank" rel="noopener noreferrer">
@@ -1535,12 +1687,31 @@ function OptionsMain() {
           <label className="toggle">
             <input
               type="checkbox"
-              checked={config.save_mhtml_locally}
+              checked={supportsMhtmlCapture && config.save_mhtml_locally}
               disabled={!supportsMhtmlCapture}
               onChange={(event) => updateLocalCaptureSetting('save_mhtml_locally', event.currentTarget.checked)}
             />
             Save MHTML snapshots locally
           </label>
+          {!supportsMhtmlCapture ? (
+            <p className="help-text">{mhtmlUnsupportedMessage}</p>
+          ) : null}
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={config.save_singlefile_locally}
+              onChange={(event) => updateLocalCaptureSetting('save_singlefile_locally', event.currentTarget.checked)}
+            />
+            Save SingleFile HTML snapshots locally
+          </label>
+          <Field label="SingleFile extension ID">
+            <input
+              value={config.singlefile_extension_id || ''}
+              onChange={(event) => saveConfig({ singlefile_extension_id: event.currentTarget.value.trim() })}
+              placeholder={defaultSingleFileExtensionId}
+            />
+          </Field>
+          <p className="help-text">{singleFileCaptureUnavailableMessage} Leave the extension ID blank to use the default SingleFile Web Store / Add-ons ID.</p>
           <StatusBadge status={localCaptureStatus} />
           <div className="section-divider" />
           <SectionHeader title="Automatic Archiving" detail="Automatically archive visited pages whose URLs match your patterns." />
