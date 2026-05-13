@@ -12,7 +12,7 @@ import type { ArchiveDepth, RuntimeMessage, RuntimeResponse, Snapshot } from '@/
 import './style.css';
 
 let root: ReactDOM.Root | null = null;
-let host: HTMLDivElement | null = null;
+let host: HTMLElement | null = null;
 let overlayUi: ShadowRootContentScriptUi<ReactDOM.Root> | null = null;
 let contentScriptContext: ContentScriptContext;
 const testBridgeEnabled = new URLSearchParams(window.location.search).has('archivebox_test');
@@ -497,7 +497,7 @@ async function showOverlay() {
     append: (_anchor, ui) => document.documentElement.appendChild(ui),
     onMount: (container, _shadow, shadowHost) => {
       shadowHost.id = 'archivebox-extension-root';
-      host = container as HTMLDivElement;
+      host = container;
       root = ReactDOM.createRoot(container);
       root.render(<ArchiveBoxOverlay />);
       return root;
