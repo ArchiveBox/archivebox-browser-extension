@@ -240,7 +240,7 @@ async function extensionHasPermission(context: BrowserContext, extensionId: stri
   const granted = await page.evaluate(async (permissionName) => {
     const extensionApi = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
     return await new Promise<boolean>((resolve) => {
-      extensionApi.permissions.contains({ permissions: [permissionName as Browser.permissions.Permission] }, resolve);
+      extensionApi.permissions.contains({ permissions: [permissionName as Browser.runtime.ManifestPermission] }, resolve);
     });
   }, permission);
   await page.close();
