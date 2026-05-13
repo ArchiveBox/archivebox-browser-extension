@@ -9,6 +9,7 @@ export type Snapshot = {
   favIconUrl?: string | null;
   depth?: ArchiveDepth;
   screenshot?: SnapshotScreenshot;
+  mhtml?: SnapshotMhtml;
 };
 
 export type SnapshotScreenshot = {
@@ -18,6 +19,14 @@ export type SnapshotScreenshot = {
   capturedAt: string;
   width: number;
   height: number;
+};
+
+export type SnapshotMhtml = {
+  storage: 'opfs';
+  path: string;
+  mimeType: 'multipart/related';
+  capturedAt: string;
+  size: number;
 };
 
 export type PersonaSettings = {
@@ -55,6 +64,8 @@ export type ConfigState = {
   match_urls: string;
   exclude_urls: string;
   enable_auto_archive: boolean;
+  save_screenshots_locally: boolean;
+  save_mhtml_locally: boolean;
 };
 
 export type ArchiveboxAddMessage = {
@@ -85,6 +96,7 @@ export type TestApiKeyMessage = {
 export type OpenOptionsMessage = {
   type: 'open_options';
   id?: string;
+  view?: 'highlight' | 'screenshot' | 'mhtml';
 };
 
 export type OpenArchiveBoxSnapshotMessage = {
@@ -102,6 +114,11 @@ export type HideOverlayMessage = {
 
 export type CaptureSnapshotScreenshotMessage = {
   type: 'capture_snapshot_screenshot';
+  snapshotId: string;
+};
+
+export type CaptureSnapshotMhtmlMessage = {
+  type: 'capture_snapshot_mhtml';
   snapshotId: string;
 };
 
@@ -131,6 +148,7 @@ export type RuntimeMessage =
   | ShowOverlayMessage
   | HideOverlayMessage
   | CaptureSnapshotScreenshotMessage
+  | CaptureSnapshotMhtmlMessage
   | ScreenshotGetMetricsMessage
   | ScreenshotScrollMessage
   | ScreenshotRestoreScrollMessage;
@@ -141,4 +159,5 @@ export type RuntimeResponse = {
   errorMessage?: string;
   user_id?: string | number;
   screenshot?: SnapshotScreenshot;
+  mhtml?: SnapshotMhtml;
 };

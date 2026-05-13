@@ -64,6 +64,17 @@ function unsavedSnapshot(): Snapshot {
   return createSnapshot(window.location.href, [], document.title, getPageFaviconUrl());
 }
 
+function setOverlayHiddenForCapture(hidden: boolean) {
+  host?.classList.toggle('archivebox-extension-root--capturing', hidden);
+}
+
+async function waitForOverlayHiddenForCapture() {
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  host?.getBoundingClientRect();
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+}
+
 function ArchiveBoxOverlay() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [allTags, setAllTags] = useState<string[]>([]);
@@ -230,6 +241,51 @@ function ArchiveBoxOverlay() {
     }
   }
 
+  function openCaptureView(view: 'screenshot' | 'mhtml') {
+    if (!snapshot?.id) return;
+    browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
+      type: 'open_options',
+      id: snapshot.id,
+      view,
+    });
+  }
+
+  async function captureLocalArtifact(kind: 'screenshot' | 'mhtml') {
+    const { currentSnapshot } = await getCurrentSnapshot();
+    if (kind === 'screenshot' && currentSnapshot.screenshot) {
+      openCaptureView('screenshot');
+      return;
+    }
+    if (kind === 'mhtml' && currentSnapshot.mhtml) {
+      openCaptureView('mhtml');
+      return;
+    }
+
+    setStatus(`Saving local ${kind === 'screenshot' ? 'screenshot' : 'MHTML snapshot'}...`);
+    setOk(null);
+    setOverlayHiddenForCapture(true);
+    await waitForOverlayHiddenForCapture();
+    const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
+      type: kind === 'screenshot' ? 'capture_snapshot_screenshot' : 'capture_snapshot_mhtml',
+      snapshotId: currentSnapshot.id,
+    }).finally(() => setOverlayHiddenForCapture(false));
+
+    if (!response.ok) {
+      const errorMessage = response.errorMessage || response.error || 'Unknown error';
+      setOk(false);
+      setStatus(`Failed to save local ${kind === 'screenshot' ? 'screenshot' : 'MHTML snapshot'}: ${errorMessage}`);
+      await refresh();
+      return;
+    }
+
+    const snapshots = await getSnapshots();
+    const nextSnapshot = snapshots.find((item) => item.id === currentSnapshot.id) || currentSnapshot;
+    setSnapshot({ ...nextSnapshot });
+    setLocalStatus('saved');
+    setOk(true);
+    setStatus(`Saved local ${kind === 'screenshot' ? 'screenshot' : 'MHTML snapshot'}`);
+  }
+
   async function addTag(tag: string) {
     if (!snapshot || snapshot.tags.includes(tag)) return;
     setInput('');
@@ -294,7 +350,22 @@ function ArchiveBoxOverlay() {
       </div>
 
       <div className="archivebox-overlay__header">
-        <span className="archivebox-overlay__header-spacer" />
+        <div className="archivebox-overlay__capture-actions">
+          <button
+            className={`archivebox-overlay__capture-button${snapshot?.screenshot ? ' archivebox-overlay__capture-button--saved' : ''}`}
+            onClick={() => captureLocalArtifact('screenshot')}
+            title={snapshot?.screenshot ? 'Open saved screenshot' : 'Save a screenshot for this URL'}
+          >
+            {snapshot?.screenshot ? '✓ Screenshot' : 'Screenshot'}
+          </button>
+          <button
+            className={`archivebox-overlay__capture-button${snapshot?.mhtml ? ' archivebox-overlay__capture-button--saved' : ''}`}
+            onClick={() => captureLocalArtifact('mhtml')}
+            title={snapshot?.mhtml ? 'Open saved MHTML snapshot' : 'Save an MHTML snapshot for this URL'}
+          >
+            {snapshot?.mhtml ? '✓ MHTML' : 'MHTML'}
+          </button>
+        </div>
         <div className="archivebox-overlay__crawl">
           <button
             className="archivebox-overlay__crawl-button"

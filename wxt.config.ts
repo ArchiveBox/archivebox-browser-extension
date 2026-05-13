@@ -3,7 +3,7 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifestVersion: 3,
-  manifest: {
+  manifest: ({ browser }) => ({
     name: 'ArchiveBox',
     description: 'Collect URLs and preserve them using a remote ArchiveBox server',
     version: '3.0.1',
@@ -11,9 +11,15 @@ export default defineConfig({
       'storage',
       'activeTab',
       'contextMenus',
+      ...(browser === 'chrome' ? ['pageCapture'] : []),
+    ],
+    optional_permissions: [
+      'cookies',
+      'history',
+      'bookmarks',
+      'tabs',
       'unlimitedStorage',
     ],
-    optional_permissions: ['cookies', 'history', 'bookmarks', 'tabs'],
     host_permissions: ['<all_urls>'],
     web_accessible_resources: [
       {
@@ -57,5 +63,5 @@ export default defineConfig({
         },
       },
     },
-  },
+  }),
 });

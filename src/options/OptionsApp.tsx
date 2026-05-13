@@ -15,12 +15,25 @@ import {
   UserRoundCog,
   type LucideIcon,
 } from 'lucide-react';
+import { strToU8, zipSync } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { addToArchiveBox } from '@/src/lib/archivebox';
 import { loadBookmarkSnapshots, loadHistorySnapshots } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
-import { downloadCsv, downloadJson } from '@/src/lib/downloads';
-import { readSnapshotScreenshotBlob } from '@/src/lib/screenshotStorage';
+import {
+  archiveboxExportBaseName,
+  downloadCsv,
+  downloadJson,
+  snapshotCsvContent,
+  snapshotJsonContent,
+} from '@/src/lib/downloads';
+import {
+  readSnapshotMhtmlBlob,
+  readSnapshotScreenshotBlob,
+  snapshotMhtmlPath,
+  snapshotScreenshotPath,
+} from '@/src/lib/screenshotStorage';
+import { renderMhtmlToHtml } from '@/src/lib/mhtml';
 import { createSnapshot, filterSnapshots, uniqueTags } from '@/src/lib/snapshots';
 import { matchingTagSuggestions } from '@/src/lib/tags';
 import {
@@ -44,6 +57,24 @@ type PersonaSettingKey = keyof Persona['settings'];
 type SavedUrlSortKey = 'date' | 'url' | 'tags' | 'sync';
 type SortDirection = 'asc' | 'desc';
 type OptionTab = { id: Tab; label: string; Icon: LucideIcon };
+type LocalCaptureConfigKey = 'save_screenshots_locally' | 'save_mhtml_locally';
+type MhtmlViewerState = {
+  error?: string;
+  html?: string;
+  loading: boolean;
+  partCount?: number;
+  rawMhtml?: string;
+  snapshot?: Snapshot;
+  title?: string;
+};
+type ScreenshotViewerState = {
+  blob?: Blob;
+  error?: string;
+  loading: boolean;
+  objectUrl?: string;
+  snapshot?: Snapshot;
+  title?: string;
+};
 
 const today = new Date();
 const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -132,7 +163,17 @@ function snapshotScreenshotDownloadName(snapshot: Snapshot): string {
   } catch {
     host = snapshot.title || snapshot.id;
   }
-  return `${snapshot.timestamp.slice(0, 10)}-${safeFileSegment(host)}-${safeFileSegment(snapshot.id)}-screenshot.png`;
+  return `${snapshot.timestamp.slice(0, 10).replaceAll('-', '')}-${safeFileSegment(host)}-${safeFileSegment(snapshot.id)}-screenshot.png`;
+}
+
+function snapshotMhtmlDownloadName(snapshot: Snapshot): string {
+  let host = 'unknown';
+  try {
+    host = new URL(snapshot.url).hostname;
+  } catch {
+    host = snapshot.title || snapshot.id;
+  }
+  return `${snapshot.timestamp.slice(0, 10).replaceAll('-', '')}-${safeFileSegment(host)}-${safeFileSegment(snapshot.id)}-snapshot.mhtml`;
 }
 
 function downloadBlob(blob: Blob, filename: string): void {
@@ -147,8 +188,27 @@ function downloadBlob(blob: Blob, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+async function blobToUint8Array(blob: Blob): Promise<Uint8Array> {
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+function uint8ArrayToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
 function extensionUrl(path: string): string {
   return (browser.runtime.getURL as (path: string) => string)(path);
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 function SnapshotFavicon({ url }: { url?: string | null }) {
@@ -180,16 +240,321 @@ function SnapshotScreenshotThumb({ snapshot }: { snapshot: Snapshot }) {
   }
 
   return (
-    <img
-      className="snapshot-screenshot-thumb"
-      src={objectUrl}
-      alt=""
-      loading="lazy"
-    />
+    <a
+      className="snapshot-screenshot-link"
+      href={extensionUrl(`/options.html?screenshot=${encodeURIComponent(snapshot.id)}`)}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`Open local screenshot: ${snapshot.screenshot?.path || ''}`}
+    >
+      <img
+        className="snapshot-screenshot-thumb"
+        src={objectUrl}
+        alt=""
+        loading="lazy"
+      />
+    </a>
+  );
+}
+
+function SnapshotMhtmlTitleLink({ snapshot }: { snapshot: Snapshot }) {
+  const title = snapshot.title || 'Untitled';
+
+  if (!snapshot.mhtml?.path) {
+    return <strong>{title}</strong>;
+  }
+
+  return (
+    <a
+      className="saved-url-mhtml-link"
+      href={extensionUrl(`/options.html?mhtml=${encodeURIComponent(snapshot.id)}`)}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`Open local MHTML snapshot: ${snapshot.mhtml?.path || ''}`}
+    >
+      <strong>{title}</strong>
+    </a>
+  );
+}
+
+function MhtmlViewer({ snapshotId }: { snapshotId: string }) {
+  const [state, setState] = useState<MhtmlViewerState>({ loading: true });
+  const [frameLoadCount, setFrameLoadCount] = useState(0);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMhtml() {
+      setState({ loading: true });
+      try {
+        const snapshots = await getSnapshots();
+        const snapshot = snapshots.find((item) => item.id === snapshotId);
+        if (!snapshot) throw new Error('Saved URL not found');
+        const blob = await readSnapshotMhtmlBlob(snapshot.mhtml);
+        if (!blob) throw new Error('Local MHTML snapshot not found');
+
+        const rawMhtml = await blob.text();
+        let html = '';
+        let title = snapshot.title || 'MHTML Snapshot';
+        let partCount = 0;
+        let error = '';
+
+        try {
+          const rendered = renderMhtmlToHtml(rawMhtml, snapshot.url);
+          html = rendered.html;
+          title = rendered.title || title;
+          partCount = rendered.partCount;
+        } catch (renderError) {
+          error = `Unable to render captured page preview: ${(renderError as Error).message}`;
+          html = [
+            '<!doctype html>',
+            '<html>',
+            '<head><title>MHTML Snapshot</title></head>',
+            '<body><pre style="white-space: pre-wrap; word-break: break-word;">',
+            escapeHtml(rawMhtml),
+            '</pre></body>',
+            '</html>',
+          ].join('');
+        }
+
+        if (!cancelled) {
+          setState({
+            error,
+            html,
+            loading: false,
+            partCount,
+            rawMhtml,
+            snapshot,
+            title,
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setState({
+            error: (error as Error).message,
+            loading: false,
+          });
+        }
+      }
+    }
+
+    loadMhtml();
+    return () => {
+      cancelled = true;
+    };
+  }, [snapshotId]);
+
+  function exportMhtml() {
+    if (!state.rawMhtml || !state.snapshot) return;
+    downloadBlob(
+      new Blob([state.rawMhtml], { type: 'multipart/related' }),
+      snapshotMhtmlDownloadName(state.snapshot),
+    );
+  }
+
+  useEffect(() => {
+    if (!state.rawMhtml || !state.snapshot) return undefined;
+
+    function handleSaveShortcut(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return;
+      event.preventDefault();
+      exportMhtml();
+    }
+
+    const frameDocument = frameRef.current?.contentDocument;
+    window.addEventListener('keydown', handleSaveShortcut, { capture: true });
+    frameDocument?.addEventListener('keydown', handleSaveShortcut, { capture: true });
+
+    return () => {
+      window.removeEventListener('keydown', handleSaveShortcut, { capture: true });
+      frameDocument?.removeEventListener('keydown', handleSaveShortcut, { capture: true });
+    };
+  }, [frameLoadCount, state.rawMhtml, state.snapshot]);
+
+  const backUrl = extensionUrl(`/options.html?highlight=${encodeURIComponent(snapshotId)}`);
+  const title = state.title || state.snapshot?.title || 'MHTML Snapshot';
+
+  return (
+    <main className="app mhtml-viewer-page">
+      <header className="mhtml-viewer-header">
+        <div className="mhtml-viewer-header__text">
+          <p>Local MHTML Snapshot</p>
+          <h1>{title}</h1>
+          {state.snapshot ? (
+            <a href={state.snapshot.url} target="_blank" rel="noreferrer">{state.snapshot.url}</a>
+          ) : null}
+        </div>
+        <div className="mhtml-viewer-header__actions">
+          {state.partCount ? <span className="status">{state.partCount} parts</span> : null}
+          <a className="button-link" href={backUrl}>Saved URLs</a>
+          <button className="icon-button" type="button" onClick={exportMhtml} disabled={!state.rawMhtml}>
+            <Download size={15} />
+            Export MHTML
+          </button>
+        </div>
+      </header>
+
+      {state.loading ? <div className="mhtml-viewer-empty">Loading local MHTML snapshot...</div> : null}
+      {state.error ? (
+        <div className={`status ${state.html ? 'warning' : 'error'}`}>
+          <AlertTriangle size={14} />
+          {state.error}
+        </div>
+      ) : null}
+      {state.html ? (
+        <iframe
+          ref={frameRef}
+          className="mhtml-viewer-frame"
+          onLoad={() => setFrameLoadCount((count) => count + 1)}
+          sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+          srcDoc={state.html}
+          title={title}
+        />
+      ) : null}
+    </main>
+  );
+}
+
+function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
+  const [state, setState] = useState<ScreenshotViewerState>({ loading: true });
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl = '';
+
+    async function loadScreenshot() {
+      setState({ loading: true });
+      try {
+        const snapshots = await getSnapshots();
+        const snapshot = snapshots.find((item) => item.id === snapshotId);
+        if (!snapshot) throw new Error('Saved URL not found');
+        const blob = await readSnapshotScreenshotBlob(snapshot.screenshot);
+        if (!blob) throw new Error('Local screenshot not found');
+
+        const nextObjectUrl = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(nextObjectUrl);
+          return;
+        }
+        objectUrl = nextObjectUrl;
+        setState({
+          blob,
+          loading: false,
+          objectUrl,
+          snapshot,
+          title: snapshot.title || 'Screenshot',
+        });
+      } catch (error) {
+        if (!cancelled) {
+          setState({
+            error: (error as Error).message,
+            loading: false,
+          });
+        }
+      }
+    }
+
+    loadScreenshot();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [snapshotId]);
+
+  function exportScreenshot() {
+    if (!state.blob || !state.snapshot) return;
+    downloadBlob(state.blob, snapshotScreenshotDownloadName(state.snapshot));
+  }
+
+  useEffect(() => {
+    if (!state.blob || !state.snapshot) return undefined;
+
+    function handleSaveShortcut(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return;
+      event.preventDefault();
+      exportScreenshot();
+    }
+
+    window.addEventListener('keydown', handleSaveShortcut, { capture: true });
+    return () => window.removeEventListener('keydown', handleSaveShortcut, { capture: true });
+  }, [state.blob, state.snapshot]);
+
+  const backUrl = extensionUrl(`/options.html?highlight=${encodeURIComponent(snapshotId)}`);
+  const title = state.title || state.snapshot?.title || 'Screenshot';
+  const screenshot = state.snapshot?.screenshot;
+  const screenshotHtml = state.objectUrl ? [
+    '<!doctype html>',
+    '<html>',
+    '<head>',
+    '<meta charset="utf-8">',
+    '<meta name="color-scheme" content="light">',
+    `<title>${escapeHtml(title)}</title>`,
+    '<style>',
+    'html,body{margin:0;min-height:100%;background:#1c1814;overflow-x:hidden;}',
+    'body{padding:0;}',
+    'img{display:block;width:100%;max-width:none;height:auto;background:#fff;}',
+    '</style>',
+    '</head>',
+    '<body>',
+    `<img src="${state.objectUrl}" alt="${escapeHtml(title)}">`,
+    '</body>',
+    '</html>',
+  ].join('') : '';
+
+  return (
+    <main className="app mhtml-viewer-page">
+      <header className="mhtml-viewer-header">
+        <div className="mhtml-viewer-header__text">
+          <p>Local Screenshot</p>
+          <h1>{title}</h1>
+          {state.snapshot ? (
+            <a href={state.snapshot.url} target="_blank" rel="noreferrer">{state.snapshot.url}</a>
+          ) : null}
+        </div>
+        <div className="mhtml-viewer-header__actions">
+          {screenshot ? <span className="status">{screenshot.width}x{screenshot.height}</span> : null}
+          <a className="button-link" href={backUrl}>Saved URLs</a>
+          <button className="icon-button" type="button" onClick={exportScreenshot} disabled={!state.blob}>
+            <Download size={15} />
+            Export PNG
+          </button>
+        </div>
+      </header>
+
+      {state.loading ? <div className="mhtml-viewer-empty">Loading local screenshot...</div> : null}
+      {state.error ? (
+        <div className="status error">
+          <AlertTriangle size={14} />
+          {state.error}
+        </div>
+      ) : null}
+      {screenshotHtml ? (
+        <iframe
+          className="mhtml-viewer-frame screenshot-viewer-frame"
+          sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+          srcDoc={screenshotHtml}
+          title={title}
+        />
+      ) : null}
+    </main>
   );
 }
 
 export default function OptionsApp() {
+  const params = new URLSearchParams(window.location.search);
+  const screenshotSnapshotId = params.get('screenshot');
+  if (screenshotSnapshotId) {
+    return <ScreenshotViewer snapshotId={screenshotSnapshotId} />;
+  }
+  const mhtmlSnapshotId = params.get('mhtml');
+  if (mhtmlSnapshotId) {
+    return <MhtmlViewer snapshotId={mhtmlSnapshotId} />;
+  }
+  return <OptionsMain />;
+}
+
+function OptionsMain() {
   const [tab, setTab] = useState<Tab>('urls');
   const [snapshots, setSnapshotsState] = useState<Snapshot[]>([]);
   const [selectedSnapshots, setSelectedSnapshots] = useState<Set<string>>(new Set());
@@ -199,6 +564,7 @@ export default function OptionsApp() {
   const [serverStatus, setServerStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [apiStatus, setApiStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [testStatus, setTestStatus] = useState<Status>({ kind: 'idle', text: '' });
+  const [localCaptureStatus, setLocalCaptureStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [savedUrlStatus, setSavedUrlStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [importStatus, setImportStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [cookieStatus, setCookieStatus] = useState<Status>({ kind: 'idle', text: '' });
@@ -303,6 +669,8 @@ export default function OptionsApp() {
   }, [highlightedSnapshotId, visibleSnapshots]);
 
   const tags = useMemo(() => uniqueTags(snapshots), [snapshots]);
+  const hasSavedScreenshots = useMemo(() => snapshots.some((snapshot) => Boolean(snapshot.screenshot?.path)), [snapshots]);
+  const supportsMhtmlCapture = browser.runtime.getURL('').startsWith('chrome-extension://');
 
   const tagCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -384,32 +752,96 @@ export default function OptionsApp() {
     else downloadJson(selectedSnapshotList);
   }
 
-  async function exportSelectedScreenshots() {
+  async function exportSelectedLocalArtifacts(
+    artifact: 'screenshot' | 'mhtml',
+    readBlob: (snapshot: Snapshot) => Promise<Blob | null>,
+    downloadName: (snapshot: Snapshot) => string,
+  ) {
     if (!selectedSnapshotList.length) return;
     setExportMenuOpen(false);
 
     let downloaded = 0;
     let missing = 0;
     for (const snapshot of selectedSnapshotList) {
-      const blob = await readSnapshotScreenshotBlob(snapshot.screenshot);
+      const blob = await readBlob(snapshot);
       if (!blob) {
         missing += 1;
         continue;
       }
-      downloadBlob(blob, snapshotScreenshotDownloadName(snapshot));
+      downloadBlob(blob, downloadName(snapshot));
       downloaded += 1;
     }
 
     if (downloaded === 0) {
-      setSavedUrlStatus({ kind: 'warning', text: 'No selected snapshots have screenshots' });
+      setSavedUrlStatus({ kind: 'warning', text: `No selected snapshots have ${artifact === 'screenshot' ? 'screenshots' : 'MHTML snapshots'}` });
       return;
     }
 
     setSavedUrlStatus({
       kind: missing > 0 ? 'warning' : 'success',
       text: missing > 0
-        ? `Downloaded ${downloaded} screenshots; ${missing} missing`
-        : `Downloaded ${downloaded} screenshots`,
+        ? `Downloaded ${downloaded} ${artifact === 'screenshot' ? 'screenshots' : 'MHTML snapshots'}; ${missing} missing`
+        : `Downloaded ${downloaded} ${artifact === 'screenshot' ? 'screenshots' : 'MHTML snapshots'}`,
+    });
+  }
+
+  async function exportSelectedScreenshots() {
+    await exportSelectedLocalArtifacts(
+      'screenshot',
+      (snapshot) => readSnapshotScreenshotBlob(snapshot.screenshot),
+      snapshotScreenshotDownloadName,
+    );
+  }
+
+  async function exportSelectedMhtml() {
+    await exportSelectedLocalArtifacts(
+      'mhtml',
+      (snapshot) => readSnapshotMhtmlBlob(snapshot.mhtml),
+      snapshotMhtmlDownloadName,
+    );
+  }
+
+  async function exportSelectedZip() {
+    if (!selectedSnapshotList.length) return;
+    setExportMenuOpen(false);
+    setSavedUrlStatus({ kind: 'idle', text: `Building ZIP export for ${selectedSnapshotList.length} snapshots...` });
+
+    const baseName = archiveboxExportBaseName();
+    const files: Record<string, Uint8Array> = {
+      [`${baseName}.csv`]: strToU8(snapshotCsvContent(selectedSnapshotList)),
+      [`${baseName}.json`]: strToU8(snapshotJsonContent(selectedSnapshotList)),
+    };
+    let includedArtifacts = 0;
+    let missingArtifacts = 0;
+
+    for (const snapshot of selectedSnapshotList) {
+      const screenshotBlob = await readSnapshotScreenshotBlob(snapshot.screenshot);
+      if (screenshotBlob) {
+        files[snapshotScreenshotPath(snapshot)] = await blobToUint8Array(screenshotBlob);
+        includedArtifacts += 1;
+      } else {
+        missingArtifacts += 1;
+      }
+
+      const mhtmlBlob = await readSnapshotMhtmlBlob(snapshot.mhtml);
+      if (mhtmlBlob) {
+        files[snapshotMhtmlPath(snapshot)] = await blobToUint8Array(mhtmlBlob);
+        includedArtifacts += 1;
+      } else {
+        missingArtifacts += 1;
+      }
+    }
+
+    const zipBytes = zipSync(files, { level: 6 });
+    downloadBlob(
+      new Blob([uint8ArrayToArrayBuffer(zipBytes)], { type: 'application/zip' }),
+      `${baseName}.zip`,
+    );
+    setSavedUrlStatus({
+      kind: missingArtifacts > 0 ? 'warning' : 'success',
+      text: missingArtifacts > 0
+        ? `Exported ZIP with ${includedArtifacts} local artifacts; ${missingArtifacts} missing`
+        : `Exported ZIP with ${includedArtifacts} local artifacts`,
     });
   }
 
@@ -542,6 +974,57 @@ export default function OptionsApp() {
       if (!granted) return;
     }
     await saveConfig({ enable_auto_archive: enabled });
+  }
+
+  async function requestLocalCaptureStorage(): Promise<void> {
+    const alreadyGranted = await browser.permissions.contains({ permissions: ['unlimitedStorage'] }).catch(() => false);
+    let unlimitedStorageGranted = alreadyGranted;
+    if (!alreadyGranted) {
+      unlimitedStorageGranted = await browser.permissions.request({ permissions: ['unlimitedStorage'] }).catch(() => false);
+    }
+
+    const storageManager = navigator.storage as StorageManager & {
+      persist?: () => Promise<boolean>;
+    };
+    const persistentStorage = await storageManager.persist?.().catch(() => false) || false;
+    setLocalCaptureStatus({
+      kind: 'success',
+      text: unlimitedStorageGranted
+        ? 'Local capture saving enabled with unlimited storage'
+        : persistentStorage
+          ? 'Local capture saving enabled with persistent storage'
+          : 'Local capture saving enabled',
+    });
+  }
+
+  async function requestMhtmlCapturePermission(): Promise<boolean> {
+    if (!supportsMhtmlCapture) {
+      setLocalCaptureStatus({ kind: 'warning', text: 'MHTML capture is only available in Chrome / Chromium' });
+      return false;
+    }
+    return true;
+  }
+
+  async function updateLocalCaptureSetting(key: LocalCaptureConfigKey, enabled: boolean) {
+    if (enabled && key === 'save_mhtml_locally' && !(await requestMhtmlCapturePermission())) return;
+
+    await saveConfig({ [key]: enabled });
+    if (enabled) {
+      await requestLocalCaptureStorage();
+      return;
+    }
+
+    if (!enabled) {
+      const otherLocalCaptureEnabled = key === 'save_screenshots_locally'
+        ? config.save_mhtml_locally
+        : config.save_screenshots_locally;
+      if (!otherLocalCaptureEnabled) {
+        await browser.permissions.remove({ permissions: ['unlimitedStorage'] }).catch(() => false);
+      }
+      setLocalCaptureStatus({ kind: 'idle', text: '' });
+    } else {
+      setLocalCaptureStatus({ kind: 'success', text: 'Local capture storage enabled' });
+    }
   }
 
   async function loadCookies() {
@@ -853,6 +1336,8 @@ export default function OptionsApp() {
                     <button onClick={() => exportSelectedSnapshots('csv')} role="menuitem">CSV</button>
                     <button onClick={() => exportSelectedSnapshots('json')} role="menuitem">JSON</button>
                     <button onClick={exportSelectedScreenshots} role="menuitem">PNG</button>
+                    <button onClick={exportSelectedMhtml} role="menuitem">MHTML</button>
+                    <button onClick={exportSelectedZip} role="menuitem">ZIP</button>
                   </div>
                 )}
               </div>
@@ -872,7 +1357,7 @@ export default function OptionsApp() {
               <StatusBadge status={savedUrlStatus} />
             </div>
             <div className="saved-url-table-wrap">
-              <table className="saved-url-table">
+              <table className={hasSavedScreenshots ? 'saved-url-table saved-url-table--with-screenshots' : 'saved-url-table'}>
                 <thead>
                   <tr>
                     <th className="saved-url-table__check">
@@ -940,10 +1425,10 @@ export default function OptionsApp() {
                         </td>
                         <td className="saved-url-main">
                           <div className="saved-url-main-layout">
-                            <SnapshotScreenshotThumb snapshot={snapshot} />
+                            {hasSavedScreenshots ? <SnapshotScreenshotThumb snapshot={snapshot} /> : null}
                             <div className="saved-url-title-row">
                               <div>
-                                <strong>{snapshot.title || 'Untitled'}</strong>
+                                <SnapshotMhtmlTitleLink snapshot={snapshot} />
                                 <div className="saved-url-url-row">
                                   <SnapshotFavicon url={snapshot.favIconUrl} />
                                   <a className="snapshot-url" href={snapshot.url} target="_blank" rel="noopener noreferrer">
@@ -1038,7 +1523,27 @@ export default function OptionsApp() {
             <a href="https://demo.archivebox.io/api/v1/docs" target="_blank" rel="noopener noreferrer">REST API docs</a>
           </div>
           <div className="section-divider" />
-          <SectionHeader title="Advanced Auto-Archive" detail="Automatically archive visited pages whose URLs match your patterns." />
+          <SectionHeader title="Advanced Archiving" detail="Control local captures and automatic archiving behavior." />
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={config.save_screenshots_locally}
+              onChange={(event) => updateLocalCaptureSetting('save_screenshots_locally', event.currentTarget.checked)}
+            />
+            Save full-page screenshots locally
+          </label>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={config.save_mhtml_locally}
+              disabled={!supportsMhtmlCapture}
+              onChange={(event) => updateLocalCaptureSetting('save_mhtml_locally', event.currentTarget.checked)}
+            />
+            Save MHTML snapshots locally
+          </label>
+          <StatusBadge status={localCaptureStatus} />
+          <div className="section-divider" />
+          <SectionHeader title="Automatic Archiving" detail="Automatically archive visited pages whose URLs match your patterns." />
           <label className="toggle">
             <input type="checkbox" checked={config.enable_auto_archive} onChange={(event) => updateAutoArchive(event.currentTarget.checked)} />
             Enable automatic archiving

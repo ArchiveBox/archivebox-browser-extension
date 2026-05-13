@@ -20,6 +20,10 @@
   mix-blend-mode: normal;
 }
 
+#archivebox-extension-root.archivebox-extension-root--capturing {
+  display: none !important;
+}
+
 .archivebox-overlay {
   position: relative;
   z-index: 2147483647;
@@ -48,8 +52,8 @@
   gap: 9px;
   align-items: start;
   margin-bottom: 8px;
-  border-radius: 6px;
-  border: 1px solid #ead0d0;
+  border: 0;
+  border-radius: 0;
   background: #fffaf7 !important;
   color: #241b1b;
   padding: 8px 68px 8px 8px;
@@ -120,23 +124,26 @@
 .archivebox-overlay__page code {
   display: block;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  white-space: normal;
 }
 
 .archivebox-overlay__page strong {
   color: #201819;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .archivebox-overlay__page code {
-  margin-top: 2px;
+  margin-top: 3px;
   color: #6f4b4b;
   background: transparent;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 11px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .archivebox-overlay__page-tags {
@@ -153,7 +160,7 @@
   height: 22px;
   min-height: 22px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1;
 }
@@ -176,7 +183,7 @@
   background: #f7eeee !important;
   color: #5a3030;
   padding: 0 7px;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1;
   text-decoration: none;
@@ -250,9 +257,13 @@ button.archivebox-overlay__tag-chip {
   background: transparent;
   color: #241b1b;
   padding: 0;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   outline: 0;
+}
+
+.archivebox-overlay__tag-chip--editing input::placeholder {
+  font-size: inherit;
 }
 
 .archivebox-overlay__header {
@@ -262,7 +273,10 @@ button.archivebox-overlay__tag-chip {
   align-items: center;
 }
 
-.archivebox-overlay__header-spacer {
+.archivebox-overlay__capture-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -314,7 +328,8 @@ button.archivebox-overlay__tag-chip {
 }
 
 .archivebox-overlay input,
-.archivebox-overlay__crawl-button {
+.archivebox-overlay__crawl-button,
+.archivebox-overlay__capture-button {
   min-width: 0;
   height: 32px;
   border: 1px solid #d8bebe;
@@ -322,6 +337,32 @@ button.archivebox-overlay__tag-chip {
   padding: 0 10px;
   color: #1d1d1d;
   background: #fff !important;
+}
+
+.archivebox-overlay__capture-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.archivebox-overlay__capture-button--saved {
+  border-color: #b7dfc7;
+  background: #e8f7ee !important;
+  color: #17683a;
+}
+
+.archivebox-overlay__capture-button:hover {
+  border-color: #a95656;
+  background: #f7eeee !important;
+}
+
+.archivebox-overlay__capture-button--saved:hover {
+  border-color: #8fcaa7;
+  background: #d9f1e3 !important;
 }
 
 .archivebox-overlay .archivebox-overlay__tag-chip--editing input {
@@ -333,7 +374,7 @@ button.archivebox-overlay__tag-chip {
   background: transparent;
   color: #241b1b;
   padding: 0;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   outline: 0;
 }
@@ -355,9 +396,13 @@ button.archivebox-overlay__tag-chip {
   color: #241b1b;
   padding: 0;
   box-shadow: none !important;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   outline: 0;
+}
+
+.archivebox-overlay .archivebox-tag-chip__input::placeholder {
+  font-size: inherit;
 }
 
 .archivebox-overlay .archivebox-tag-autocomplete {

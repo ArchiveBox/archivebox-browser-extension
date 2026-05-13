@@ -15,7 +15,15 @@ function csvEscape(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-export function downloadCsv(snapshots: Snapshot[]): void {
+export function exportDateSegment(date = new Date()): string {
+  return date.toISOString().slice(0, 10).replaceAll('-', '');
+}
+
+export function archiveboxExportBaseName(date = new Date()): string {
+  return `${exportDateSegment(date)}__archivebox_export`;
+}
+
+export function snapshotCsvContent(snapshots: Snapshot[]): string {
   const headers = ['id', 'timestamp', 'url', 'title', 'tags'];
   const csvRows = [
     headers.join(','),
@@ -28,17 +36,25 @@ export function downloadCsv(snapshots: Snapshot[]): void {
     ].join(',')),
   ];
 
+  return csvRows.join('\n');
+}
+
+export function snapshotJsonContent(snapshots: Snapshot[]): string {
+  return JSON.stringify(snapshots, null, 2);
+}
+
+export function downloadCsv(snapshots: Snapshot[]): void {
   downloadBlob(
-    new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' }),
-    `archivebox-export-${new Date().toISOString().split('T')[0]}.csv`,
+    new Blob([snapshotCsvContent(snapshots)], { type: 'text/csv;charset=utf-8;' }),
+    `${archiveboxExportBaseName()}.csv`,
   );
 }
 
 export function downloadJson(snapshots: Snapshot[]): void {
   downloadBlob(
-    new Blob([JSON.stringify(snapshots, null, 2)], {
+    new Blob([snapshotJsonContent(snapshots)], {
       type: 'application/json;charset=utf-8',
     }),
-    `archivebox-export-${new Date().toISOString().split('T')[0]}.json`,
+    `${archiveboxExportBaseName()}.json`,
   );
 }

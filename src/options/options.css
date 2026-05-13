@@ -406,6 +406,32 @@ code {
   stroke-width: 2.1;
 }
 
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  border: 1px solid var(--ab-rule-strong);
+  border-radius: 4px;
+  background: var(--ab-vellum);
+  color: var(--ab-ink);
+  padding: 5px 10px;
+  box-shadow: var(--ab-shadow-1);
+  font-family: var(--ab-font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+}
+
+.button-link:hover,
+.button-link:focus-visible {
+  border-color: var(--ab-ink-3);
+  background: var(--ab-paper-2);
+  color: var(--ab-ink);
+  text-decoration: none;
+}
+
 .export-menu {
   position: relative;
 }
@@ -547,10 +573,14 @@ code {
 
 .saved-url-main-layout {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 7px;
   align-items: center;
   min-width: 0;
+}
+
+.saved-url-table--with-screenshots .saved-url-main-layout {
+  grid-template-columns: 64px minmax(0, 1fr);
 }
 
 .snapshot-screenshot-thumb,
@@ -561,6 +591,20 @@ code {
   border-radius: 4px;
   background: var(--ab-paper-2);
   box-shadow: var(--ab-shadow-1);
+}
+
+.snapshot-screenshot-link {
+  display: block;
+  width: 64px;
+  height: 42px;
+  border-radius: 4px;
+  cursor: zoom-in;
+}
+
+.snapshot-screenshot-link:hover .snapshot-screenshot-thumb,
+.snapshot-screenshot-link:focus-visible .snapshot-screenshot-thumb {
+  border-color: var(--ab-oxblood);
+  box-shadow: 0 0 0 2px var(--ab-oxblood-wash), var(--ab-shadow-2);
 }
 
 .snapshot-screenshot-thumb {
@@ -671,6 +715,121 @@ code {
   white-space: nowrap;
 }
 
+.saved-url-mhtml-link {
+  display: block;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.saved-url-mhtml-link:hover strong,
+.saved-url-mhtml-link:focus-visible strong {
+  color: var(--ab-oxblood);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.mhtml-viewer-page {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100vh;
+  min-height: 100vh;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.mhtml-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--ab-rule-strong);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(253, 252, 248, 0.98), rgba(243, 240, 232, 0.94)),
+    var(--ab-vellum);
+  padding: 8px 10px;
+  box-shadow: var(--ab-shadow-2);
+}
+
+.mhtml-viewer-header__text {
+  min-width: 0;
+}
+
+.mhtml-viewer-header__text p {
+  margin: 0 0 2px;
+  color: var(--ab-ink-3);
+  font-family: var(--ab-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mhtml-viewer-header__text h1 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--ab-ink);
+  font-family: var(--ab-font-serif);
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mhtml-viewer-header__text a {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--ab-ink-3);
+  font-family: var(--ab-font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mhtml-viewer-header__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.mhtml-viewer-header__actions .status {
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.mhtml-viewer-empty {
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  border: 1px solid var(--ab-rule);
+  border-radius: 4px;
+  background: var(--ab-vellum);
+  color: var(--ab-ink-3);
+  padding: 0 12px;
+  font-family: var(--ab-font-mono);
+  font-size: 12px;
+}
+
+.mhtml-viewer-frame {
+  grid-row: 3;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  border: 1px solid var(--ab-rule-strong);
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: var(--ab-shadow-1);
+}
+
+.screenshot-viewer-frame {
+  overflow: auto;
+}
+
 .saved-url-url-row {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
@@ -730,7 +889,7 @@ code {
   height: 20px;
   min-height: 20px;
   padding: 0 6px;
-  font-size: 10.5px;
+  font-size: 12.5px;
 }
 
 .saved-url-tags .archivebox-tag-chip--add {
@@ -920,7 +1079,7 @@ code {
   padding: 2px 8px;
   box-shadow: none;
   font-family: var(--ab-font-sans);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -991,8 +1150,12 @@ code {
   box-shadow: none;
   padding: 0;
   color: var(--ab-ink);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
+}
+
+.tag-chip--editing input::placeholder {
+  font-size: inherit;
 }
 
 .tag-chip--editing input:focus {
@@ -1435,7 +1598,7 @@ code {
 .modal .toolbar .archivebox-tag-chip__input {
   height: 22px;
   min-height: 22px;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .modal-actions {

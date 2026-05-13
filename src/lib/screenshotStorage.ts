@@ -1,4 +1,4 @@
-import type { Snapshot, SnapshotScreenshot } from './types';
+import type { Snapshot, SnapshotMhtml, SnapshotScreenshot } from './types';
 
 function pathSafeSegment(value: string): string {
   return value
@@ -14,7 +14,7 @@ function snapshotDateSegment(snapshot: Snapshot): string {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
   const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return `${year}${month}${day}`;
 }
 
 function snapshotHostSegment(snapshot: Snapshot): string {
@@ -36,12 +36,65 @@ export function snapshotScreenshotPath(snapshot: Snapshot): string {
   ].join('/');
 }
 
+export function snapshotMhtmlPath(snapshot: Snapshot): string {
+  return [
+    'snapshots',
+    snapshotDateSegment(snapshot),
+    snapshotHostSegment(snapshot),
+    pathSafeSegment(snapshot.id),
+    'chrome_extension_mhtml',
+    'snapshot.mhtml',
+  ].join('/');
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function getDirectory(pathSegments: string[], create: boolean): Promise<FileSystemDirectoryHandle> {
   let directory = await navigator.storage.getDirectory();
   for (const segment of pathSegments) {
-    directory = await directory.getDirectoryHandle(segment, { create });
+    try {
+      directory = await directory.getDirectoryHandle(segment, { create });
+    } catch (error) {
+      throw new Error(`Failed to open local capture directory "${segment}": ${errorMessage(error)}`);
+    }
   }
   return directory;
+}
+
+async function writeBytesToFile(directory: FileSystemDirectoryHandle, fileName: string, bytes: ArrayBuffer): Promise<void> {
+  let fileHandle: FileSystemFileHandle;
+  try {
+    fileHandle = await directory.getFileHandle(fileName, { create: true });
+  } catch (error) {
+    throw new Error(`Failed to open local capture file "${fileName}": ${errorMessage(error)}`);
+  }
+
+  let writable: FileSystemWritableFileStream;
+  try {
+    writable = await fileHandle.createWritable();
+  } catch (error) {
+    throw new Error(`Failed to create local capture writer for "${fileName}": ${errorMessage(error)}`);
+  }
+
+  try {
+    await writable.write(bytes);
+  } catch (error) {
+    throw new Error(`Failed to write local capture file "${fileName}": ${errorMessage(error)}`);
+  } finally {
+    await writable.close().catch(() => undefined);
+  }
+}
+
+async function writeBlobToFile(directory: FileSystemDirectoryHandle, fileName: string, blob: Blob): Promise<void> {
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await blob.arrayBuffer();
+  } catch (error) {
+    throw new Error(`Failed to read local capture blob for "${fileName}": ${errorMessage(error)}`);
+  }
+  await writeBytesToFile(directory, fileName, bytes);
 }
 
 export async function writeSnapshotScreenshot(
@@ -56,10 +109,7 @@ export async function writeSnapshotScreenshot(
   if (!fileName) throw new Error('Invalid screenshot path');
 
   const directory = await getDirectory(segments, true);
-  const fileHandle = await directory.getFileHandle(fileName, { create: true });
-  const writable = await fileHandle.createWritable();
-  await writable.write(blob);
-  await writable.close();
+  await writeBlobToFile(directory, fileName, blob);
 
   return {
     storage: 'opfs',
@@ -71,9 +121,65 @@ export async function writeSnapshotScreenshot(
   };
 }
 
+export async function writeSnapshotMhtml(
+  snapshot: Snapshot,
+  content: string,
+): Promise<SnapshotMhtml> {
+  return writeSnapshotMhtmlBlob(snapshot, new Blob([content], { type: 'multipart/related' }));
+}
+
+export async function writeSnapshotMhtmlBlob(
+  snapshot: Snapshot,
+  blob: Blob,
+): Promise<SnapshotMhtml> {
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await blob.arrayBuffer();
+  } catch (error) {
+    throw new Error(`Failed to read generated MHTML data: ${errorMessage(error)}`);
+  }
+  return writeSnapshotMhtmlBytes(snapshot, bytes);
+}
+
+export async function writeSnapshotMhtmlBytes(
+  snapshot: Snapshot,
+  bytes: ArrayBuffer,
+): Promise<SnapshotMhtml> {
+  const path = snapshotMhtmlPath(snapshot);
+  const segments = path.split('/');
+  const fileName = segments.pop();
+  if (!fileName) throw new Error('Invalid MHTML path');
+
+  const directory = await getDirectory(segments, true);
+  await writeBytesToFile(directory, fileName, bytes);
+
+  return {
+    storage: 'opfs',
+    path,
+    mimeType: 'multipart/related',
+    capturedAt: new Date().toISOString(),
+    size: bytes.byteLength,
+  };
+}
+
 export async function readSnapshotScreenshotBlob(screenshot?: SnapshotScreenshot): Promise<Blob | null> {
   if (!screenshot?.path) return null;
   const segments = screenshot.path.split('/');
+  const fileName = segments.pop();
+  if (!fileName) return null;
+
+  try {
+    const directory = await getDirectory(segments, false);
+    const fileHandle = await directory.getFileHandle(fileName);
+    return await fileHandle.getFile();
+  } catch {
+    return null;
+  }
+}
+
+export async function readSnapshotMhtmlBlob(mhtml?: SnapshotMhtml): Promise<Blob | null> {
+  if (!mhtml?.path) return null;
+  const segments = mhtml.path.split('/');
   const fileName = segments.pop();
   if (!fileName) return null;
 

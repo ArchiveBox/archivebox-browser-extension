@@ -25,15 +25,28 @@ This is a browser extension that lets you send individual browser tabs or all UR
 
 #### Recent Changes
 
-- [x] update to manifest v3 to re-submit to Chrome web store
-- [x] added an admin view where you can see a list of all the URLs you've collected so far
-- [x] added ability to search admin view by url, timestamp, uuid, tags
-- [x] added the ability to export filtered URLs list from history as CSV and JSON 
-- [x] added the ability to import URLs from chrome history / bookmarks by daterange or filter query
-- [x] add the ability to edit extension config options, allowlist/denylist, etc. from options.html
-- [x] add the ability to test connection to ArchiveBox server
+- [x] updated the extension to Manifest v3 using WXT, React, and TypeScript
+- [x] added a Saved URLs view where you can see, search, sort, tag, sync, delete, and export the URLs you've collected so far
+- [x] added the ability to import URLs from browser history / bookmarks by date range or filter query
+- [x] added the ability to export selected URLs as CSV/JSON, selected screenshots as PNG, selected MHTML snapshots as `.mhtml`, or a ZIP bundle containing all selected snapshot data and local artifacts
+- [x] added extension-local full-page screenshot capture for saved URLs
+- [x] added extension-local MHTML capture for saved URLs on Chrome / Chromium browsers
+- [x] added the ability to edit extension config options, allowlist/denylist, ArchiveBox server URL, API key, and authentication profiles from the options page
+- [x] added the ability to test the connection to your ArchiveBox server
 
 
+
+
+## Local Captures
+
+When local capture saving is enabled in the options page, the extension stores capture artifacts in the browser's extension-local OPFS storage before the popup is shown:
+
+- Full-page screenshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_screenshot/screenshot.png`
+- MHTML snapshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_mhtml/snapshot.mhtml`
+
+Screenshots are shown as thumbnails in the Saved URLs table when at least one saved URL has a screenshot, and can be exported as PNG from the Export menu. MHTML snapshots can also be exported from the same menu. The ZIP export includes the selected CSV/JSON metadata plus local artifacts under the same `snapshots/YYYYMMDD/example.com/{uuid}/...` paths used in OPFS. When an MHTML snapshot is available, the Saved URLs table title opens an extension-local viewer for that snapshot.
+
+MHTML capture uses Chrome's `pageCapture.saveAsMHTML()` extension API and is available in Chrome / Chromium builds. Firefox builds still save the URL and screenshot, but skip MHTML capture because the Chrome page capture API is not available there.
 
 
 ## Setup
@@ -47,9 +60,9 @@ This is a browser extension that lets you send individual browser tabs or all UR
     # (make sure to restart the server after if you apply this change)
     ```
     <img width="400" alt="Screenshot of ArchiveBox CLI configuring PUBLIC_ADD_VIEW=True" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/b0dc715c-4f88-49dd-a019-ffd65ebcc7c4">
-4. Configure the extension to point to your ArchiveBox server's base URL (e.g. `http://localhost:8000`, `https://archivebox.example.com`, etc.)  
+3. Configure the extension to point to your ArchiveBox server's base URL (e.g. `http://localhost:8000`, `https://archivebox.example.com`, etc.)  
     <img width="500" alt="Screenshot of extension config area: example with localhost" src="https://github.com/user-attachments/assets/308c4462-ca09-434f-89a6-3f6bac404be2" align="top"><img width="250" alt="Screenshot of extension config area: example with demo" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/82d6ae08-6327-45ef-a536-cb775ec58b41" align="top">
-5. ✅ *Test it out by right-clicking on any page and selecting `Save to ArchiveBox`, or by clicking the extension icon in the menubar.*  
+4. ✅ *Test it out by right-clicking on any page and selecting `Save to ArchiveBox`, or by clicking the extension icon in the menubar.*  
     <img width="400" alt="Screenshot of right-clicking to add a page to ArchiveBox using extension" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/6c0b8125-e1b9-4c64-b79a-c74a8d85c176" align="top"><img width="600" alt="Screenshot of ArchiveBox server with added URL" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/ab2dc48a-e2cd-4bef-aea3-553a91bc70c9" align="top">
 
 ---
@@ -58,22 +71,39 @@ This is a browser extension that lets you send individual browser tabs or all UR
 
 *✨ Originally contributed by [TJ Horner (@tjhorner)](https://github.com/tjhorner), now maintained by [@benmuth](https://github.com/benmuth) and the [ArchiveBox](https://github.com/ArchiveBox) team.*
 
-If you wish to contribute to (or just build for yourself) this extension, you will need to download and install [Node.js](https://nodejs.org/en/).
+If you wish to contribute to (or just build for yourself) this extension, you will need to download and install [Node.js](https://nodejs.org/en/) and [pnpm](https://pnpm.io/).
 
 ```bash
 git clone https://github.com/ArchiveBox/archivebox-browser-extension
 cd archivebox-browser-extension/
 
-# There is no build step with v2.1.3 and above, the project uses vanilla ESM JS.
-# Simply load the entire directory as an unpacked extension in Chrome
+pnpm install
+pnpm compile
+pnpm build
+pnpm build:firefox
 ```
 
-Load the root repo folder into Chrome or Firefox using their [Load Unpacked Extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) UI.
+For local development:
+
+```bash
+pnpm dev           # Chrome / Chromium
+pnpm dev:firefox   # Firefox
+```
+
+For a production-style local build, load `.output/chrome-mv3` into Chrome / Chromium using the [Load Unpacked Extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) UI, or load `.output/firefox-mv3` into Firefox using `about:debugging`.
+
+To create store upload bundles:
+
+```bash
+pnpm zip
+pnpm zip:firefox
+```
 
 Please open an issue to discuss any proposed changes *before* starting work on any PRs.
 
 ## Changelog
 
+- 2026-05 Extension v3.0.1 migrated to WXT, React, TypeScript, Manifest v3, local screenshot capture, and Chrome MHTML capture
 - 2025-03 New Manifest v3 [Extension v2.1.3](https://github.com/ArchiveBox/archivebox-browser-extension/releases/tag/v2.1.3) Released
 - 2024-11 Development [started](https://github.com/ArchiveBox/archivebox-browser-extension/pull/31) on v2 extension with more advanced UI and tagging options
 - 2024-01 Extension repo moved from `tjhorner/archivebox-exporter` to `Archivebox/archivebox-browser-extension`

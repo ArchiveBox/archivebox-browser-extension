@@ -6,6 +6,8 @@ const defaultConfig: ConfigState = {
   match_urls: '',
   exclude_urls: '',
   enable_auto_archive: false,
+  save_screenshots_locally: false,
+  save_mhtml_locally: false,
 };
 
 export async function getConfig(): Promise<ConfigState> {
@@ -15,6 +17,8 @@ export async function getConfig(): Promise<ConfigState> {
     'match_urls',
     'exclude_urls',
     'enable_auto_archive',
+    'save_screenshots_locally',
+    'save_mhtml_locally',
   ]);
   const sync = await browser.storage.sync.get(['config_archiveBoxBaseUrl']);
 
@@ -26,6 +30,8 @@ export async function getConfig(): Promise<ConfigState> {
     match_urls: typeof local.match_urls === 'string' ? local.match_urls : '',
     exclude_urls: typeof local.exclude_urls === 'string' ? local.exclude_urls : '',
     enable_auto_archive: Boolean(local.enable_auto_archive),
+    save_screenshots_locally: Boolean(local.save_screenshots_locally),
+    save_mhtml_locally: Boolean(local.save_mhtml_locally),
   };
 }
 
