@@ -263,7 +263,11 @@ async function captureSingleFileHtml(_tab: Browser.tabs.Tab, snapshot: Snapshot)
 
   let pageData: SingleFileCaptureResult;
   try {
-    pageData = await sendExternalMessage(extensionId, { method: 'capture-page', tabId: _tab.id });
+    pageData = await sendExternalMessage(extensionId, {
+      method: 'capture-page',
+      tabId: _tab.id,
+      displayName: browser.runtime.getManifest().name || 'ArchiveBox',
+    });
   } catch (error) {
     throw new Error(`SingleFile capture failed: ${errorMessage(error)}`);
   }

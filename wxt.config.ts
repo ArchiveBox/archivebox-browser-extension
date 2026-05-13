@@ -6,7 +6,7 @@ export default defineConfig({
   manifest: ({ browser }) => ({
     name: 'ArchiveBox',
     description: 'Collect URLs and preserve them using a remote ArchiveBox server',
-    version: '3.0.1',
+    version: '3.1.0',
     permissions: [
       'storage',
       'activeTab',
