@@ -71,6 +71,7 @@ export type Persona = {
 export type ConfigState = {
   archivebox_server_url: string;
   archivebox_api_key: string;
+  ui_language: 'auto' | 'en' | 'es' | 'zh_CN';
   match_urls: string;
   exclude_urls: string;
   enable_auto_archive: boolean;

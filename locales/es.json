@@ -1,0 +1,6 @@
+{
+  "extensionName": "ArchiveBox",
+  "extensionDescription": "Conserva copias de sitios web localmente y con tu servidor ArchiveBox mientras navegas",
+  "actionTitle": "Guardar en ArchiveBox",
+  "commandSaveToArchiveBox": "Guardar URL en ArchiveBox"
+}

@@ -3,6 +3,7 @@ import type { ConfigState, Persona, Snapshot } from './types';
 const defaultConfig: ConfigState = {
   archivebox_server_url: '',
   archivebox_api_key: '',
+  ui_language: 'auto',
   match_urls: '',
   exclude_urls: '',
   enable_auto_archive: false,
@@ -16,6 +17,7 @@ export async function getConfig(): Promise<ConfigState> {
   const local = await browser.storage.local.get([
     'archivebox_server_url',
     'archivebox_api_key',
+    'ui_language',
     'match_urls',
     'exclude_urls',
     'enable_auto_archive',
@@ -31,6 +33,9 @@ export async function getConfig(): Promise<ConfigState> {
       local.archivebox_server_url || sync.config_archiveBoxBaseUrl || '',
     ),
     archivebox_api_key: String(local.archivebox_api_key || ''),
+    ui_language: ['auto', 'en', 'es', 'zh_CN'].includes(String(local.ui_language))
+      ? local.ui_language as ConfigState['ui_language']
+      : 'auto',
     match_urls: typeof local.match_urls === 'string' ? local.match_urls : '',
     exclude_urls: typeof local.exclude_urls === 'string' ? local.exclude_urls : '',
     enable_auto_archive: Boolean(local.enable_auto_archive),

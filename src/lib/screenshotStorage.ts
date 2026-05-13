@@ -1,4 +1,5 @@
 import type { Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotSingleFile } from './types';
+import { t } from './i18n';
 
 function pathSafeSegment(value: string): string {
   return value
@@ -64,7 +65,7 @@ function errorMessage(error: unknown): string {
 
 async function getDirectory(pathSegments: string[], create: boolean): Promise<FileSystemDirectoryHandle> {
   if (typeof navigator.storage?.getDirectory !== 'function') {
-    throw new Error('Local capture storage is not available in this browser.');
+    throw new Error(t("Local capture storage is not available in this browser."));
   }
 
   let directory = await navigator.storage.getDirectory();
@@ -72,7 +73,7 @@ async function getDirectory(pathSegments: string[], create: boolean): Promise<Fi
     try {
       directory = await directory.getDirectoryHandle(segment, { create });
     } catch (error) {
-      throw new Error(`Failed to open local capture directory "${segment}": ${errorMessage(error)}`);
+      throw new Error(t("Unable to open local capture directory: $1", segment, errorMessage(error)));
     }
   }
   return directory;
@@ -83,20 +84,20 @@ async function writeBytesToFile(directory: FileSystemDirectoryHandle, fileName: 
   try {
     fileHandle = await directory.getFileHandle(fileName, { create: true });
   } catch (error) {
-    throw new Error(`Failed to open local capture file "${fileName}": ${errorMessage(error)}`);
+    throw new Error(t("Unable to open local capture file: $1", fileName, errorMessage(error)));
   }
 
   let writable: FileSystemWritableFileStream;
   try {
     writable = await fileHandle.createWritable();
   } catch (error) {
-    throw new Error(`Failed to create local capture writer for "${fileName}": ${errorMessage(error)}`);
+    throw new Error(t("Unable to create local capture writer: $1", fileName, errorMessage(error)));
   }
 
   try {
     await writable.write(bytes);
   } catch (error) {
-    throw new Error(`Failed to write local capture file "${fileName}": ${errorMessage(error)}`);
+    throw new Error(t("Unable to write local capture file: $1", fileName, errorMessage(error)));
   } finally {
     await writable.close().catch(() => undefined);
   }
@@ -107,7 +108,7 @@ async function writeBlobToFile(directory: FileSystemDirectoryHandle, fileName: s
   try {
     bytes = await blob.arrayBuffer();
   } catch (error) {
-    throw new Error(`Failed to read local capture blob for "${fileName}": ${errorMessage(error)}`);
+    throw new Error(t("Unable to read local capture file: $1", fileName, errorMessage(error)));
   }
   await writeBytesToFile(directory, fileName, bytes);
 }
@@ -121,7 +122,7 @@ export async function writeSnapshotScreenshot(
   const path = snapshotScreenshotPath(snapshot);
   const segments = path.split('/');
   const fileName = segments.pop();
-  if (!fileName) throw new Error('Invalid screenshot path');
+  if (!fileName) throw new Error(t("Invalid local screenshot path."));
 
   const directory = await getDirectory(segments, true);
   await writeBlobToFile(directory, fileName, blob);
@@ -151,7 +152,7 @@ export async function writeSnapshotMhtmlBlob(
   try {
     bytes = await blob.arrayBuffer();
   } catch (error) {
-    throw new Error(`Failed to read generated MHTML data: ${errorMessage(error)}`);
+    throw new Error(t("Unable to read local MHTML data: $1", errorMessage(error)));
   }
   return writeSnapshotMhtmlBytes(snapshot, bytes);
 }
@@ -163,7 +164,7 @@ export async function writeSnapshotMhtmlBytes(
   const path = snapshotMhtmlPath(snapshot);
   const segments = path.split('/');
   const fileName = segments.pop();
-  if (!fileName) throw new Error('Invalid MHTML path');
+  if (!fileName) throw new Error(t("Invalid local MHTML path."));
 
   const directory = await getDirectory(segments, true);
   await writeBytesToFile(directory, fileName, bytes);
@@ -186,7 +187,7 @@ export async function writeSnapshotSingleFileHtml(
   const path = snapshotSingleFilePath(snapshot);
   const segments = path.split('/');
   const fileName = segments.pop();
-  if (!fileName) throw new Error('Invalid SingleFile HTML path');
+  if (!fileName) throw new Error(t("Invalid local SingleFile HTML path."));
 
   const directory = await getDirectory(segments, true);
   await writeBytesToFile(directory, fileName, bytes);

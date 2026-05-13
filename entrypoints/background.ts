@@ -1,5 +1,6 @@
 import { addToArchiveBox, archiveBoxSnapshotUrl, removeFromArchiveBox, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
+import { setUiLanguage, t } from '@/src/lib/i18n';
 import { writeSnapshotMhtmlBytes, writeSnapshotScreenshot, writeSnapshotSingleFileHtml } from '@/src/lib/screenshotStorage';
 import { createSnapshot } from '@/src/lib/snapshots';
 import { getArchiveBoxServerUrl, getConfig, getSnapshots, setSnapshots } from '@/src/lib/storage';
@@ -38,6 +39,17 @@ type ChromePageCaptureApi = {
   ): Promise<Blob | undefined> | void;
 };
 
+type ScriptingApi = {
+  executeScript(details: {
+    target: { tabId: number };
+    files: string[];
+  }): Promise<unknown[]>;
+  insertCSS(details: {
+    target: { tabId: number };
+    files: string[];
+  }): Promise<void>;
+};
+
 type CaptureArtifactOptions = {
   screenshot?: boolean;
   mhtml?: boolean;
@@ -68,12 +80,21 @@ function getChromeApis(): {
   }).chrome || {};
 }
 
+function getScriptingApi(): ScriptingApi | undefined {
+  return (browser as unknown as { scripting?: ScriptingApi }).scripting;
+}
+
 function chromeLastError(): string {
   return getChromeApis().runtime?.lastError?.message || '';
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+async function refreshUiLanguage(): Promise<void> {
+  const { ui_language } = await getConfig();
+  setUiLanguage(ui_language);
 }
 
 function dataUrlToBlob(dataUrl: string): Blob {
@@ -96,10 +117,28 @@ function capturePositions(size: number, viewportSize: number): number[] {
 
 async function captureVisibleTabPng(windowId: number): Promise<Blob> {
   if (typeof browser.tabs.captureVisibleTab !== 'function') {
-    throw new Error('Screenshot capture is not available in this browser.');
+    throw new Error(t("Screenshot capture is not available in this browser."));
   }
   const dataUrl = await browser.tabs.captureVisibleTab(windowId, { format: 'png' });
   return dataUrlToBlob(dataUrl);
+}
+
+async function ensureArchiveBoxContentScript(tab: Browser.tabs.Tab): Promise<void> {
+  if (!tab.id) throw new Error(t("No tab ID available."));
+  const scripting = getScriptingApi();
+  if (!scripting) {
+    throw new Error(t("The scripting API is not available in this browser."));
+  }
+
+  await scripting.insertCSS({
+    target: { tabId: tab.id },
+    files: ['content-scripts/archivebox.css'],
+  }).catch(() => undefined);
+
+  await scripting.executeScript({
+    target: { tabId: tab.id },
+    files: ['content-scripts/archivebox.js'],
+  });
 }
 
 async function attachScreenshotToSnapshot(snapshotId: string, screenshot: SnapshotScreenshot): Promise<void> {
@@ -124,11 +163,12 @@ async function attachSingleFileToSnapshot(snapshotId: string, singlefile: Snapsh
 }
 
 async function captureFullPageScreenshot(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<SnapshotScreenshot> {
-  if (!tab.id) throw new Error('Cannot capture screenshot without a tab id');
-  if (typeof tab.windowId !== 'number') throw new Error('Cannot capture screenshot without a window id');
+  if (!tab.id) throw new Error(t("No tab ID available for screenshot capture."));
+  if (typeof tab.windowId !== 'number') throw new Error(t("No window ID available for screenshot capture."));
   if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap !== 'function') {
-    throw new Error('Full-page screenshot stitching is not available in this browser.');
+    throw new Error(t("Full-page screenshot stitching is not available in this browser."));
   }
+  await ensureArchiveBoxContentScript(tab);
 
   const metrics = await browser.tabs.sendMessage<RuntimeMessage, PageMetrics>(tab.id, {
     type: 'screenshot_get_metrics',
@@ -166,7 +206,7 @@ async function captureFullPageScreenshot(tab: Browser.tabs.Tab, snapshot: Snapsh
           canvas = new OffscreenCanvas(Math.ceil(pageWidth * scaleX), Math.ceil(pageHeight * scaleY));
           context = canvas.getContext('2d');
         }
-        if (!context) throw new Error('Could not create screenshot canvas');
+        if (!context) throw new Error(t("Unable to prepare screenshot canvas."));
         const drawingContext = context;
 
         const visibleCssWidth = Math.min(viewportWidth, pageWidth - scroll.scrollX);
@@ -193,18 +233,23 @@ async function captureFullPageScreenshot(tab: Browser.tabs.Tab, snapshot: Snapsh
     }).catch(() => undefined);
   }
 
-  if (!canvas) throw new Error('No screenshot tiles captured');
+  if (!canvas) throw new Error(t("No screenshot tiles were captured."));
   const blob = await canvas.convertToBlob({ type: 'image/png' });
   return writeSnapshotScreenshot(snapshot, blob, canvas.width, canvas.height);
 }
 
 async function captureMhtml(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<SnapshotMhtml> {
-  if (!tab.id) throw new Error('Cannot capture MHTML without a tab id');
-  if (!supportsMhtmlCapture) throw new Error(mhtmlUnsupportedMessage);
+  if (!tab.id) throw new Error(t("No tab ID available for MHTML capture."));
+  if (!supportsMhtmlCapture) throw new Error(mhtmlUnsupportedMessage());
+  const hasPermission = await browser.permissions.contains({ permissions: ['pageCapture'] }).catch(() => false);
+  if (!hasPermission) {
+    const granted = await browser.permissions.request({ permissions: ['pageCapture'] }).catch(() => false);
+    if (!granted) throw new Error(t("MHTML capture permission denied"));
+  }
 
   const pageCapture = getChromeApis().pageCapture;
   if (!pageCapture) {
-    throw new Error('MHTML capture is not available because this browser does not expose chrome.pageCapture.saveAsMHTML().');
+    throw new Error(t("MHTML capture is not available in this browser."));
   }
 
   let blob: Blob | undefined;
@@ -228,7 +273,7 @@ async function captureMhtml(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<
     throw new Error(`chrome.pageCapture.saveAsMHTML failed: ${errorMessage(error)}`);
   }
 
-  if (!blob) throw new Error('The browser returned an empty MHTML snapshot');
+  if (!blob) throw new Error(t("MHTML capture returned an empty file."));
 
   let bytes: ArrayBuffer;
   try {
@@ -249,11 +294,12 @@ type SingleFileCaptureResult = {
 };
 
 async function captureSingleFileHtml(_tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<SnapshotSingleFile> {
-  if (!_tab.id) throw new Error('Cannot capture SingleFile HTML without a tab id');
+  if (!_tab.id) throw new Error(t("No tab ID available for SingleFile capture."));
+  await ensureArchiveBoxContentScript(_tab);
   const { singlefile_extension_id } = await getConfig();
   const extensionId = singlefile_extension_id.trim() || defaultSingleFileExtensionId;
   if (!extensionId) {
-    throw new Error('SingleFile extension ID is not configured');
+    throw new Error(t("SingleFile extension ID is not configured."));
   }
 
   const sendExternalMessage = browser.runtime.sendMessage as unknown as (
@@ -266,14 +312,14 @@ async function captureSingleFileHtml(_tab: Browser.tabs.Tab, snapshot: Snapshot)
     pageData = await sendExternalMessage(extensionId, {
       method: 'capture-page',
       tabId: _tab.id,
-      displayName: browser.runtime.getManifest().name || 'ArchiveBox',
+      displayName: t("ArchiveBox"),
     });
   } catch (error) {
-    throw new Error(`SingleFile capture failed: ${errorMessage(error)}`);
+    throw new Error(t("SingleFile capture failed.", errorMessage(error)));
   }
 
   if (!pageData?.content) {
-    throw new Error('SingleFile returned an empty capture');
+    throw new Error(t("SingleFile capture returned an empty file."));
   }
 
   return writeSnapshotSingleFileHtml(snapshot, pageData.content, pageData.filename);
@@ -389,7 +435,7 @@ async function ensureSnapshotForTab(tab: Browser.tabs.Tab): Promise<{
   snapshot: Snapshot;
   created: boolean;
 }> {
-  if (!tab.url) throw new Error('Cannot save a tab without a URL');
+  if (!tab.url) throw new Error(t("No URL found for the current tab."));
   const snapshots = await getSnapshots();
   let snapshot = snapshots.find((item) => item.url === tab.url);
   let created = false;
@@ -475,6 +521,7 @@ async function configureAutoArchiving(): Promise<void> {
 async function showOverlay(tab?: Browser.tabs.Tab): Promise<void> {
   if (!tab?.id) return;
   try {
+    await ensureArchiveBoxContentScript(tab);
     const { snapshot, created } = await ensureSnapshotForTab(tab);
     await captureConfiguredSnapshotArtifacts(tab, snapshot, created);
     await browser.tabs.sendMessage(tab.id, { type: 'show_archivebox_overlay' } satisfies RuntimeMessage);
@@ -484,20 +531,30 @@ async function showOverlay(tab?: Browser.tabs.Tab): Promise<void> {
 }
 
 export default defineBackground(() => {
+  refreshUiLanguage().catch(() => undefined);
   browser.runtime.onStartup.addListener(configureAutoArchiving);
   browser.runtime.onInstalled.addListener(() => {
-    browser.contextMenus.removeAll();
-    browser.contextMenus.create({
-      id: 'save_to_archivebox_ctxmenu',
-      title: 'Save to ArchiveBox',
-      contexts: ['page'],
-    });
-    configureAutoArchiving();
+    refreshUiLanguage()
+      .catch(() => undefined)
+      .then(() => {
+        browser.contextMenus.removeAll();
+        browser.contextMenus.create({
+          id: 'save_to_archivebox_ctxmenu',
+          title: t("Save to ArchiveBox"),
+          contexts: ['page'],
+        });
+        configureAutoArchiving();
+      });
   });
 
   browser.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.enable_auto_archive) {
       configureAutoArchiving();
+    }
+    if (area === 'local' && changes.ui_language) {
+      refreshUiLanguage()
+        .then(() => browser.contextMenus.update('save_to_archivebox_ctxmenu', { title: t("Save to ArchiveBox") }))
+        .catch(() => undefined);
     }
   });
 
@@ -532,11 +589,11 @@ export default defineBackground(() => {
 
       case 'capture_snapshot_screenshot': {
         const tab = sender.tab;
-        if (!tab?.id) return { ok: false, errorMessage: 'Screenshot capture requires an active tab' };
+        if (!tab?.id) return { ok: false, errorMessage: t("Open the ArchiveBox popup on the page before saving a screenshot.") };
         return getSnapshots()
           .then((snapshots) => {
             const snapshot = snapshots.find((item) => item.id === message.snapshotId);
-            if (!snapshot) throw new Error('Snapshot not found');
+            if (!snapshot) throw new Error(t("Saved snapshot not found."));
             return captureAndAttachSnapshotScreenshot(tab, snapshot, { hideOverlay: false });
           })
           .then((screenshot) => ({ ok: true, screenshot }))
@@ -545,11 +602,11 @@ export default defineBackground(() => {
 
       case 'capture_snapshot_mhtml': {
         const tab = sender.tab;
-        if (!tab?.id) return { ok: false, errorMessage: 'MHTML capture requires an active tab' };
+        if (!tab?.id) return { ok: false, errorMessage: t("Open the ArchiveBox popup on the page before saving MHTML.") };
         return getSnapshots()
           .then((snapshots) => {
             const snapshot = snapshots.find((item) => item.id === message.snapshotId);
-            if (!snapshot) throw new Error('Snapshot not found');
+            if (!snapshot) throw new Error(t("Saved snapshot not found."));
             return captureAndAttachSnapshotMhtml(tab, snapshot, { hideOverlay: false });
           })
           .then((mhtml) => ({ ok: true, mhtml }))
@@ -558,11 +615,11 @@ export default defineBackground(() => {
 
       case 'capture_snapshot_singlefile': {
         const tab = sender.tab;
-        if (!tab?.id) return { ok: false, errorMessage: 'SingleFile capture requires an active tab' };
+        if (!tab?.id) return { ok: false, errorMessage: t("Open the ArchiveBox popup on the page before saving SingleFile HTML.") };
         return getSnapshots()
           .then((snapshots) => {
             const snapshot = snapshots.find((item) => item.id === message.snapshotId);
-            if (!snapshot) throw new Error('Snapshot not found');
+            if (!snapshot) throw new Error(t("Saved snapshot not found."));
             return captureAndAttachSnapshotSingleFile(tab, snapshot, { hideOverlay: false });
           })
           .then((singlefile) => ({ ok: true, singlefile }))
@@ -596,14 +653,14 @@ export default defineBackground(() => {
       case 'open_archivebox_snapshot':
         return getArchiveBoxServerUrl()
           .then((serverUrl) => {
-            if (!serverUrl) throw new Error('Server not configured');
+            if (!serverUrl) throw new Error(t("Server not configured"));
             return browser.tabs.create({ url: archiveBoxSnapshotUrl(serverUrl, message.url) });
           })
           .then(() => ({ ok: true }))
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));
 
       default:
-        return { ok: false, error: 'Unknown message type' };
+        return { ok: false, error: t("Unknown message type") };
     }
   });
 

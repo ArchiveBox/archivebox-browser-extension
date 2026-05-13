@@ -1,14 +1,15 @@
 import { getConfig, getArchiveBoxServerUrl } from './storage';
+import { t } from './i18n';
 import type { ArchiveDepth } from './types';
 
 function requireHttpServerUrl(serverUrl: string): void {
   try {
     const { protocol } = new URL(serverUrl);
     if (protocol !== 'http:' && protocol !== 'https:') {
-      throw new Error('Invalid protocol');
+      throw new Error(t("ArchiveBox server URL must use http:// or https://."));
     }
   } catch {
-    throw new Error('ArchiveBox server URL must start with http:// or https://');
+    throw new Error(t("ArchiveBox server URL must be http:// or https://."));
   }
 }
 
@@ -17,6 +18,22 @@ function apiHeaders(apiKey: string): Record<string, string> {
     'Content-Type': 'application/json',
     ...(apiKey ? { 'x-archivebox-api-key': apiKey } : {}),
   };
+}
+
+function serverOriginPattern(serverUrl: string): string {
+  const url = new URL(serverUrl);
+  return `${url.origin}/*`;
+}
+
+async function ensureServerOriginPermission(serverUrl: string): Promise<void> {
+  const origins = [serverOriginPattern(serverUrl)];
+  const hasPermission = await browser.permissions.contains({ origins }).catch(() => false);
+  if (hasPermission) return;
+
+  const granted = await browser.permissions.request({ origins }).catch(() => false);
+  if (!granted) {
+    throw new Error(t("Permission denied for ArchiveBox server URL."));
+  }
 }
 
 export function archiveBoxSnapshotUrl(serverUrl: string, url: string): string {
@@ -35,9 +52,10 @@ export async function addToArchiveBox(
   const { archivebox_api_key } = await getConfig();
 
   if (!archiveboxServerUrl) {
-    throw new Error('Server not configured');
+    throw new Error(t("Server not configured"));
   }
   requireHttpServerUrl(archiveboxServerUrl);
+  await ensureServerOriginPermission(archiveboxServerUrl);
 
   if (archivebox_api_key) {
     const response = await fetch(`${archiveboxServerUrl}/api/v1/cli/add`, {
@@ -74,9 +92,10 @@ export async function removeFromArchiveBox(url: string): Promise<void> {
   const { archivebox_api_key } = await getConfig();
 
   if (!archiveboxServerUrl) {
-    throw new Error('Server not configured');
+    throw new Error(t("Server not configured"));
   }
   requireHttpServerUrl(archiveboxServerUrl);
+  await ensureServerOriginPermission(archiveboxServerUrl);
 
   const response = await fetch(`${archiveboxServerUrl}/api/v1/cli/remove`, {
     headers: apiHeaders(archivebox_api_key),
@@ -96,12 +115,13 @@ export async function removeFromArchiveBox(url: string): Promise<void> {
 
   const data = await response.json().catch(() => null) as { success?: boolean; errors?: string[] } | null;
   if (data && data.success === false) {
-    throw new Error(data.errors?.join(', ') || 'ArchiveBox remove failed');
+    throw new Error(data.errors?.join(', ') || t("ArchiveBox remove failed: $1"));
   }
 }
 
 export async function testServerUrl(serverUrl: string): Promise<void> {
   requireHttpServerUrl(serverUrl);
+  await ensureServerOriginPermission(serverUrl);
 
   let response = await fetch(`${serverUrl}/api/`, {
     method: 'GET',
@@ -123,8 +143,9 @@ export async function testServerUrl(serverUrl: string): Promise<void> {
 
 export async function testApiKey(serverUrl: string, apiKey: string): Promise<string | number> {
   requireHttpServerUrl(serverUrl);
+  await ensureServerOriginPermission(serverUrl);
   if (!apiKey) {
-    throw new Error('API key is required');
+    throw new Error(t("API key required"));
   }
 
   const response = await fetch(`${serverUrl}/api/v1/auth/check_api_token`, {
@@ -142,7 +163,7 @@ export async function testApiKey(serverUrl: string, apiKey: string): Promise<str
 
   const data = (await response.json()) as { user_id?: string | number };
   if (!data.user_id) {
-    throw new Error('Invalid API key response');
+    throw new Error(t("Invalid API key response"));
   }
   return data.user_id;
 }

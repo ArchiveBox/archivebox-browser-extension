@@ -1,3 +1,5 @@
+import { t } from './i18n';
+
 type MimeHeaders = Record<string, string>;
 
 type MhtmlPart = {
@@ -66,7 +68,7 @@ function parseMhtmlParts(rawMhtml: string): { headers: MimeHeaders; parts: Mhtml
   const headers = parseMimeHeaders(top.headerText);
   const boundary = mimeParameter(headers['content-type'], 'boundary');
   if (!boundary) {
-    throw new Error('MHTML file is missing a multipart boundary');
+    throw new Error(t('MHTML file is missing a multipart boundary'));
   }
 
   const delimiter = `--${boundary}`;
@@ -85,7 +87,7 @@ function parseMhtmlParts(rawMhtml: string): { headers: MimeHeaders; parts: Mhtml
     });
 
   if (!parts.length) {
-    throw new Error('MHTML file does not contain any parts');
+    throw new Error(t('MHTML file does not contain any parts'));
   }
 
   return { headers, parts };
@@ -324,7 +326,7 @@ function escapeHtml(value: string): string {
 function findRootHtmlPart(parts: DecodedMhtmlPart[], sourceUrl: string): DecodedMhtmlPart {
   const htmlParts = parts.filter((part) => part.mimeType === 'text/html');
   const fallback = htmlParts[0] || parts[0];
-  if (!fallback) throw new Error('MHTML file does not contain any readable parts');
+  if (!fallback) throw new Error(t('MHTML file does not contain any readable parts'));
   const sourceHref = (() => {
     try {
       return new URL(sourceUrl).href;
@@ -370,8 +372,8 @@ export function renderMhtmlToHtml(rawMhtml: string, sourceUrl: string): Rendered
   const rendered = rootPart.mimeType === 'text/html'
     ? rewriteHtml(rootPart.text, baseUrl, resources)
     : {
-      html: `<!doctype html><html><head><title>MHTML Snapshot</title></head><body><pre>${escapeHtml(rootPart.text)}</pre></body></html>`,
-      title: 'MHTML Snapshot',
+      html: `<!doctype html><html><head><title>${escapeHtml(t('MHTML Snapshot'))}</title></head><body><pre>${escapeHtml(rootPart.text)}</pre></body></html>`,
+      title: t('MHTML Snapshot'),
     };
 
   return {

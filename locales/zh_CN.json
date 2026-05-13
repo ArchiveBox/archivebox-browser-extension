@@ -1,0 +1,6 @@
+{
+  "extensionName": "ArchiveBox",
+  "extensionDescription": "在浏览时将网站副本保存到本地并同步到你的 ArchiveBox 服务器",
+  "actionTitle": "保存到 ArchiveBox",
+  "commandSaveToArchiveBox": "将网址保存到 ArchiveBox"
+}

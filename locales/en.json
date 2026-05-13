@@ -1,0 +1,6 @@
+{
+  "extensionName": "ArchiveBox",
+  "extensionDescription": "Preserve copies of websites locally and using your ArchiveBox server while you browse",
+  "actionTitle": "Save to ArchiveBox",
+  "commandSaveToArchiveBox": "Save URL to ArchiveBox"
+}

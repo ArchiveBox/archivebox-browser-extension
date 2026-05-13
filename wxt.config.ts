@@ -1,26 +1,35 @@
 import { defineConfig } from 'wxt';
 
 export default defineConfig({
-  modules: ['@wxt-dev/module-react'],
+  modules: ['@wxt-dev/module-react', '@wxt-dev/i18n/module'],
   manifestVersion: 3,
+  hooks: {
+    'build:manifestGenerated': (_wxt, manifest) => {
+      if (manifest.content_scripts?.length === 0) {
+        delete manifest.content_scripts;
+      }
+    },
+  },
   manifest: ({ browser }) => ({
-    name: 'ArchiveBox',
-    description: 'Collect URLs and preserve them using a remote ArchiveBox server',
-    version: '3.1.0',
+    name: '__MSG_extensionName__',
+    description: '__MSG_extensionDescription__',
+    default_locale: 'en',
+    version: '3.2.0',
     permissions: [
       'storage',
       'activeTab',
       'contextMenus',
-      ...(['chrome', 'edge'].includes(browser) ? ['pageCapture'] : []),
+      'scripting',
     ],
     optional_permissions: [
       'cookies',
       'history',
       'bookmarks',
       'tabs',
-      'unlimitedStorage',
+      ...(['chrome', 'edge'].includes(browser) ? ['unlimitedStorage'] : []),
+      ...(['chrome', 'edge'].includes(browser) ? ['pageCapture'] : []),
     ],
-    host_permissions: ['<all_urls>'],
+    optional_host_permissions: ['<all_urls>'],
     web_accessible_resources: [
       {
         resources: ['icon/*.png'],
@@ -37,7 +46,7 @@ export default defineConfig({
       128: '/icon/128.png',
     },
     action: {
-      default_title: 'Save to ArchiveBox',
+      default_title: '__MSG_actionTitle__',
       default_icon: {
         16: '/icon/16.png',
         32: '/icon/32.png',
@@ -47,7 +56,7 @@ export default defineConfig({
     },
     commands: {
       'save-to-archivebox-action': {
-        description: 'Save URL to ArchiveBox',
+        description: '__MSG_commandSaveToArchiveBox__',
         suggested_key: {
           default: 'Ctrl+Shift+X',
           mac: 'Command+Shift+X',

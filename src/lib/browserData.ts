@@ -1,4 +1,5 @@
 import { createSnapshot } from './snapshots';
+import { t } from './i18n';
 import type { Snapshot } from './types';
 
 export function parseLocalDate(value: string): Date {
@@ -17,7 +18,7 @@ export async function loadHistorySnapshots(
   endDate.setHours(23, 59, 59, 999);
 
   if (startDate > endDate) {
-    throw new Error('Start date must be before end date');
+    throw new Error(t("Start date must be before end date"));
   }
 
   const historyItems = await browser.history.search({

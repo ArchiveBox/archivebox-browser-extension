@@ -134,7 +134,7 @@ Please open an issue to discuss any proposed changes *before* starting work on a
 
 ## Changelog
 
-- 2026-05 Extension v3.1.0 migrated to WXT, React, TypeScript, Manifest v3, local screenshot capture, Chrome / Edge MHTML capture, and SingleFile HTML capture
+- 2026-05 Extension v3.2.0 migrated to WXT, React, TypeScript, Manifest v3, local screenshot capture, Chrome / Edge MHTML capture, and SingleFile HTML capture
 - 2025-03 New Manifest v3 [Extension v2.1.3](https://github.com/ArchiveBox/archivebox-browser-extension/releases/tag/v2.1.3) Released
 - 2024-11 Development [started](https://github.com/ArchiveBox/archivebox-browser-extension/pull/31) on v2 extension with more advanced UI and tagging options
 - 2024-01 Extension repo moved from `tjhorner/archivebox-exporter` to `Archivebox/archivebox-browser-extension`

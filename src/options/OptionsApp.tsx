@@ -18,7 +18,7 @@ import {
 import { strToU8, zipSync } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { addToArchiveBox } from '@/src/lib/archivebox';
-import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
+import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture, supportsUnlimitedStoragePermission } from '@/src/lib/browserCapabilities';
 import { loadBookmarkSnapshots, loadHistorySnapshots } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
 import {
@@ -39,6 +39,7 @@ import {
 import { renderMhtmlToHtml } from '@/src/lib/mhtml';
 import { createSnapshot, filterSnapshots, uniqueTags } from '@/src/lib/snapshots';
 import { matchingTagSuggestions } from '@/src/lib/tags';
+import { setUiLanguage, t } from '@/src/lib/i18n';
 import {
   defaultConfig,
   defaultPersona,
@@ -89,13 +90,6 @@ type HtmlViewerState = {
 
 const today = new Date();
 const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-const optionTabs: OptionTab[] = [
-  { id: 'urls', label: 'Saved URLs', Icon: Database },
-  { id: 'config', label: 'Server Configuration', Icon: Settings2 },
-  { id: 'profiles', label: 'Authentication Profiles', Icon: UserRoundCog },
-  { id: 'import', label: 'Bulk Import URLs', Icon: FileInput },
-];
-
 function dateInputValue(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -107,16 +101,16 @@ function detectOS(): string {
   if (ua.includes('Linux')) return 'Linux';
   if (ua.includes('Android')) return 'Android';
   if (ua.includes('iOS')) return 'iOS';
-  return 'Unknown';
+  return t("Unknown");
 }
 
 async function detectGeography(): Promise<string> {
   try {
     const response = await fetch('https://ipapi.co/json/');
     const data = await response.json() as { city?: string; country_name?: string };
-    return [data.city, data.country_name].filter(Boolean).join(', ') || 'Unknown';
+    return [data.city, data.country_name].filter(Boolean).join(', ') || t("Unknown");
   } catch {
-    return 'Unknown';
+    return t("Unknown");
   }
 }
 
@@ -266,7 +260,7 @@ function SnapshotScreenshotThumb({ snapshot }: { snapshot: Snapshot }) {
       href={extensionUrl(`/options.html?screenshot=${encodeURIComponent(snapshot.id)}`)}
       target="_blank"
       rel="noopener noreferrer"
-      title={`Open local screenshot: ${snapshot.screenshot?.path || ''}`}
+      title={t("Open local screenshot: $1", snapshot.screenshot?.path || '')}
     >
       <img
         className="snapshot-screenshot-thumb"
@@ -279,12 +273,12 @@ function SnapshotScreenshotThumb({ snapshot }: { snapshot: Snapshot }) {
 }
 
 function SnapshotArchiveTitleLink({ snapshot }: { snapshot: Snapshot }) {
-  const title = snapshot.title || 'Untitled';
+  const title = snapshot.title || t("Untitled page");
 
   const capture = snapshot.singlefile?.path
-    ? { view: 'singlefile', label: 'SingleFile HTML', path: snapshot.singlefile.path }
+    ? { view: 'singlefile', label: t("SingleFile HTML"), path: snapshot.singlefile.path }
     : snapshot.mhtml?.path
-      ? { view: 'mhtml', label: 'MHTML', path: snapshot.mhtml.path }
+      ? { view: 'mhtml', label: t("MHTML snapshot"), path: snapshot.mhtml.path }
       : null;
 
   if (!capture) {
@@ -297,7 +291,7 @@ function SnapshotArchiveTitleLink({ snapshot }: { snapshot: Snapshot }) {
       href={extensionUrl(`/options.html?${capture.view}=${encodeURIComponent(snapshot.id)}`)}
       target="_blank"
       rel="noopener noreferrer"
-      title={`Open local ${capture.label} snapshot: ${capture.path}`}
+      title={t("Open local $1 snapshot: $2", capture.label, capture.path)}
     >
       <strong>{title}</strong>
     </a>
@@ -317,13 +311,13 @@ function MhtmlViewer({ snapshotId }: { snapshotId: string }) {
       try {
         const snapshots = await getSnapshots();
         const snapshot = snapshots.find((item) => item.id === snapshotId);
-        if (!snapshot) throw new Error('Saved URL not found');
+        if (!snapshot) throw new Error(t("Saved URL not found"));
         const blob = await readSnapshotMhtmlBlob(snapshot.mhtml);
-        if (!blob) throw new Error('Local MHTML snapshot not found');
+        if (!blob) throw new Error(t("Local MHTML snapshot not found"));
 
         const rawMhtml = await blob.text();
         let html = '';
-        let title = snapshot.title || 'MHTML Snapshot';
+        let title = snapshot.title || t("MHTML Snapshot");
         let partCount = 0;
         let error = '';
 
@@ -333,11 +327,11 @@ function MhtmlViewer({ snapshotId }: { snapshotId: string }) {
           title = rendered.title || title;
           partCount = rendered.partCount;
         } catch (renderError) {
-          error = `Unable to render captured page preview: ${(renderError as Error).message}`;
+          error = t("Unable to render captured page preview: $1", (renderError as Error).message);
           html = [
             '<!doctype html>',
             '<html>',
-            '<head><title>MHTML Snapshot</title></head>',
+            `<head><title>${escapeHtml(t("MHTML Snapshot"))}</title></head>`,
             '<body><pre style="white-space: pre-wrap; word-break: break-word;">',
             escapeHtml(rawMhtml),
             '</pre></body>',
@@ -400,29 +394,29 @@ function MhtmlViewer({ snapshotId }: { snapshotId: string }) {
   }, [frameLoadCount, state.rawMhtml, state.snapshot]);
 
   const backUrl = extensionUrl(`/options.html?highlight=${encodeURIComponent(snapshotId)}`);
-  const title = state.title || state.snapshot?.title || 'MHTML Snapshot';
+  const title = state.title || state.snapshot?.title || t("MHTML Snapshot");
 
   return (
     <main className="app mhtml-viewer-page">
       <header className="mhtml-viewer-header">
         <div className="mhtml-viewer-header__text">
-          <p>Local MHTML Snapshot</p>
+          <p>{t("Local MHTML Snapshot")}</p>
           <h1>{title}</h1>
           {state.snapshot ? (
             <a href={state.snapshot.url} target="_blank" rel="noreferrer">{state.snapshot.url}</a>
           ) : null}
         </div>
         <div className="mhtml-viewer-header__actions">
-          {state.partCount ? <span className="status">{state.partCount} parts</span> : null}
-          <a className="button-link" href={backUrl}>Saved URLs</a>
+          {state.partCount ? <span className="status">{t("$1 parts", state.partCount)}</span> : null}
+          <a className="button-link" href={backUrl}>{t("Saved URLs")}</a>
           <button className="icon-button" type="button" onClick={exportMhtml} disabled={!state.rawMhtml}>
             <Download size={15} />
-            Export MHTML
+            {t("Export MHTML")}
           </button>
         </div>
       </header>
 
-      {state.loading ? <div className="mhtml-viewer-empty">Loading local MHTML snapshot...</div> : null}
+      {state.loading ? <div className="mhtml-viewer-empty">{t("Loading local MHTML snapshot...")}</div> : null}
       {state.error ? (
         <div className={`status ${state.html ? 'warning' : 'error'}`}>
           <AlertTriangle size={14} />
@@ -454,9 +448,9 @@ function SingleFileViewer({ snapshotId }: { snapshotId: string }) {
       try {
         const snapshots = await getSnapshots();
         const snapshot = snapshots.find((item) => item.id === snapshotId);
-        if (!snapshot) throw new Error('Saved URL not found');
+        if (!snapshot) throw new Error(t("Saved URL not found"));
         const blob = await readSnapshotSingleFileBlob(snapshot.singlefile);
-        if (!blob) throw new Error('Local SingleFile HTML snapshot not found');
+        if (!blob) throw new Error(t("Local SingleFile HTML snapshot not found"));
 
         const html = await blob.text();
         if (!cancelled) {
@@ -465,7 +459,7 @@ function SingleFileViewer({ snapshotId }: { snapshotId: string }) {
             html,
             loading: false,
             snapshot,
-            title: snapshot.title || 'SingleFile HTML Snapshot',
+            title: snapshot.title || t("SingleFile HTML Snapshot"),
           });
         }
       } catch (error) {
@@ -503,14 +497,14 @@ function SingleFileViewer({ snapshotId }: { snapshotId: string }) {
   }, [state.blob, state.snapshot]);
 
   const backUrl = extensionUrl(`/options.html?highlight=${encodeURIComponent(snapshotId)}`);
-  const title = state.title || state.snapshot?.title || 'SingleFile HTML Snapshot';
+  const title = state.title || state.snapshot?.title || t("SingleFile HTML Snapshot");
   const singlefile = state.snapshot?.singlefile;
 
   return (
     <main className="app mhtml-viewer-page">
       <header className="mhtml-viewer-header">
         <div className="mhtml-viewer-header__text">
-          <p>Local SingleFile HTML Snapshot</p>
+          <p>{t("Local SingleFile HTML Snapshot")}</p>
           <h1>{title}</h1>
           {state.snapshot ? (
             <a href={state.snapshot.url} target="_blank" rel="noreferrer">{state.snapshot.url}</a>
@@ -518,15 +512,15 @@ function SingleFileViewer({ snapshotId }: { snapshotId: string }) {
         </div>
         <div className="mhtml-viewer-header__actions">
           {singlefile ? <span className="status">{Math.ceil(singlefile.size / 1024)} KB</span> : null}
-          <a className="button-link" href={backUrl}>Saved URLs</a>
+          <a className="button-link" href={backUrl}>{t("Saved URLs")}</a>
           <button className="icon-button" type="button" onClick={exportSingleFile} disabled={!state.blob}>
             <Download size={15} />
-            Export HTML
+            {t("Export HTML")}
           </button>
         </div>
       </header>
 
-      {state.loading ? <div className="mhtml-viewer-empty">Loading local SingleFile HTML snapshot...</div> : null}
+      {state.loading ? <div className="mhtml-viewer-empty">{t("Loading local SingleFile HTML snapshot...")}</div> : null}
       {state.error ? (
         <div className="status error">
           <AlertTriangle size={14} />
@@ -557,9 +551,9 @@ function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
       try {
         const snapshots = await getSnapshots();
         const snapshot = snapshots.find((item) => item.id === snapshotId);
-        if (!snapshot) throw new Error('Saved URL not found');
+        if (!snapshot) throw new Error(t("Saved URL not found"));
         const blob = await readSnapshotScreenshotBlob(snapshot.screenshot);
-        if (!blob) throw new Error('Local screenshot not found');
+        if (!blob) throw new Error(t("Local screenshot not found"));
 
         const nextObjectUrl = URL.createObjectURL(blob);
         if (cancelled) {
@@ -572,7 +566,7 @@ function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
           loading: false,
           objectUrl,
           snapshot,
-          title: snapshot.title || 'Screenshot',
+          title: snapshot.title || t("Screenshot"),
         });
       } catch (error) {
         if (!cancelled) {
@@ -610,7 +604,7 @@ function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
   }, [state.blob, state.snapshot]);
 
   const backUrl = extensionUrl(`/options.html?highlight=${encodeURIComponent(snapshotId)}`);
-  const title = state.title || state.snapshot?.title || 'Screenshot';
+  const title = state.title || state.snapshot?.title || t("Screenshot");
   const screenshot = state.snapshot?.screenshot;
   const screenshotHtml = state.objectUrl ? [
     '<!doctype html>',
@@ -635,7 +629,7 @@ function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
     <main className="app mhtml-viewer-page">
       <header className="mhtml-viewer-header">
         <div className="mhtml-viewer-header__text">
-          <p>Local Screenshot</p>
+          <p>{t("Local Screenshot")}</p>
           <h1>{title}</h1>
           {state.snapshot ? (
             <a href={state.snapshot.url} target="_blank" rel="noreferrer">{state.snapshot.url}</a>
@@ -643,15 +637,15 @@ function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
         </div>
         <div className="mhtml-viewer-header__actions">
           {screenshot ? <span className="status">{screenshot.width}x{screenshot.height}</span> : null}
-          <a className="button-link" href={backUrl}>Saved URLs</a>
+          <a className="button-link" href={backUrl}>{t("Saved URLs")}</a>
           <button className="icon-button" type="button" onClick={exportScreenshot} disabled={!state.blob}>
             <Download size={15} />
-            Export PNG
+            {t("Export PNG")}
           </button>
         </div>
       </header>
 
-      {state.loading ? <div className="mhtml-viewer-empty">Loading local screenshot...</div> : null}
+      {state.loading ? <div className="mhtml-viewer-empty">{t("Loading local screenshot...")}</div> : null}
       {state.error ? (
         <div className="status error">
           <AlertTriangle size={14} />
@@ -671,6 +665,15 @@ function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
 }
 
 export default function OptionsApp() {
+  const [, setLanguageLoaded] = useState(false);
+
+  useEffect(() => {
+    getConfig().then((storedConfig) => {
+      setUiLanguage(storedConfig.ui_language);
+      setLanguageLoaded(true);
+    }).catch(() => setLanguageLoaded(true));
+  }, []);
+
   const params = new URLSearchParams(window.location.search);
   const screenshotSnapshotId = params.get('screenshot');
   if (screenshotSnapshotId) {
@@ -724,6 +727,19 @@ function OptionsMain() {
   const [savedUrlSortKey, setSavedUrlSortKey] = useState<SavedUrlSortKey>('date');
   const [savedUrlSortDirection, setSavedUrlSortDirection] = useState<SortDirection>('desc');
   const tagDialogRef = useRef<HTMLDialogElement>(null);
+  const browserLanguage = (() => {
+    try {
+      return browser.i18n?.getUILanguage?.() || navigator.language || t("Unknown");
+    } catch {
+      return navigator.language || t("Unknown");
+    }
+  })();
+  const optionTabs: OptionTab[] = [
+    { id: 'urls', label: t("Saved URLs"), Icon: Database },
+    { id: 'config', label: t("Configuration"), Icon: Settings2 },
+    { id: 'profiles', label: t("Cookies"), Icon: UserRoundCog },
+    { id: 'import', label: t("Bulk Import URLs"), Icon: FileInput },
+  ];
 
   async function refreshAll() {
     const [storedSnapshots, storedConfig, personaState] = await Promise.all([
@@ -731,6 +747,7 @@ function OptionsMain() {
       getConfig(),
       ensurePersonas(),
     ]);
+    setUiLanguage(storedConfig.ui_language);
     setSnapshotsState(storedSnapshots);
     setConfigState(storedConfig);
     setPersonasState(personaState.personas);
@@ -839,10 +856,10 @@ function OptionsMain() {
 
   const activePersonaStats = useMemo(() => {
     const persona = personas.find((item) => item.id === activePersona);
-    if (!persona) return 'No active profile selected';
+    if (!persona) return t("No active profile selected");
     const domains = Object.keys(persona.cookies || {});
     const cookieCount = Object.values(persona.cookies || {}).reduce((sum, cookies) => sum + cookies.length, 0);
-    return `${domains.length} domains / ${cookieCount} cookies`;
+    return t("$1 domains / $2 cookies", domains.length, cookieCount);
   }, [activePersona, personas]);
 
   const archiveboxServerUrlIsValid = isHttpUrl(config.archivebox_server_url);
@@ -904,17 +921,17 @@ function OptionsMain() {
     }
 
     if (downloaded === 0) {
-      const artifactLabel = artifact === 'screenshot' ? 'screenshots' : artifact === 'mhtml' ? 'MHTML snapshots' : 'SingleFile HTML snapshots';
-      setSavedUrlStatus({ kind: 'warning', text: `No selected snapshots have ${artifactLabel}` });
+      const artifactLabel = artifact === 'screenshot' ? t("screenshots") : artifact === 'mhtml' ? t("MHTML snapshots") : t("SingleFile HTML snapshots");
+      setSavedUrlStatus({ kind: 'warning', text: t("No selected snapshots have $1", artifactLabel) });
       return;
     }
 
-    const artifactLabel = artifact === 'screenshot' ? 'screenshots' : artifact === 'mhtml' ? 'MHTML snapshots' : 'SingleFile HTML snapshots';
+    const artifactLabel = artifact === 'screenshot' ? t("screenshots") : artifact === 'mhtml' ? t("MHTML snapshots") : t("SingleFile HTML snapshots");
     setSavedUrlStatus({
       kind: missing > 0 ? 'warning' : 'success',
       text: missing > 0
-        ? `Downloaded ${downloaded} ${artifactLabel}; ${missing} missing`
-        : `Downloaded ${downloaded} ${artifactLabel}`,
+        ? t("Downloaded $1 $2; $3 missing", downloaded, artifactLabel, missing)
+        : t("Downloaded $1 $2", downloaded, artifactLabel),
     });
   }
 
@@ -945,7 +962,7 @@ function OptionsMain() {
   async function exportSelectedZip() {
     if (!selectedSnapshotList.length) return;
     setExportMenuOpen(false);
-    setSavedUrlStatus({ kind: 'idle', text: `Building ZIP export for ${selectedSnapshotList.length} snapshots...` });
+    setSavedUrlStatus({ kind: 'idle', text: t("Building ZIP export for $1 snapshots...", selectedSnapshotList.length) });
 
     const baseName = archiveboxExportBaseName();
     const files: Record<string, Uint8Array> = {
@@ -989,8 +1006,8 @@ function OptionsMain() {
     setSavedUrlStatus({
       kind: missingArtifacts > 0 ? 'warning' : 'success',
       text: missingArtifacts > 0
-        ? `Exported ZIP with ${includedArtifacts} local artifacts; ${missingArtifacts} missing`
-        : `Exported ZIP with ${includedArtifacts} local artifacts`,
+        ? t("Exported ZIP with $1 local artifacts; $2 missing", includedArtifacts, missingArtifacts)
+        : t("Exported ZIP with $1 local artifacts", includedArtifacts),
     });
   }
 
@@ -1023,7 +1040,7 @@ function OptionsMain() {
       return;
     }
     const nextTags = [...new Set([...snapshot.tags, tag])];
-    await updateSnapshotTags(snapshot.id, nextTags, `Added tag "${tag}"`);
+    await updateSnapshotTags(snapshot.id, nextTags, t("Added tag \"$1\"", tag));
     setInlineTagEditor(null);
   }
 
@@ -1031,27 +1048,20 @@ function OptionsMain() {
     await updateSnapshotTags(
       snapshot.id,
       snapshot.tags.filter((item) => item !== tag),
-      `Removed tag "${tag}"`,
+      t("Removed tag \"$1\"", tag),
     );
   }
 
   async function saveConfig(patch: Partial<ConfigState>) {
     const next = { ...config, ...patch };
+    if (patch.ui_language) setUiLanguage(patch.ui_language);
     setConfigState(next);
     await setConfig(patch);
   }
 
   async function testServer() {
     if (!archiveboxServerUrlIsValid) {
-      setServerStatus({ kind: 'warning', text: 'Enter a valid http:// or https:// server URL' });
-      return;
-    }
-    const granted = await browser.permissions.request({
-      permissions: ['cookies'],
-      origins: [`${archiveboxServerBaseUrl}/*`],
-    });
-    if (!granted) {
-      setServerStatus({ kind: 'error', text: 'Permission denied' });
+      setServerStatus({ kind: 'warning', text: t("Enter a valid http:// or https:// server URL") });
       return;
     }
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
@@ -1059,13 +1069,13 @@ function OptionsMain() {
       serverUrl: archiveboxServerBaseUrl,
     });
     setServerStatus(response.ok
-      ? { kind: 'success', text: 'Server is reachable' }
-      : { kind: 'error', text: response.error || 'Server test failed' });
+      ? { kind: 'success', text: t("Server is reachable") }
+      : { kind: 'error', text: response.error || t("Server test failed") });
   }
 
   async function testApiKeyValue() {
     if (!archiveboxServerUrlIsValid) {
-      setApiStatus({ kind: 'warning', text: 'Enter a valid http:// or https:// server URL' });
+      setApiStatus({ kind: 'warning', text: t("Enter a valid http:// or https:// server URL") });
       return;
     }
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
@@ -1074,14 +1084,14 @@ function OptionsMain() {
       apiKey: config.archivebox_api_key,
     });
     setApiStatus(response.ok
-      ? { kind: 'success', text: `API key is valid: user_id = ${response.user_id}` }
-      : { kind: 'error', text: response.error || 'API key test failed' });
+      ? { kind: 'success', text: t("API key is valid: user_id = $1", response.user_id || '') }
+      : { kind: 'error', text: response.error || t("API key test failed") });
   }
 
   async function testUrlPatterns() {
     const url = testUrl.trim();
     if (!url) {
-      setTestStatus({ kind: 'error', text: 'Please enter a URL to test' });
+      setTestStatus({ kind: 'error', text: t("Please enter a URL to test") });
       return;
     }
 
@@ -1089,28 +1099,28 @@ function OptionsMain() {
     try {
       shouldArchive = new RegExp(config.match_urls || /^$/).test(url);
     } catch (error) {
-      setTestStatus({ kind: 'error', text: `Error with match pattern: ${(error as Error).message}` });
+      setTestStatus({ kind: 'error', text: t("Error with match pattern: $1", (error as Error).message) });
       return;
     }
 
     try {
       if (new RegExp(config.exclude_urls || /^$/).test(url)) {
-        setTestStatus({ kind: 'warning', text: 'URL is excluded from auto-archiving' });
+        setTestStatus({ kind: 'warning', text: t("URL is excluded from auto-archiving") });
         return;
       }
     } catch (error) {
-      setTestStatus({ kind: 'error', text: `Error with exclude pattern: ${(error as Error).message}` });
+      setTestStatus({ kind: 'error', text: t("Error with exclude pattern: $1", (error as Error).message) });
       return;
     }
 
     if (!shouldArchive) {
-      setTestStatus({ kind: 'warning', text: 'URL does not match the auto-archive pattern' });
+      setTestStatus({ kind: 'warning', text: t("URL does not match the auto-archive pattern") });
       return;
     }
 
     try {
       await addToArchiveBox([url], ['test']);
-      setTestStatus({ kind: 'success', text: 'URL was submitted to ArchiveBox' });
+      setTestStatus({ kind: 'success', text: t("URL was submitted to ArchiveBox") });
       setTestUrl('');
     } catch (error) {
       setTestStatus({ kind: 'error', text: (error as Error).message });
@@ -1119,16 +1129,18 @@ function OptionsMain() {
 
   async function updateAutoArchive(enabled: boolean) {
     if (enabled) {
-      const granted = await browser.permissions.request({ permissions: ['tabs'] });
+      const granted = await browser.permissions.request({
+        permissions: ['tabs'],
+        origins: ['<all_urls>'],
+      });
       if (!granted) return;
     }
     await saveConfig({ enable_auto_archive: enabled });
   }
 
   async function requestLocalCaptureStorage(): Promise<void> {
-    const alreadyGranted = await browser.permissions.contains({ permissions: ['unlimitedStorage'] }).catch(() => false);
-    let unlimitedStorageGranted = alreadyGranted;
-    if (!alreadyGranted) {
+    let unlimitedStorageGranted = false;
+    if (supportsUnlimitedStoragePermission) {
       unlimitedStorageGranted = await browser.permissions.request({ permissions: ['unlimitedStorage'] }).catch(() => false);
     }
 
@@ -1139,16 +1151,22 @@ function OptionsMain() {
     setLocalCaptureStatus({
       kind: 'success',
       text: unlimitedStorageGranted
-        ? 'Local capture saving enabled with unlimited storage'
+        ? t("Local capture saving enabled with unlimited storage")
         : persistentStorage
-          ? 'Local capture saving enabled with persistent storage'
-          : 'Local capture saving enabled',
+          ? t("Local capture saving enabled with persistent storage")
+          : t("Local capture storage enabled"),
     });
   }
 
   async function requestMhtmlCapturePermission(): Promise<boolean> {
     if (!supportsMhtmlCapture) {
-      setLocalCaptureStatus({ kind: 'warning', text: mhtmlUnsupportedMessage });
+      setLocalCaptureStatus({ kind: 'warning', text: mhtmlUnsupportedMessage() });
+      return false;
+    }
+
+    const granted = await browser.permissions.request({ permissions: ['pageCapture'] }).catch(() => false);
+    if (!granted) {
+      setLocalCaptureStatus({ kind: 'error', text: t("MHTML capture permission denied") });
       return false;
     }
     return true;
@@ -1170,11 +1188,13 @@ function OptionsMain() {
           ? config.save_screenshots_locally || config.save_singlefile_locally
           : config.save_screenshots_locally || config.save_mhtml_locally;
       if (!otherLocalCaptureEnabled) {
-        await browser.permissions.remove({ permissions: ['unlimitedStorage'] }).catch(() => false);
+        if (supportsUnlimitedStoragePermission) {
+          await browser.permissions.remove({ permissions: ['unlimitedStorage'] }).catch(() => false);
+        }
       }
       setLocalCaptureStatus({ kind: 'idle', text: '' });
     } else {
-      setLocalCaptureStatus({ kind: 'success', text: 'Local capture storage enabled' });
+      setLocalCaptureStatus({ kind: 'success', text: t("Local capture storage enabled") });
     }
   }
 
@@ -1184,23 +1204,23 @@ function OptionsMain() {
       origins: ['*://*/*'],
     });
     if (!granted) {
-      setCookieStatus({ kind: 'error', text: 'Cookie permission denied' });
+      setCookieStatus({ kind: 'error', text: t("Cookie permission denied") });
       return;
     }
     const nextCookies = await getCookiesByDomain();
     setCookiesByDomain(nextCookies);
-    setCookieStatus({ kind: 'success', text: `Loaded cookies for ${Object.keys(nextCookies).length} domains` });
+    setCookieStatus({ kind: 'success', text: t("Loaded cookies for $1 domains", Object.keys(nextCookies).length) });
   }
 
   async function importSelectedCookies(targetPersonaId: string) {
     const targetPersona = personas.find((persona) => persona.id === targetPersonaId);
     if (!targetPersona) {
-      setCookieStatus({ kind: 'warning', text: 'Select a profile to copy cookies into' });
+      setCookieStatus({ kind: 'warning', text: t("Select a profile to copy cookies into") });
       setCookieProfileMenuOpen(false);
       return;
     }
     if (selectedCookieDomains.size === 0) {
-      setCookieStatus({ kind: 'warning', text: 'No cookie domains selected' });
+      setCookieStatus({ kind: 'warning', text: t("No cookie domains selected") });
       setCookieProfileMenuOpen(false);
       return;
     }
@@ -1220,7 +1240,7 @@ function OptionsMain() {
     const persona = nextPersonas.find((item) => item.id === targetPersonaId);
     setCookieStatus({
       kind: 'success',
-      text: `Copied ${selectedCount} domain cookies to ${persona?.name || targetPersona.name}`,
+      text: t("Copied $1 domain cookies to $2", selectedCount, persona?.name || targetPersona.name),
     });
   }
 
@@ -1237,7 +1257,7 @@ function OptionsMain() {
   }
 
   async function createPersona() {
-    const name = prompt('Enter name for new profile:');
+    const name = prompt(t("Enter name for new profile:"));
     if (!name) return;
     const persona = {
       ...defaultPersona(name),
@@ -1246,7 +1266,7 @@ function OptionsMain() {
     const nextPersonas = [...personas, persona];
     setPersonasState(nextPersonas);
     await setPersonas(nextPersonas);
-    setPersonaStatus({ kind: 'success', text: `Created profile "${name}"` });
+    setPersonaStatus({ kind: 'success', text: t("Created profile \"$1\"", name) });
   }
 
   async function savePersona(persona: Persona, patch: Partial<Persona>) {
@@ -1256,7 +1276,7 @@ function OptionsMain() {
   }
 
   async function deletePersona(id: string) {
-    if (!confirm('Delete this profile? This cannot be undone.')) return;
+    if (!confirm(t("Delete this profile? This cannot be undone."))) return;
     const nextPersonas = personas.filter((persona) => persona.id !== id);
     setPersonasState(nextPersonas);
     await setPersonas(nextPersonas);
@@ -1265,7 +1285,7 @@ function OptionsMain() {
       setActivePersonaState(nextActive);
       await setActivePersona(nextActive);
     }
-    setPersonaStatus({ kind: 'success', text: 'Profile deleted' });
+    setPersonaStatus({ kind: 'success', text: t("Profile deleted") });
   }
 
   async function chooseActivePersona(id: string) {
@@ -1277,7 +1297,7 @@ function OptionsMain() {
     await savePersona(persona, {
       settings: await currentPersonaSettings(),
     });
-    setPersonaStatus({ kind: 'success', text: `Updated browser settings for ${persona.name}` });
+    setPersonaStatus({ kind: 'success', text: t("Updated browser settings for $1", persona.name) });
   }
 
   async function updatePersonaSetting(persona: Persona, key: PersonaSettingKey, value: string) {
@@ -1298,14 +1318,14 @@ function OptionsMain() {
   async function loadHistory() {
     const granted = await browser.permissions.request({ permissions: ['history'] });
     if (!granted) {
-      setImportStatus({ kind: 'error', text: 'History permission denied' });
+      setImportStatus({ kind: 'error', text: t("History permission denied") });
       return;
     }
     const existingUrls = new Set(snapshots.map((snapshot) => snapshot.url));
     try {
       const items = await loadHistorySnapshots(importStartDate, importEndDate, existingUrls);
       setImportItems(items);
-      setImportStatus({ kind: 'success', text: `Loaded ${items.length} history URLs` });
+      setImportStatus({ kind: 'success', text: t("Loaded $1 history URLs", items.length) });
     } catch (error) {
       setImportStatus({ kind: 'error', text: (error as Error).message });
     }
@@ -1314,20 +1334,20 @@ function OptionsMain() {
   async function loadBookmarks() {
     const granted = await browser.permissions.request({ permissions: ['bookmarks'] });
     if (!granted) {
-      setImportStatus({ kind: 'error', text: 'Bookmark permission denied' });
+      setImportStatus({ kind: 'error', text: t("Bookmark permission denied") });
       return;
     }
     const existingUrls = new Set(snapshots.map((snapshot) => snapshot.url));
     const items = await loadBookmarkSnapshots(existingUrls);
     setImportItems(items);
-    setImportStatus({ kind: 'success', text: `Loaded ${items.length} bookmark URLs` });
+    setImportStatus({ kind: 'success', text: t("Loaded $1 bookmark URLs", items.length) });
   }
 
   async function importSelectedUrls() {
     const tagsToAdd = importTags.split(',').map((tag) => tag.trim()).filter(Boolean);
     const selected = importItems.filter((item) => item.selected);
     if (!selected.length) {
-      setImportStatus({ kind: 'warning', text: 'No items selected' });
+      setImportStatus({ kind: 'warning', text: t("No items selected") });
       return;
     }
     const selectedIds = new Set(selected.map((item) => item.id));
@@ -1346,7 +1366,7 @@ function OptionsMain() {
     setImportTags('');
     setFilterText('');
     window.history.pushState({}, '', window.location.pathname);
-    setImportStatus({ kind: 'success', text: `Successfully imported ${imported.length} URLs` });
+    setImportStatus({ kind: 'success', text: t("Successfully imported $1 URLs", imported.length) });
     setTab('urls');
   }
 
@@ -1358,20 +1378,20 @@ function OptionsMain() {
   async function syncSelected() {
     const selected = snapshots.filter((snapshot) => selectedSnapshots.has(snapshot.id));
     if (!selected.length) {
-      setSavedUrlStatus({ kind: 'warning', text: 'No snapshots selected' });
+      setSavedUrlStatus({ kind: 'warning', text: t("No snapshots selected") });
       return;
     }
-    setSavedUrlStatus({ kind: 'idle', text: `Syncing ${selected.length} snapshots...` });
+    setSavedUrlStatus({ kind: 'idle', text: t("Syncing $1 snapshots...", selected.length) });
     for (const snapshot of selected) {
       setSyncStatuses((current) => ({
         ...current,
-        [snapshot.id]: { kind: 'warning', text: 'Syncing...' },
+        [snapshot.id]: { kind: 'warning', text: t("Syncing...") },
       }));
       try {
         await addToArchiveBox([snapshot.url], snapshot.tags);
         setSyncStatuses((current) => ({
           ...current,
-          [snapshot.id]: { kind: 'success', text: 'Synced' },
+          [snapshot.id]: { kind: 'success', text: t("Synced") },
         }));
       } catch (error) {
         setSyncStatuses((current) => ({
@@ -1381,7 +1401,7 @@ function OptionsMain() {
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
-    setSavedUrlStatus({ kind: 'success', text: `Finished syncing ${selected.length} snapshots` });
+    setSavedUrlStatus({ kind: 'success', text: t("Finished syncing $1 snapshots", selected.length) });
   }
 
   function openTagEditor() {
@@ -1416,7 +1436,7 @@ function OptionsMain() {
       : snapshot);
     await persistSnapshots(nextSnapshots);
     setEditingTags(false);
-    setSavedUrlStatus({ kind: 'success', text: `Updated tags on ${selectedSnapshots.size} snapshots` });
+    setSavedUrlStatus({ kind: 'success', text: t("Updated tags on $1 snapshots", selectedSnapshots.size) });
   }
 
   async function copyPersonaCookies(persona: Persona) {
@@ -1425,7 +1445,7 @@ function OptionsMain() {
     await navigator.clipboard.writeText(formatCookiesForExport(persona.cookies));
     setPersonaStatus({
       kind: 'success',
-      text: `${domainCount} domain logins (${cookieCount} cookies) copied for ${persona.name}`,
+      text: t("$1 domain logins ($2 cookies) copied for $3", domainCount, cookieCount, persona.name),
     });
   }
 
@@ -1433,7 +1453,7 @@ function OptionsMain() {
     await navigator.clipboard.writeText(formatCookiesForExport({ [domain]: cookies }));
     setCookieStatus({
       kind: 'success',
-      text: `${cookies.length} cookies copied for ${domain}`,
+      text: t("$1 cookies copied for $2", cookies.length, domain),
     });
   }
 
@@ -1443,11 +1463,11 @@ function OptionsMain() {
         <div className="topbar__brand">
           <img src={extensionUrl('icon/48.png')} alt="" />
           <div>
-            <h1>ArchiveBox Collector</h1>
-            <p>Collect browser URLs and submit captures to ArchiveBox.</p>
+            <h1>{t("ArchiveBox Collector")}</h1>
+            <p>{t("Collect browser URLs and submit captures to ArchiveBox.")}</p>
           </div>
         </div>
-        <nav className="tabs" aria-label="Options sections">
+        <nav className="tabs" aria-label={t("Options sections")}>
           {optionTabs.map(({ id, label, Icon }) => (
             <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
               <Icon aria-hidden="true" size={14} />
@@ -1461,14 +1481,14 @@ function OptionsMain() {
         <section className="layout">
           <div className="panel wide">
             <div className="toolbar saved-url-toolbar">
-              <span className="saved-url-count">{visibleSnapshots.length} visible / {snapshots.length} saved · {visibleSelectedCount} selected</span>
+              <span className="saved-url-count">{t("$1 visible / $2 saved · $3 selected", visibleSnapshots.length, snapshots.length, visibleSelectedCount)}</span>
               <label className="search-field">
                 <Search size={14} aria-hidden="true" />
-                <input value={filterText} onChange={(event) => updateSavedUrlFilter(event.currentTarget.value)} placeholder="Search by URL, title, ID, timestamp, or tags" />
+                <input value={filterText} onChange={(event) => updateSavedUrlFilter(event.currentTarget.value)} placeholder={t("Search by URL, title, ID, timestamp, or tags")} />
               </label>
               <button className="icon-button" disabled={!selectedSnapshots.size} onClick={openTagEditor}>
                 <Pencil size={14} aria-hidden="true" />
-                <span>Tags</span>
+                <span>{t("Tags")}</span>
               </button>
               <div className="export-menu">
                 <button
@@ -1479,32 +1499,32 @@ function OptionsMain() {
                   aria-haspopup="menu"
                 >
                   <Download size={14} aria-hidden="true" />
-                  <span>Export</span>
+                  <span>{t("Export")}</span>
                   <ChevronDown size={13} aria-hidden="true" />
                 </button>
                 {exportMenuOpen && selectedSnapshots.size > 0 && (
                   <div className="export-menu__items" role="menu">
-                    <button onClick={() => exportSelectedSnapshots('csv')} role="menuitem">CSV</button>
-                    <button onClick={() => exportSelectedSnapshots('json')} role="menuitem">JSON</button>
-                    <button onClick={exportSelectedScreenshots} role="menuitem">PNG</button>
-                    <button onClick={exportSelectedMhtml} role="menuitem">MHTML</button>
-                    <button onClick={exportSelectedSingleFile} role="menuitem">SingleFile HTML</button>
-                    <button onClick={exportSelectedZip} role="menuitem">ZIP</button>
+                    <button onClick={() => exportSelectedSnapshots('csv')} role="menuitem">{t("CSV")}</button>
+                    <button onClick={() => exportSelectedSnapshots('json')} role="menuitem">{t("JSON")}</button>
+                    <button onClick={exportSelectedScreenshots} role="menuitem">{t("PNG")}</button>
+                    <button onClick={exportSelectedMhtml} role="menuitem">{t("MHTML")}</button>
+                    <button onClick={exportSelectedSingleFile} role="menuitem">{t("SingleFile HTML")}</button>
+                    <button onClick={exportSelectedZip} role="menuitem">{t("ZIP")}</button>
                   </div>
                 )}
               </div>
               <button disabled={!selectedSnapshots.size} onClick={async () => {
-                if (!confirm(`Delete ${selectedSnapshots.size} snapshots?`)) return;
+                if (!confirm(t("Delete $1 snapshots?", selectedSnapshots.size))) return;
                 await persistSnapshots(snapshots.filter((snapshot) => !selectedSnapshots.has(snapshot.id)));
                 setSelectedSnapshots(new Set());
-                setSavedUrlStatus({ kind: 'success', text: 'Deleted selected snapshots' });
+                setSavedUrlStatus({ kind: 'success', text: t("Deleted selected snapshots") });
               }} className="icon-button">
                 <Trash2 size={14} aria-hidden="true" />
-                <span>Delete</span>
+                <span>{t("Delete")}</span>
               </button>
               <button className="icon-button" disabled={!selectedSnapshots.size} onClick={syncSelected}>
                 <Upload size={14} aria-hidden="true" />
-                <span>Sync</span>
+                <span>{t("Sync")}</span>
               </button>
               <StatusBadge status={savedUrlStatus} />
             </div>
@@ -1515,7 +1535,7 @@ function OptionsMain() {
                     <th className="saved-url-table__check">
                       <input
                         type="checkbox"
-                        aria-label={allVisibleSelected ? 'Deselect all visible URLs' : 'Select all visible URLs'}
+                        aria-label={allVisibleSelected ? t("Deselect all visible URLs") : t("Select all visible URLs")}
                         checked={allVisibleSelected}
                         disabled={visibleSnapshotIds.length === 0}
                         onChange={(event) => {
@@ -1533,25 +1553,25 @@ function OptionsMain() {
                     </th>
                     <th aria-sort={savedUrlSortKey === 'date' ? (savedUrlSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
                       <button className="sort-header" onClick={() => updateSavedUrlSort('date')}>
-                        <span>Date Added</span>
+                        <span>{t("Date Added")}</span>
                         <b>{savedUrlSortIndicator('date')}</b>
                       </button>
                     </th>
                     <th aria-sort={savedUrlSortKey === 'url' ? (savedUrlSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
                       <button className="sort-header" onClick={() => updateSavedUrlSort('url')}>
-                        <span>URL</span>
+                        <span>{t("URL")}</span>
                         <b>{savedUrlSortIndicator('url')}</b>
                       </button>
                     </th>
                     <th aria-sort={savedUrlSortKey === 'tags' ? (savedUrlSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
                       <button className="sort-header" onClick={() => updateSavedUrlSort('tags')}>
-                        <span>Tags</span>
+                        <span>{t("Tags")}</span>
                         <b>{savedUrlSortIndicator('tags')}</b>
                       </button>
                     </th>
                     <th aria-sort={savedUrlSortKey === 'sync' ? (savedUrlSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
                       <button className="sort-header" onClick={() => updateSavedUrlSort('sync')}>
-                        <span>Status</span>
+                        <span>{t("Status")}</span>
                         <b>{savedUrlSortIndicator('sync')}</b>
                       </button>
                     </th>
@@ -1591,20 +1611,20 @@ function OptionsMain() {
                             </div>
                           </div>
                           <div className="saved-url-links">
-                            {config.archivebox_server_url && <a href={`${config.archivebox_server_url}/archive/${snapshot.url}`} target="_blank" rel="noopener noreferrer">ArchiveBox</a>}
-                            <a href={`https://web.archive.org/web/${snapshot.url}`} target="_blank" rel="noopener noreferrer">Archive.org ↗</a>
+                            {config.archivebox_server_url && <a href={`${config.archivebox_server_url}/archive/${snapshot.url}`} target="_blank" rel="noopener noreferrer">{t("ArchiveBox")}</a>}
+                            <a href={`https://web.archive.org/web/${snapshot.url}`} target="_blank" rel="noopener noreferrer">{t("Archive.org ↗")}</a>
                           </div>
                         </td>
                         <td className="saved-url-tags">
                           <TagList>
                             {snapshot.tags.map((tag) => (
-                              <TagChip key={tag} label={tag} onRemove={() => removeSnapshotTag(snapshot, tag)} removeTitle={`Remove tag ${tag}`} />
+                              <TagChip key={tag} label={tag} onRemove={() => removeSnapshotTag(snapshot, tag)} removeTitle={t("Remove tag $1", tag)} />
                             ))}
                             {inlineTagEditor?.snapshotId === snapshot.id ? (
                               <TagInputChip
                                 value={inlineTagEditor.value}
                                 autoFocus
-                                placeholder="tag"
+                                placeholder={t("tag")}
                                 suggestions={inlineTagSuggestions}
                                 onCommit={(tag) => addInlineTag(snapshot, tag)}
                                 onCancel={() => setInlineTagEditor(null)}
@@ -1616,7 +1636,7 @@ function OptionsMain() {
                             ) : (
                               <TagChip label="+" variant="add" onClick={() => {
                                 setInlineTagEditor({ snapshotId: snapshot.id, value: '' });
-                              }} title="Add tag" />
+                              }} title={t("Add tag")} />
                             )}
                           </TagList>
                         </td>
@@ -1628,11 +1648,11 @@ function OptionsMain() {
                   })}
                 </tbody>
               </table>
-              {visibleSnapshots.length === 0 && <EmptyState title="No saved URLs match this view" detail="Save a page with the toolbar button or import URLs from browser history/bookmarks." />}
+              {visibleSnapshots.length === 0 && <EmptyState title={t("No saved URLs match this view")} detail={t("Save a page with the toolbar button or import URLs from browser history/bookmarks.")} />}
             </div>
           </div>
           <aside className="panel tags-panel">
-            <h2>Tags</h2>
+            <h2>{t("Tags")}</h2>
             {tagCounts.map(([tag, count]) => (
               <button
                 key={tag}
@@ -1649,40 +1669,48 @@ function OptionsMain() {
 
       {tab === 'config' && (
         <section className="panel config-grid">
-          <SectionHeader title="Server Configuration" detail="Connect the extension to your self-hosted ArchiveBox server." />
-          <Field label="ArchiveBox Server URL">
-            <input value={config.archivebox_server_url} onChange={(event) => saveConfig({ archivebox_server_url: event.currentTarget.value })} placeholder="http://localhost:8000 or https://archivebox.example.com" />
-            <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin`, '_blank')}>Admin</button>
-            <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin/login/`, '_blank')}>Login</button>
-            <button disabled={!archiveboxServerUrlIsValid} onClick={testServer}>Test</button>
+          <SectionHeader title={t("Configuration")} detail={t("Connect the extension to your self-hosted ArchiveBox server.")} />
+          <Field label={t("Language")}>
+            <select value={config.ui_language} onChange={(event) => saveConfig({ ui_language: event.currentTarget.value as ConfigState['ui_language'] })}>
+              <option value="auto">{t("Browser default ($1)", browserLanguage)}</option>
+              <option value="en">English</option>
+              <option value="es">Español</option>
+              <option value="zh_CN">中文（简体）</option>
+            </select>
+          </Field>
+          <Field label={t("ArchiveBox Server URL")}>
+            <input value={config.archivebox_server_url} onChange={(event) => saveConfig({ archivebox_server_url: event.currentTarget.value })} placeholder={t("http://localhost:8000 or https://archivebox.example.com")} />
+            <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin`, '_blank')}>{t("Admin")}</button>
+            <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin/login/`, '_blank')}>{t("Login")}</button>
+            <button disabled={!archiveboxServerUrlIsValid} onClick={testServer}>{t("Test")}</button>
             <StatusBadge status={serverStatus} />
           </Field>
           <p className="help-text">
-            The base URL of your self-hosted ArchiveBox server. Local HTTP servers such as <code>http://localhost:8000</code> are supported, as are HTTPS deployments.
+            {t("The base URL of your self-hosted ArchiveBox server. Local HTTP servers such as")} <code>http://localhost:8000</code> {t("are supported, as are HTTPS deployments.")}
           </p>
-          <Field label="API Key">
+          <Field label={t("API Key")}>
             <input value={config.archivebox_api_key} onChange={(event) => saveConfig({ archivebox_api_key: event.currentTarget.value.trim() })} placeholder="... abcexamplekey1234 ..." />
-            <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin/api/apitoken/add/`, '_blank')}>Generate</button>
-            <button disabled={!archiveboxServerUrlIsValid} onClick={testApiKeyValue}>Test</button>
+            <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin/api/apitoken/add/`, '_blank')}>{t("Generate")}</button>
+            <button disabled={!archiveboxServerUrlIsValid} onClick={testApiKeyValue}>{t("Test")}</button>
             <StatusBadge status={apiStatus} />
           </Field>
           <div className="notice">
-            API keys are supported by ArchiveBox v0.8.5 and newer. For older servers, leave this blank and stay logged into the ArchiveBox admin UI in this browser. Public unauthenticated adding is possible server-side, but it is a security risk.
+            {t("API keys are supported by ArchiveBox v0.8.5 and newer. For older servers, leave this blank and stay logged into the ArchiveBox admin UI in this browser. Public unauthenticated adding is possible server-side, but it is a security risk.")}
           </div>
           <div className="doc-links">
-            <a href="https://github.com/ArchiveBox/archivebox-browser-extension#setup" target="_blank" rel="noopener noreferrer">Extension setup guide</a>
-            <a href="https://github.com/ArchiveBox/ArchiveBox/wiki/Configuration#public_index--public_snapshots--public_add_view" target="_blank" rel="noopener noreferrer">ArchiveBox server config</a>
-            <a href="https://demo.archivebox.io/api/v1/docs" target="_blank" rel="noopener noreferrer">REST API docs</a>
+            <a href="https://github.com/ArchiveBox/archivebox-browser-extension#setup" target="_blank" rel="noopener noreferrer">{t("Extension setup guide")}</a>
+            <a href="https://github.com/ArchiveBox/ArchiveBox/wiki/Configuration#public_index--public_snapshots--public_add_view" target="_blank" rel="noopener noreferrer">{t("ArchiveBox server config")}</a>
+            <a href="https://demo.archivebox.io/api/v1/docs" target="_blank" rel="noopener noreferrer">{t("REST API docs")}</a>
           </div>
           <div className="section-divider" />
-          <SectionHeader title="Advanced Archiving" detail="Control local captures and automatic archiving behavior." />
+          <SectionHeader title={t("Advanced Archiving")} detail={t("Control local captures and automatic archiving behavior.")} />
           <label className="toggle">
             <input
               type="checkbox"
               checked={config.save_screenshots_locally}
               onChange={(event) => updateLocalCaptureSetting('save_screenshots_locally', event.currentTarget.checked)}
             />
-            Save full-page screenshots locally
+            {t("Save full-page screenshots locally")}
           </label>
           <label className="toggle">
             <input
@@ -1691,10 +1719,10 @@ function OptionsMain() {
               disabled={!supportsMhtmlCapture}
               onChange={(event) => updateLocalCaptureSetting('save_mhtml_locally', event.currentTarget.checked)}
             />
-            Save MHTML snapshots locally
+            {t("Save MHTML snapshots locally")}
           </label>
           {!supportsMhtmlCapture ? (
-            <p className="help-text">{mhtmlUnsupportedMessage}</p>
+            <p className="help-text">{mhtmlUnsupportedMessage()}</p>
           ) : null}
           <label className="toggle">
             <input
@@ -1702,32 +1730,32 @@ function OptionsMain() {
               checked={config.save_singlefile_locally}
               onChange={(event) => updateLocalCaptureSetting('save_singlefile_locally', event.currentTarget.checked)}
             />
-            Save SingleFile HTML snapshots locally
+            {t("Save SingleFile HTML snapshots locally")}
           </label>
-          <Field label="SingleFile extension ID">
+          <Field label={t("SingleFile extension ID")}>
             <input
               value={config.singlefile_extension_id || ''}
               onChange={(event) => saveConfig({ singlefile_extension_id: event.currentTarget.value.trim() })}
               placeholder={defaultSingleFileExtensionId}
             />
           </Field>
-          <p className="help-text">{singleFileCaptureUnavailableMessage} Leave the extension ID blank to use the default SingleFile Web Store / Add-ons ID.</p>
+          <p className="help-text">{t("$1 Leave the extension ID blank to use the default SingleFile Web Store / Add-ons ID.", singleFileCaptureUnavailableMessage())}</p>
           <StatusBadge status={localCaptureStatus} />
           <div className="section-divider" />
-          <SectionHeader title="Automatic Archiving" detail="Automatically archive visited pages whose URLs match your patterns." />
+          <SectionHeader title={t("Automatic Archiving")} detail={t("Automatically archive visited pages whose URLs match your patterns.")} />
           <label className="toggle">
             <input type="checkbox" checked={config.enable_auto_archive} onChange={(event) => updateAutoArchive(event.currentTarget.checked)} />
-            Enable automatic archiving
+            {t("Enable automatic archiving")}
           </label>
-          <Field label="Match URL regex">
+          <Field label={t("Match URL regex")}>
             <input value={config.match_urls} onChange={(event) => saveConfig({ match_urls: event.currentTarget.value })} placeholder="(wikipedia.org)|(archive.org)|(github.com/ArchiveBox/ArchiveBox/$)" />
           </Field>
-          <p className="help-text">By default, pages are archived only when you click Save to ArchiveBox. Use <code>.*</code> to archive all visited pages, though that is not recommended.</p>
-          <Field label="Exclude URL regex">
+          <p className="help-text">{t("By default, pages are archived only when you click Save to ArchiveBox. Use")} <code>.*</code> {t("to archive all visited pages, though that is not recommended.")}</p>
+          <Field label={t("Exclude URL regex")}>
             <input value={config.exclude_urls} onChange={(event) => saveConfig({ exclude_urls: event.currentTarget.value })} placeholder="(mail.google.com)|(password)|(login)|(logout)|(signup)|(register)" />
           </Field>
-          <p className="help-text">Exclude sensitive pages like inboxes, forms, corporate documents, banking sites, login/logout flows, and password pages.</p>
-          <Field label="Test URL">
+          <p className="help-text">{t("Exclude sensitive pages like inboxes, forms, corporate documents, banking sites, login/logout flows, and password pages.")}</p>
+          <Field label={t("Test URL")}>
             <input
               value={testUrl}
               onChange={(event) => setTestUrl(event.currentTarget.value)}
@@ -1739,7 +1767,7 @@ function OptionsMain() {
               }}
               placeholder="https://example.com/article"
             />
-            <button onClick={testUrlPatterns}>Submit Test</button>
+            <button onClick={testUrlPatterns}>{t("Submit Test")}</button>
             <StatusBadge status={testStatus} />
           </Field>
         </section>
@@ -1747,37 +1775,37 @@ function OptionsMain() {
 
       {tab === 'profiles' && (
         <section className="panel">
-          <SectionHeader title="Authentication Profiles" detail="Manage cookies and browser-like settings used for logged-in archiving." />
+          <SectionHeader title={t("Cookies")} detail={t("Manage cookies and browser-like settings used for logged-in archiving.")} />
           <div className="notice">
-            For logged-in archiving, import credentials into one or more archiving profiles. A profile is ArchiveBox's equivalent to a browser profile: cookies plus browser settings for the sites you want to capture.
+            {t("For logged-in archiving, import credentials into one or more archiving profiles. A profile is ArchiveBox's equivalent to a browser profile: cookies plus browser settings for the sites you want to capture.")}
             <pre>{`archivebox config --set COOKIE_FILE=$PWD/cookies.txt
 archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
           </div>
           <div className="notice warning">
-            Use dedicated archiving accounts where possible so archives do not embed personal browsing data or normal-account cookies.
+            {t("Use dedicated archiving accounts where possible so archives do not embed personal browsing data or normal-account cookies.")}
           </div>
           <div className="toolbar">
             <select value={activePersona} onChange={(event) => chooseActivePersona(event.currentTarget.value)}>
-              <option value="">Select a profile...</option>
+              <option value="">{t("Select a profile...")}</option>
               {personas.map((persona) => <option key={persona.id} value={persona.id}>{persona.name}</option>)}
             </select>
-            <button onClick={createPersona}>New Profile</button>
+            <button onClick={createPersona}>{t("New Profile")}</button>
           </div>
-          <div className="notice compact">Active profile: {activePersonaStats}</div>
+          <div className="notice compact">{t("Active profile: $1", activePersonaStats)}</div>
           <StatusBadge status={personaStatus} />
           <div className="persona-list">
             {personas.map((persona) => (
               <article className={persona.id === activePersona ? 'persona active' : 'persona'} key={persona.id}>
                 <input value={persona.name} onChange={(event) => savePersona(persona, { name: event.currentTarget.value })} />
-                <p>{Object.keys(persona.cookies || {}).length} domains · Last used {persona.lastUsed ? new Date(persona.lastUsed).toLocaleString() : 'never'}</p>
+                <p>{t("$1 domains · Last used $2", Object.keys(persona.cookies || {}).length, persona.lastUsed ? new Date(persona.lastUsed).toLocaleString() : t("never"))}</p>
                 <div className="settings-grid">
                   {[
-                    ['userAgent', 'User Agent'],
-                    ['geography', 'Geography'],
-                    ['timezone', 'Timezone'],
-                    ['language', 'Language'],
-                    ['operatingSystem', 'Operating System'],
-                    ['viewport', 'Viewport Size'],
+                    ['userAgent', t("User Agent")],
+                    ['geography', t("Geography")],
+                    ['timezone', t("Timezone")],
+                    ['language', t("Language")],
+                    ['operatingSystem', t("Operating System")],
+                    ['viewport', t("Viewport Size")],
                   ].map(([key, label]) => (
                     <label key={key}>
                       <span>{label}</span>
@@ -1791,26 +1819,26 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
                   ))}
                 </div>
                 <div className="row-actions">
-                  <button onClick={() => detectPersonaSettings(persona)}>Detect Settings</button>
-                  <button onClick={() => copyPersonaCookies(persona)}>Export cookies.txt</button>
-                  <button onClick={() => deletePersona(persona.id)}>Delete</button>
+                  <button onClick={() => detectPersonaSettings(persona)}>{t("Detect Settings")}</button>
+                  <button onClick={() => copyPersonaCookies(persona)}>{t("Export cookies.txt")}</button>
+                  <button onClick={() => deletePersona(persona.id)}>{t("Delete")}</button>
                 </div>
               </article>
             ))}
           </div>
           <div className="section-heading cookie-import-heading">
             <div>
-              <h2>Import Browser Cookies to Archiving Profile</h2>
-              <p>Load browser cookies, filter by domain, then copy selected domains into an archiving profile.</p>
+              <h2>{t("Import Browser Cookies to Archiving Profile")}</h2>
+              <p>{t("Load browser cookies, filter by domain, then copy selected domains into an archiving profile.")}</p>
             </div>
             <div className="cookie-import-actions">
-              <button onClick={loadCookies}>Load Browser Cookies</button>
+              <button onClick={loadCookies}>{t("Load Browser Cookies")}</button>
               <div className="profile-menu">
                 <button
                   disabled={selectedCookieDomains.size === 0 || personas.length === 0}
                   onClick={() => setCookieProfileMenuOpen((open) => !open)}
                 >
-                  Copy Cookies to Profile ⌄
+                  {t("Copy Cookies to Profile ⌄")}
                 </button>
                 {cookieProfileMenuOpen && (
                   <div className="profile-menu__dropdown" role="menu">
@@ -1828,9 +1856,9 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
           <div className="table-controls">
             <label className="search-field">
               <Search size={14} aria-hidden="true" />
-              <input value={cookieFilter} onChange={(event) => setCookieFilter(event.currentTarget.value)} placeholder="Filter cookie domains" />
+              <input value={cookieFilter} onChange={(event) => setCookieFilter(event.currentTarget.value)} placeholder={t("Filter cookie domains")} />
             </label>
-            <span className="selected-count">{selectedCookieDomains.size} selected</span>
+            <span className="selected-count">{t("$1 selected", selectedCookieDomains.size)}</span>
           </div>
           <table className="data-table">
             <thead>
@@ -1838,14 +1866,14 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
                 <th>
                   <input
                     type="checkbox"
-                    aria-label="Select all visible cookie domains"
+                    aria-label={t("Select all visible cookie domains")}
                     checked={filteredCookies.length > 0 && filteredCookies.every(([domain]) => selectedCookieDomains.has(domain))}
                     onChange={(event) => setAllVisibleCookies(event.currentTarget.checked)}
                   />
                 </th>
-                <th>Domain</th>
-                <th>Cookies</th>
-                <th>Export cookies.txt</th>
+                <th>{t("Domain")}</th>
+                <th>{t("Cookies")}</th>
+                <th>{t("Export cookies.txt")}</th>
               </tr>
             </thead>
             <tbody>
@@ -1859,30 +1887,30 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
                   })} /></td>
                   <td>{domain}</td>
                   <td>{cookies.length}</td>
-                  <td><button onClick={() => copyDomainCookies(domain, cookies)}>Copy cookies.txt</button></td>
+                  <td><button onClick={() => copyDomainCookies(domain, cookies)}>{t("Copy cookies.txt")}</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {filteredCookies.length === 0 && <EmptyState title="No browser cookies loaded" detail="Click Load Browser Cookies and accept the permission prompt to populate this table." />}
+          {filteredCookies.length === 0 && <EmptyState title={t("No browser cookies loaded")} detail={t("Click Load Browser Cookies and accept the permission prompt to populate this table.")} />}
         </section>
       )}
 
       {tab === 'import' && (
         <section className="panel">
-          <SectionHeader title="Bulk Import URLs" detail="Import URLs from Firefox/Chrome history or bookmarks into the saved URL list." />
+          <SectionHeader title={t("Bulk Import URLs")} detail={t("Import URLs from browser history or bookmarks into the saved URL list.")} />
           <div className="toolbar">
-            <button onClick={loadHistory}>Import from Browser History</button>
-            <button onClick={loadBookmarks}>Import from Browser Bookmarks</button>
+            <button onClick={loadHistory}>{t("Import from Browser History")}</button>
+            <button onClick={loadBookmarks}>{t("Import from Browser Bookmarks")}</button>
             <input type="date" value={importStartDate} onChange={(event) => setImportStartDate(event.currentTarget.value)} />
             <input type="date" value={importEndDate} onChange={(event) => setImportEndDate(event.currentTarget.value)} />
             <label className="search-field">
               <Search size={14} aria-hidden="true" />
-              <input value={importFilter} onChange={(event) => setImportFilter(event.currentTarget.value)} placeholder="Filter URLs and titles" />
+              <input value={importFilter} onChange={(event) => setImportFilter(event.currentTarget.value)} placeholder={t("Filter URLs and titles")} />
             </label>
-            <label className="toggle"><input type="checkbox" checked={showNewOnly} onChange={(event) => setShowNewOnly(event.currentTarget.checked)} /> Show new only</label>
-            <input value={importTags} onChange={(event) => setImportTags(event.currentTarget.value)} placeholder="tags,comma,separated" />
-            <button disabled={!importItems.some((item) => item.selected)} onClick={importSelectedUrls}>Import Selected ({visibleSelectedImportCount})</button>
+            <label className="toggle"><input type="checkbox" checked={showNewOnly} onChange={(event) => setShowNewOnly(event.currentTarget.checked)} /> {t("Show new only")}</label>
+            <input value={importTags} onChange={(event) => setImportTags(event.currentTarget.value)} placeholder={t("tags,comma,separated")} />
+            <button disabled={!importItems.some((item) => item.selected)} onClick={importSelectedUrls}>{t("Import Selected ($1)", visibleSelectedImportCount)}</button>
             <StatusBadge status={importStatus} />
           </div>
           <table className="data-table">
@@ -1891,14 +1919,14 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
                 <th>
                   <input
                     type="checkbox"
-                    aria-label="Select all visible import URLs"
+                    aria-label={t("Select all visible import URLs")}
                     checked={filteredImportItems.length > 0 && filteredImportItems.filter((item) => item.isNew).every((item) => item.selected)}
                     onChange={(event) => setAllVisibleImportItems(event.currentTarget.checked)}
                   />
                 </th>
-                <th>URL</th>
-                <th>Title</th>
-                <th>Timestamp</th>
+                <th>{t("URL")}</th>
+                <th>{t("Title")}</th>
+                <th>{t("Timestamp")}</th>
               </tr>
             </thead>
             <tbody>
@@ -1912,41 +1940,41 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
               ))}
             </tbody>
           </table>
-          {importItems.length === 0 && <EmptyState title="No import source loaded" detail="Choose browser history or bookmarks to review URLs before importing." />}
+          {importItems.length === 0 && <EmptyState title={t("No import source loaded")} detail={t("Choose browser history or bookmarks to review URLs before importing.")} />}
         </section>
       )}
 
       {editingTags && (
-          <dialog className="modal" ref={tagDialogRef} aria-label="Edit tags">
-            <h2>Edit Tags</h2>
+          <dialog className="modal" ref={tagDialogRef} aria-label={t("Edit Tags")}>
+            <h2>{t("Edit Tags")}</h2>
             <div className="tag-line">
               {modalTags.map((tag) => <button type="button" key={tag} onClick={() => setModalTags(modalTags.filter((item) => item !== tag))}>{tag} ×</button>)}
             </div>
             <div className="toolbar">
               <TagInputChip
                 value={newTag}
-                placeholder="Add tag"
+                placeholder={t("Add tag")}
                 suggestions={modalTagSuggestions}
                 onCommit={addModalTag}
                 onChange={setNewTag}
               />
               <button type="button" onClick={() => {
                 addModalTag(newTag);
-              }}>Add</button>
+              }}>{t("Add")}</button>
             </div>
             <footer className="modal-actions">
-              <button type="button" className="modal-button modal-button--cancel" onClick={closeTagEditor}>cancel</button>
-              <span>Selected snapshots: {selectedSnapshots.size}</span>
-              <button type="button" className="modal-button modal-button--primary" onClick={saveTagChanges}>Save Changes</button>
+              <button type="button" className="modal-button modal-button--cancel" onClick={closeTagEditor}>{t("cancel")}</button>
+              <span>{t("Selected snapshots: $1", selectedSnapshots.size)}</span>
+              <button type="button" className="modal-button modal-button--primary" onClick={saveTagChanges}>{t("Save Changes")}</button>
             </footer>
           </dialog>
       )}
       <footer className="footer-links">
-        <a href="https://github.com/ArchiveBox/archivebox-browser-extension" target="_blank" rel="noopener noreferrer">Extension documentation</a>
-        <a href="https://github.com/ArchiveBox/ArchiveBox/wiki" target="_blank" rel="noopener noreferrer">ArchiveBox documentation</a>
-        <a href="https://chromewebstore.google.com/detail/archivebox-exporter/habonpimjphpdnmcfkaockjnffodikoj?authuser=0&hl=en" target="_blank" rel="noopener noreferrer">Chrome extension details</a>
-        <a href="https://github.com/ArchiveBox/archivebox-browser-extension/issues" target="_blank" rel="noopener noreferrer">Report an issue</a>
-        <a href="https://zulip.archivebox.io" target="_blank" rel="noopener noreferrer">Support forum</a>
+        <a href="https://github.com/ArchiveBox/archivebox-browser-extension" target="_blank" rel="noopener noreferrer">{t("Extension documentation")}</a>
+        <a href="https://github.com/ArchiveBox/ArchiveBox/wiki" target="_blank" rel="noopener noreferrer">{t("ArchiveBox documentation")}</a>
+        <a href="https://chromewebstore.google.com/detail/archivebox-exporter/habonpimjphpdnmcfkaockjnffodikoj?authuser=0&hl=en" target="_blank" rel="noopener noreferrer">{t("Chrome extension details")}</a>
+        <a href="https://github.com/ArchiveBox/archivebox-browser-extension/issues" target="_blank" rel="noopener noreferrer">{t("Report an issue")}</a>
+        <a href="https://zulip.archivebox.io" target="_blank" rel="noopener noreferrer">{t("Support forum")}</a>
       </footer>
     </main>
   );
@@ -1985,7 +2013,7 @@ function StatusBadge({ status }: { status: Status }) {
 }
 
 function SyncStatusIcon({ status }: { status?: Status }) {
-  const label = status?.text || 'Not synced';
+  const label = status?.text || t("Not synced");
   const kind = status?.kind || 'idle';
   const icon = kind === 'success'
     ? <CheckCircle2 size={15} aria-hidden="true" />
