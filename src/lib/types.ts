@@ -9,6 +9,7 @@ export type Snapshot = {
   favIconUrl?: string | null;
   depth?: ArchiveDepth;
   screenshot?: SnapshotScreenshot;
+  mhtml?: SnapshotMhtml;
 };
 
 export type SnapshotScreenshot = {
@@ -18,6 +19,14 @@ export type SnapshotScreenshot = {
   capturedAt: string;
   width: number;
   height: number;
+};
+
+export type SnapshotMhtml = {
+  storage: 'opfs';
+  path: string;
+  mimeType: 'multipart/related';
+  capturedAt: string;
+  size: number;
 };
 
 export type PersonaSettings = {
@@ -141,4 +150,5 @@ export type RuntimeResponse = {
   errorMessage?: string;
   user_id?: string | number;
   screenshot?: SnapshotScreenshot;
+  mhtml?: SnapshotMhtml;
 };

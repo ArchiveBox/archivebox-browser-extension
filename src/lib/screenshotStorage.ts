@@ -1,4 +1,4 @@
-import type { Snapshot, SnapshotScreenshot } from './types';
+import type { Snapshot, SnapshotMhtml, SnapshotScreenshot } from './types';
 
 function pathSafeSegment(value: string): string {
   return value
@@ -14,7 +14,7 @@ function snapshotDateSegment(snapshot: Snapshot): string {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
   const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return `${year}${month}${day}`;
 }
 
 function snapshotHostSegment(snapshot: Snapshot): string {
@@ -33,6 +33,17 @@ export function snapshotScreenshotPath(snapshot: Snapshot): string {
     pathSafeSegment(snapshot.id),
     'chrome_extension_screenshot',
     'screenshot.png',
+  ].join('/');
+}
+
+export function snapshotMhtmlPath(snapshot: Snapshot): string {
+  return [
+    'snapshots',
+    snapshotDateSegment(snapshot),
+    snapshotHostSegment(snapshot),
+    pathSafeSegment(snapshot.id),
+    'chrome_extension_mhtml',
+    'snapshot.mhtml',
   ].join('/');
 }
 
@@ -71,9 +82,49 @@ export async function writeSnapshotScreenshot(
   };
 }
 
+export async function writeSnapshotMhtml(
+  snapshot: Snapshot,
+  content: string,
+): Promise<SnapshotMhtml> {
+  const path = snapshotMhtmlPath(snapshot);
+  const segments = path.split('/');
+  const fileName = segments.pop();
+  if (!fileName) throw new Error('Invalid MHTML path');
+
+  const blob = new Blob([content], { type: 'multipart/related' });
+  const directory = await getDirectory(segments, true);
+  const fileHandle = await directory.getFileHandle(fileName, { create: true });
+  const writable = await fileHandle.createWritable();
+  await writable.write(blob);
+  await writable.close();
+
+  return {
+    storage: 'opfs',
+    path,
+    mimeType: 'multipart/related',
+    capturedAt: new Date().toISOString(),
+    size: blob.size,
+  };
+}
+
 export async function readSnapshotScreenshotBlob(screenshot?: SnapshotScreenshot): Promise<Blob | null> {
   if (!screenshot?.path) return null;
   const segments = screenshot.path.split('/');
+  const fileName = segments.pop();
+  if (!fileName) return null;
+
+  try {
+    const directory = await getDirectory(segments, false);
+    const fileHandle = await directory.getFileHandle(fileName);
+    return await fileHandle.getFile();
+  } catch {
+    return null;
+  }
+}
+
+export async function readSnapshotMhtmlBlob(mhtml?: SnapshotMhtml): Promise<Blob | null> {
+  if (!mhtml?.path) return null;
+  const segments = mhtml.path.split('/');
   const fileName = segments.pop();
   if (!fileName) return null;
 

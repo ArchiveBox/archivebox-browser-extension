@@ -1,8 +1,8 @@
 import { addToArchiveBox, archiveBoxSnapshotUrl, removeFromArchiveBox, testApiKey, testServerUrl } from '@/src/lib/archivebox';
-import { writeSnapshotScreenshot } from '@/src/lib/screenshotStorage';
+import { writeSnapshotMhtml, writeSnapshotScreenshot } from '@/src/lib/screenshotStorage';
 import { createSnapshot } from '@/src/lib/snapshots';
 import { getArchiveBoxServerUrl, getConfig, getSnapshots, setSnapshots } from '@/src/lib/storage';
-import type { RuntimeMessage, RuntimeResponse, Snapshot, SnapshotScreenshot } from '@/src/lib/types';
+import type { RuntimeMessage, RuntimeResponse, Snapshot, SnapshotMhtml, SnapshotScreenshot } from '@/src/lib/types';
 
 type ActionClickApi = {
   onClicked: {
@@ -24,12 +24,92 @@ type ScrollResult = PageMetrics & {
   scrollY: number;
 };
 
+type Debuggee = {
+  tabId: number;
+};
+
+type ChromeDebuggerApi = {
+  attach(debuggee: Debuggee, version: string, callback?: () => void): void;
+  detach(debuggee: Debuggee, callback?: () => void): void;
+  sendCommand(
+    debuggee: Debuggee,
+    method: string,
+    commandParams?: Record<string, unknown>,
+    callback?: (result?: unknown) => void,
+  ): void;
+};
+
+type ChromeRuntimeApi = {
+  lastError?: {
+    message?: string;
+  };
+};
+
+type CaptureSnapshotResult = {
+  data?: string;
+};
+
 function getActionApi(): ActionClickApi | undefined {
   const extensionBrowser = browser as unknown as {
     action?: ActionClickApi;
     browserAction?: ActionClickApi;
   };
   return extensionBrowser.action || extensionBrowser.browserAction;
+}
+
+function getChromeApis(): {
+  debugger?: ChromeDebuggerApi;
+  runtime?: ChromeRuntimeApi;
+} {
+  return (globalThis as unknown as {
+    chrome?: {
+      debugger?: ChromeDebuggerApi;
+      runtime?: ChromeRuntimeApi;
+    };
+  }).chrome || {};
+}
+
+function chromeLastError(): string {
+  return getChromeApis().runtime?.lastError?.message || '';
+}
+
+function debuggerAttach(debuggee: Debuggee): Promise<void> {
+  const debuggerApi = getChromeApis().debugger;
+  if (!debuggerApi) throw new Error('chrome.debugger is not available in this browser');
+
+  return new Promise((resolve, reject) => {
+    debuggerApi.attach(debuggee, '1.3', () => {
+      const error = chromeLastError();
+      if (error) reject(new Error(error));
+      else resolve();
+    });
+  });
+}
+
+function debuggerDetach(debuggee: Debuggee): Promise<void> {
+  const debuggerApi = getChromeApis().debugger;
+  if (!debuggerApi) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    debuggerApi.detach(debuggee, () => resolve());
+  });
+}
+
+function debuggerCommand<T>(
+  debuggee: Debuggee,
+  method: string,
+  commandParams?: Record<string, unknown>,
+): Promise<T> {
+  const debuggerApi = getChromeApis().debugger;
+  if (!debuggerApi) throw new Error('chrome.debugger is not available in this browser');
+
+  return new Promise((resolve, reject) => {
+    debuggerApi.sendCommand(debuggee, method, commandParams, (result) => {
+      const error = chromeLastError();
+      if (error) reject(new Error(error));
+      else resolve(result as T);
+    });
+  });
 }
 
 function dataUrlToBlob(dataUrl: string): Blob {
@@ -59,6 +139,13 @@ async function attachScreenshotToSnapshot(snapshotId: string, screenshot: Snapsh
   const snapshots = await getSnapshots();
   await setSnapshots(snapshots.map((snapshot) => (
     snapshot.id === snapshotId ? { ...snapshot, screenshot } : snapshot
+  )));
+}
+
+async function attachMhtmlToSnapshot(snapshotId: string, mhtml: SnapshotMhtml): Promise<void> {
+  const snapshots = await getSnapshots();
+  await setSnapshots(snapshots.map((snapshot) => (
+    snapshot.id === snapshotId ? { ...snapshot, mhtml } : snapshot
   )));
 }
 
@@ -133,6 +220,24 @@ async function captureFullPageScreenshot(tab: Browser.tabs.Tab, snapshot: Snapsh
   return writeSnapshotScreenshot(snapshot, blob, canvas.width, canvas.height);
 }
 
+async function captureMhtml(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<SnapshotMhtml> {
+  if (!tab.id) throw new Error('Cannot capture MHTML without a tab id');
+
+  const debuggee = { tabId: tab.id };
+  await debuggerAttach(debuggee);
+  try {
+    // Page.captureSnapshot serializes the current frame tree into MHTML, including
+    // subframes Chrome can access through the DevTools protocol.
+    const result = await debuggerCommand<CaptureSnapshotResult>(debuggee, 'Page.captureSnapshot', {
+      format: 'mhtml',
+    });
+    if (!result.data) throw new Error('Chrome returned an empty MHTML snapshot');
+    return writeSnapshotMhtml(snapshot, result.data);
+  } finally {
+    await debuggerDetach(debuggee);
+  }
+}
+
 async function captureAndAttachSnapshotScreenshot(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<SnapshotScreenshot> {
   if (tab.id) {
     await browser.tabs.sendMessage<RuntimeMessage, unknown>(tab.id, {
@@ -142,6 +247,45 @@ async function captureAndAttachSnapshotScreenshot(tab: Browser.tabs.Tab, snapsho
   const screenshot = await captureFullPageScreenshot(tab, snapshot);
   await attachScreenshotToSnapshot(snapshot.id, screenshot);
   return screenshot;
+}
+
+async function captureAndAttachSnapshotMhtml(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<SnapshotMhtml> {
+  if (tab.id) {
+    await browser.tabs.sendMessage<RuntimeMessage, unknown>(tab.id, {
+      type: 'hide_archivebox_overlay',
+    }).catch(() => undefined);
+  }
+  const mhtml = await captureMhtml(tab, snapshot);
+  await attachMhtmlToSnapshot(snapshot.id, mhtml);
+  snapshot.mhtml = mhtml;
+  return mhtml;
+}
+
+async function captureAndAttachSnapshotArtifacts(
+  tab: Browser.tabs.Tab,
+  snapshot: Snapshot,
+  options: {
+    screenshot?: boolean;
+    mhtml?: boolean;
+  } = {},
+): Promise<void> {
+  if (tab.id) {
+    await browser.tabs.sendMessage<RuntimeMessage, unknown>(tab.id, {
+      type: 'hide_archivebox_overlay',
+    }).catch(() => undefined);
+  }
+
+  if (options.mhtml) {
+    await captureAndAttachSnapshotMhtml(tab, snapshot).catch((error) => {
+      console.error(`Failed to capture MHTML for ${snapshot.url}:`, error);
+    });
+  }
+
+  if (options.screenshot) {
+    await captureAndAttachSnapshotScreenshot(tab, snapshot).catch((error) => {
+      console.error(`Failed to capture screenshot for ${snapshot.url}:`, error);
+    });
+  }
 }
 
 async function ensureSnapshotForTab(tab: Browser.tabs.Tab): Promise<{
@@ -206,8 +350,9 @@ async function autoArchive(
   snapshots.push(snapshot);
   await setSnapshots(snapshots);
 
-  captureAndAttachSnapshotScreenshot(tab, snapshot).catch((error) => {
-    console.error(`Failed to capture screenshot for ${snapshot.url}:`, error);
+  captureAndAttachSnapshotArtifacts(tab, snapshot, {
+    screenshot: true,
+    mhtml: true,
   });
 
   try {
@@ -235,11 +380,10 @@ async function showOverlay(tab?: Browser.tabs.Tab): Promise<void> {
   if (!tab?.id) return;
   try {
     const { snapshot, created } = await ensureSnapshotForTab(tab);
-    if (created) {
-      await captureAndAttachSnapshotScreenshot(tab, snapshot).catch((error) => {
-        console.error(`Failed to capture screenshot for ${snapshot.url}:`, error);
-      });
-    }
+    await captureAndAttachSnapshotArtifacts(tab, snapshot, {
+      screenshot: created || !snapshot.screenshot,
+      mhtml: created || !snapshot.mhtml,
+    });
     await browser.tabs.sendMessage(tab.id, { type: 'show_archivebox_overlay' } satisfies RuntimeMessage);
   } catch (error) {
     console.error('Failed to show ArchiveBox overlay:', error);

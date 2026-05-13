@@ -671,6 +671,20 @@ code {
   white-space: nowrap;
 }
 
+.saved-url-mhtml-link {
+  display: block;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.saved-url-mhtml-link:hover strong,
+.saved-url-mhtml-link:focus-visible strong {
+  color: var(--ab-oxblood);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .saved-url-url-row {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);

@@ -20,7 +20,7 @@ import { addToArchiveBox } from '@/src/lib/archivebox';
 import { loadBookmarkSnapshots, loadHistorySnapshots } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
 import { downloadCsv, downloadJson } from '@/src/lib/downloads';
-import { readSnapshotScreenshotBlob } from '@/src/lib/screenshotStorage';
+import { readSnapshotMhtmlBlob, readSnapshotScreenshotBlob } from '@/src/lib/screenshotStorage';
 import { createSnapshot, filterSnapshots, uniqueTags } from '@/src/lib/snapshots';
 import { matchingTagSuggestions } from '@/src/lib/tags';
 import {
@@ -135,6 +135,16 @@ function snapshotScreenshotDownloadName(snapshot: Snapshot): string {
   return `${snapshot.timestamp.slice(0, 10)}-${safeFileSegment(host)}-${safeFileSegment(snapshot.id)}-screenshot.png`;
 }
 
+function snapshotMhtmlDownloadName(snapshot: Snapshot): string {
+  let host = 'unknown';
+  try {
+    host = new URL(snapshot.url).hostname;
+  } catch {
+    host = snapshot.title || snapshot.id;
+  }
+  return `${snapshot.timestamp.slice(0, 10).replaceAll('-', '')}-${safeFileSegment(host)}-${safeFileSegment(snapshot.id)}-snapshot.mhtml`;
+}
+
 function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -186,6 +196,43 @@ function SnapshotScreenshotThumb({ snapshot }: { snapshot: Snapshot }) {
       alt=""
       loading="lazy"
     />
+  );
+}
+
+function SnapshotMhtmlTitleLink({ snapshot }: { snapshot: Snapshot }) {
+  const [objectUrl, setObjectUrl] = useState('');
+  const title = snapshot.title || 'Untitled';
+
+  useEffect(() => {
+    let cancelled = false;
+    let nextObjectUrl = '';
+    setObjectUrl('');
+    readSnapshotMhtmlBlob(snapshot.mhtml).then((blob) => {
+      if (!blob || cancelled) return;
+      nextObjectUrl = URL.createObjectURL(blob);
+      setObjectUrl(nextObjectUrl);
+    });
+    return () => {
+      cancelled = true;
+      if (nextObjectUrl) URL.revokeObjectURL(nextObjectUrl);
+    };
+  }, [snapshot.mhtml?.path]);
+
+  if (!objectUrl) {
+    return <strong>{title}</strong>;
+  }
+
+  return (
+    <a
+      className="saved-url-mhtml-link"
+      href={objectUrl}
+      download={snapshotMhtmlDownloadName(snapshot)}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`Open local MHTML snapshot: ${snapshot.mhtml?.path || ''}`}
+    >
+      <strong>{title}</strong>
+    </a>
   );
 }
 
@@ -943,7 +990,7 @@ export default function OptionsApp() {
                             <SnapshotScreenshotThumb snapshot={snapshot} />
                             <div className="saved-url-title-row">
                               <div>
-                                <strong>{snapshot.title || 'Untitled'}</strong>
+                                <SnapshotMhtmlTitleLink snapshot={snapshot} />
                                 <div className="saved-url-url-row">
                                   <SnapshotFavicon url={snapshot.favIconUrl} />
                                   <a className="snapshot-url" href={snapshot.url} target="_blank" rel="noopener noreferrer">
