@@ -11,6 +11,9 @@
     "build:firefox": "wxt build -b firefox --mv3",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox --mv3",
+    "zip:stores": "pnpm zip && pnpm zip:firefox",
+    "submit:chrome": "wxt submit --chrome-extension-id habonpimjphpdnmcfkaockjnffodikoj --chrome-zip .output/archivebox-browser-extension-3.0.1-chrome.zip",
+    "submit:firefox": "wxt submit --firefox-extension-id archivebox@tjhorner.dev --firefox-zip .output/archivebox-browser-extension-3.0.1-firefox.zip --firefox-sources-zip .output/archivebox-browser-extension-3.0.1-sources.zip",
     "compile": "tsc --noEmit",
     "postinstall": "wxt prepare"
   },
