@@ -11,6 +11,7 @@ const defaultConfig: ConfigState = {
   save_mhtml_locally: false,
   save_singlefile_locally: false,
   singlefile_extension_id: '',
+  tab_manager_plus_extension_id: '',
 };
 
 export async function getConfig(): Promise<ConfigState> {
@@ -25,6 +26,7 @@ export async function getConfig(): Promise<ConfigState> {
     'save_mhtml_locally',
     'save_singlefile_locally',
     'singlefile_extension_id',
+    'tab_manager_plus_extension_id',
   ]);
   const sync = await browser.storage.sync.get(['config_archiveBoxBaseUrl']);
 
@@ -43,6 +45,7 @@ export async function getConfig(): Promise<ConfigState> {
     save_mhtml_locally: Boolean(local.save_mhtml_locally),
     save_singlefile_locally: Boolean(local.save_singlefile_locally),
     singlefile_extension_id: String(local.singlefile_extension_id || ''),
+    tab_manager_plus_extension_id: String(local.tab_manager_plus_extension_id || ''),
   };
 }
 

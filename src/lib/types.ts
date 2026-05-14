@@ -88,6 +88,7 @@ export type ConfigState = {
   save_mhtml_locally: boolean;
   save_singlefile_locally: boolean;
   singlefile_extension_id: string;
+  tab_manager_plus_extension_id: string;
 };
 
 export type ArchiveboxAddMessage = {

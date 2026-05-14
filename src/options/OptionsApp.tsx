@@ -18,7 +18,7 @@ import {
 import { strToU8, zipSync } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { addToArchiveBox } from '@/src/lib/archivebox';
-import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
+import { defaultSingleFileExtensionId, defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { loadBookmarkSnapshots, loadHistorySnapshots } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
 import {
@@ -62,6 +62,23 @@ type SavedUrlSortKey = 'date' | 'url' | 'tags' | 'sync';
 type SortDirection = 'asc' | 'desc';
 type OptionTab = { id: Tab; label: string; Icon: LucideIcon };
 type LocalCaptureConfigKey = 'save_screenshots_locally' | 'save_mhtml_locally' | 'save_singlefile_locally';
+type TabManagerPlusTab = {
+  favIconUrl?: string;
+  title?: string;
+  url?: string;
+};
+type TabManagerPlusSession = {
+  date?: number | string;
+  id?: string;
+  name?: string;
+  tabs?: TabManagerPlusTab[];
+};
+type TabManagerPlusResponse = {
+  error?: string;
+  message?: string;
+  ok?: boolean;
+  sessions?: TabManagerPlusSession[];
+};
 type MhtmlViewerState = {
   error?: string;
   html?: string;
@@ -90,8 +107,52 @@ type HtmlViewerState = {
 
 const today = new Date();
 const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+const tabManagerPlusSavedSessionsMethod = 'tabManagerPlus.getSavedSessions';
 function dateInputValue(date: Date): string {
   return date.toISOString().slice(0, 10);
+}
+
+function tagSafeText(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w.-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function dateTag(prefix: string, value: number | string | undefined): string {
+  const parsed = typeof value === 'number' || typeof value === 'string' ? new Date(value) : new Date();
+  const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  const hour = `${date.getHours()}`.padStart(2, '0');
+  const minute = `${date.getMinutes()}`.padStart(2, '0');
+  return `${prefix}-${year}${month}${day}${hour}${minute}`;
+}
+
+function tabManagerPlusSessionTag(session: TabManagerPlusSession): string {
+  const namedTag = tagSafeText(session.name || '');
+  return namedTag || dateTag('tab-manager-plus', session.date);
+}
+
+function tabManagerPlusSessionsToImportItems(sessions: TabManagerPlusSession[], existingUrls: Set<string>): ImportItem[] {
+  return sessions.flatMap((session) => {
+    const sourceTag = 'tab-manager-plus';
+    const sessionTag = tabManagerPlusSessionTag(session);
+    const tags = [...new Set([sourceTag, sessionTag])];
+    const timestamp = new Date(session.date || Date.now());
+    const timestampIso = Number.isNaN(timestamp.getTime()) ? new Date().toISOString() : timestamp.toISOString();
+    return (session.tabs || [])
+      .filter((tab): tab is TabManagerPlusTab & { url: string } => Boolean(tab.url && isHttpUrl(tab.url)))
+      .map((tab) => ({
+        ...createSnapshot(tab.url, tags, tab.title || '', tab.favIconUrl || null),
+        timestamp: timestampIso,
+        selected: !existingUrls.has(tab.url),
+        isNew: !existingUrls.has(tab.url),
+      }));
+  });
 }
 
 function detectOS(): string {
@@ -1383,6 +1444,30 @@ function OptionsMain() {
     setImportStatus({ kind: 'success', text: t("Loaded $1 bookmark URLs", items.length) });
   }
 
+  async function loadTabManagerPlus() {
+    const extensionId = config.tab_manager_plus_extension_id || defaultTabManagerPlusExtensionId;
+    setImportStatus({ kind: 'idle', text: t("Requesting saved sessions from Tab Manager Plus.") });
+    try {
+      const response = await browser.runtime.sendMessage(extensionId, {
+        method: tabManagerPlusSavedSessionsMethod,
+        displayName: 'ArchiveBox',
+      }) as TabManagerPlusResponse;
+      if (!response?.ok) {
+        const message = response?.error === 'approval_required'
+          ? t("Approve ArchiveBox in Tab Manager Plus options, then click Import from Tab Manager Plus again.")
+          : response?.message || response?.error || t("Tab Manager Plus did not return saved sessions.");
+        setImportStatus({ kind: response?.error === 'approval_required' ? 'warning' : 'error', text: message });
+        return;
+      }
+      const existingUrls = new Set(snapshots.map((snapshot) => snapshot.url));
+      const items = tabManagerPlusSessionsToImportItems(response.sessions || [], existingUrls);
+      setImportItems(items);
+      setImportStatus({ kind: 'success', text: t("Loaded $1 Tab Manager Plus URLs", items.length) });
+    } catch (error) {
+      setImportStatus({ kind: 'error', text: `${t("Failed to import from Tab Manager Plus")}: ${(error as Error).message}` });
+    }
+  }
+
   async function importSelectedUrls() {
     const tagsToAdd = importTags.split(',').map((tag) => tag.trim()).filter(Boolean);
     const selected = importItems.filter((item) => item.selected);
@@ -1395,7 +1480,7 @@ function OptionsMain() {
       ...snapshot,
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
-      tags: tagsToAdd,
+      tags: [...new Set([...snapshot.tags, ...tagsToAdd])],
     }));
     const latestSnapshots = await getSnapshots();
     const nextSnapshots = [...latestSnapshots, ...imported];
@@ -1803,6 +1888,14 @@ function OptionsMain() {
               placeholder={defaultSingleFileExtensionId}
             />
           </Field>
+          <Field label={t("Tab Manager Plus extension ID")}>
+            <input
+              value={config.tab_manager_plus_extension_id || ''}
+              onChange={(event) => saveConfig({ tab_manager_plus_extension_id: event.currentTarget.value.trim() })}
+              placeholder={defaultTabManagerPlusExtensionId}
+            />
+          </Field>
+          <p className="help-text">{t("Leave the Tab Manager Plus extension ID blank to use the default Chrome Web Store ID.")}</p>
           <p className="help-text">{t("$1 Leave the extension ID blank to use the default SingleFile Web Store / Add-ons ID.", singleFileCaptureUnavailableMessage())}</p>
           <StatusBadge status={localCaptureStatus} />
           <div className="section-divider" />
@@ -1966,6 +2059,7 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
           <div className="toolbar">
             <button onClick={loadHistory}>{t("Import from Browser History")}</button>
             <button onClick={loadBookmarks}>{t("Import from Browser Bookmarks")}</button>
+            <button onClick={loadTabManagerPlus}>{t("Import from Tab Manager Plus")}</button>
             <input type="date" value={importStartDate} onChange={(event) => setImportStartDate(event.currentTarget.value)} />
             <input type="date" value={importEndDate} onChange={(event) => setImportEndDate(event.currentTarget.value)} />
             <label className="search-field">
