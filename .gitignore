@@ -2,7 +2,9 @@ dist
 node_modules
 .wxt
 .output
+.DS_Store
 .env
 .env.*
 !.env.example
 test-results/
+tmp/chrome_profile/

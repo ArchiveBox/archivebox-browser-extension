@@ -16,8 +16,17 @@ export type Snapshot = {
 export type SnapshotScreenshot = {
   storage: 'opfs';
   path: string;
+  parts?: SnapshotScreenshotPart[];
   mimeType: 'image/png';
   capturedAt: string;
+  width: number;
+  height: number;
+};
+
+export type SnapshotScreenshotPart = {
+  path: string;
+  x: number;
+  y: number;
   width: number;
   height: number;
 };
@@ -117,27 +126,44 @@ export type OpenArchiveBoxSnapshotMessage = {
   url: string;
 };
 
-export type ShowOverlayMessage = {
-  type: 'show_archivebox_overlay';
-};
-
-export type HideOverlayMessage = {
-  type: 'hide_archivebox_overlay';
-};
-
 export type CaptureSnapshotScreenshotMessage = {
   type: 'capture_snapshot_screenshot';
   snapshotId: string;
+  tabId: number;
+  windowId: number;
+  fullPage?: boolean;
+};
+
+export type CancelSnapshotScreenshotMessage = {
+  type: 'cancel_snapshot_screenshot';
+  snapshotId: string;
+};
+
+export type ScreenshotCaptureProgressMessage = {
+  type: 'screenshot_capture_progress';
+  snapshotId: string;
+  captured: number;
+  total: number;
+  phase: 'visible' | 'scrolling' | 'done' | 'canceled';
+};
+
+export type MeasureScreenshotPageMessage = {
+  type: 'measure_screenshot_page';
+  tabId: number;
 };
 
 export type CaptureSnapshotMhtmlMessage = {
   type: 'capture_snapshot_mhtml';
   snapshotId: string;
+  tabId: number;
+  windowId: number;
 };
 
 export type CaptureSnapshotSingleFileMessage = {
   type: 'capture_snapshot_singlefile';
   snapshotId: string;
+  tabId: number;
+  windowId: number;
 };
 
 export type ScreenshotGetMetricsMessage = {
@@ -163,9 +189,10 @@ export type RuntimeMessage =
   | TestApiKeyMessage
   | OpenOptionsMessage
   | OpenArchiveBoxSnapshotMessage
-  | ShowOverlayMessage
-  | HideOverlayMessage
   | CaptureSnapshotScreenshotMessage
+  | CancelSnapshotScreenshotMessage
+  | ScreenshotCaptureProgressMessage
+  | MeasureScreenshotPageMessage
   | CaptureSnapshotMhtmlMessage
   | CaptureSnapshotSingleFileMessage
   | ScreenshotGetMetricsMessage
@@ -177,6 +204,8 @@ export type RuntimeResponse = {
   error?: string;
   errorMessage?: string;
   user_id?: string | number;
+  screenshotNeedsScroll?: boolean;
+  screenshotCanceled?: boolean;
   screenshot?: SnapshotScreenshot;
   mhtml?: SnapshotMhtml;
   singlefile?: SnapshotSingleFile;

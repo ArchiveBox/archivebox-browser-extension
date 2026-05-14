@@ -18,7 +18,7 @@ import {
 import { strToU8, zipSync } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { addToArchiveBox } from '@/src/lib/archivebox';
-import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture, supportsUnlimitedStoragePermission } from '@/src/lib/browserCapabilities';
+import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { loadBookmarkSnapshots, loadHistorySnapshots } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
 import {
@@ -29,12 +29,12 @@ import {
   snapshotJsonContent,
 } from '@/src/lib/downloads';
 import {
+  assertLocalCaptureStorageAvailable,
   readSnapshotSingleFileBlob,
   readSnapshotMhtmlBlob,
   readSnapshotScreenshotBlob,
-  snapshotSingleFilePath,
-  snapshotMhtmlPath,
-  snapshotScreenshotPath,
+  readSnapshotScreenshotBlobs,
+  readSnapshotOpfsFiles,
 } from '@/src/lib/screenshotStorage';
 import { renderMhtmlToHtml } from '@/src/lib/mhtml';
 import { createSnapshot, filterSnapshots, uniqueTags } from '@/src/lib/snapshots';
@@ -72,10 +72,10 @@ type MhtmlViewerState = {
   title?: string;
 };
 type ScreenshotViewerState = {
-  blob?: Blob;
+  blobs?: Blob[];
   error?: string;
   loading: boolean;
-  objectUrl?: string;
+  objectUrls?: string[];
   snapshot?: Snapshot;
   title?: string;
 };
@@ -161,14 +161,15 @@ function safeFileSegment(value: string): string {
     .replace(/^-+|-+$/g, '') || 'unknown';
 }
 
-function snapshotScreenshotDownloadName(snapshot: Snapshot): string {
+function snapshotScreenshotDownloadName(snapshot: Snapshot, partIndex = 0): string {
   let host = 'unknown';
   try {
     host = new URL(snapshot.url).hostname;
   } catch {
     host = snapshot.title || snapshot.id;
   }
-  return `${snapshot.timestamp.slice(0, 10).replaceAll('-', '')}-${safeFileSegment(host)}-${safeFileSegment(snapshot.id)}-screenshot.png`;
+  const suffix = partIndex === 0 ? 'screenshot.png' : `screenshot-${partIndex}.png`;
+  return `${snapshot.timestamp.slice(0, 10).replaceAll('-', '')}-${safeFileSegment(host)}-${safeFileSegment(snapshot.id)}-${suffix}`;
 }
 
 function snapshotMhtmlDownloadName(snapshot: Snapshot): string {
@@ -544,7 +545,7 @@ function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    let objectUrl = '';
+    let objectUrls: string[] = [];
 
     async function loadScreenshot() {
       setState({ loading: true });
@@ -552,19 +553,19 @@ function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
         const snapshots = await getSnapshots();
         const snapshot = snapshots.find((item) => item.id === snapshotId);
         if (!snapshot) throw new Error(t("Saved URL not found"));
-        const blob = await readSnapshotScreenshotBlob(snapshot.screenshot);
-        if (!blob) throw new Error(t("Local screenshot not found"));
+        const blobs = await readSnapshotScreenshotBlobs(snapshot.screenshot);
+        if (blobs.length === 0) throw new Error(t("Local screenshot not found"));
 
-        const nextObjectUrl = URL.createObjectURL(blob);
+        const nextObjectUrls = blobs.map((blob) => URL.createObjectURL(blob));
         if (cancelled) {
-          URL.revokeObjectURL(nextObjectUrl);
+          nextObjectUrls.forEach((url) => URL.revokeObjectURL(url));
           return;
         }
-        objectUrl = nextObjectUrl;
+        objectUrls = nextObjectUrls;
         setState({
-          blob,
+          blobs,
           loading: false,
-          objectUrl,
+          objectUrls,
           snapshot,
           title: snapshot.title || t("Screenshot"),
         });
@@ -581,17 +582,17 @@ function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
     loadScreenshot();
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, [snapshotId]);
 
   function exportScreenshot() {
-    if (!state.blob || !state.snapshot) return;
-    downloadBlob(state.blob, snapshotScreenshotDownloadName(state.snapshot));
+    if (!state.blobs?.length || !state.snapshot) return;
+    state.blobs.forEach((blob, index) => downloadBlob(blob, snapshotScreenshotDownloadName(state.snapshot as Snapshot, index)));
   }
 
   useEffect(() => {
-    if (!state.blob || !state.snapshot) return undefined;
+    if (!state.blobs?.length || !state.snapshot) return undefined;
 
     function handleSaveShortcut(event: KeyboardEvent) {
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return;
@@ -601,12 +602,15 @@ function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
 
     window.addEventListener('keydown', handleSaveShortcut, { capture: true });
     return () => window.removeEventListener('keydown', handleSaveShortcut, { capture: true });
-  }, [state.blob, state.snapshot]);
+  }, [state.blobs, state.snapshot]);
 
   const backUrl = extensionUrl(`/options.html?highlight=${encodeURIComponent(snapshotId)}`);
   const title = state.title || state.snapshot?.title || t("Screenshot");
   const screenshot = state.snapshot?.screenshot;
-  const screenshotHtml = state.objectUrl ? [
+  const screenshotObjectUrls = state.objectUrls || [];
+  const visibleScreenshotUrl = screenshotObjectUrls[0];
+  const fullPageScreenshotUrls = screenshotObjectUrls.length > 1 ? screenshotObjectUrls.slice(1) : screenshotObjectUrls;
+  const screenshotHtml = state.objectUrls?.length ? [
     '<!doctype html>',
     '<html>',
     '<head>',
@@ -617,10 +621,18 @@ function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
     'html,body{margin:0;min-height:100%;background:#1c1814;overflow-x:hidden;}',
     'body{padding:0;}',
     'img{display:block;width:100%;max-width:none;height:auto;background:#fff;}',
+    '.screenshot-separator{display:flex;align-items:center;gap:12px;margin:0;padding:14px 18px;background:#1c1814;color:#f7efe4;font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em;text-transform:uppercase;}',
+    '.screenshot-separator::before,.screenshot-separator::after{content:"";height:1px;flex:1;background:#7a6653;}',
     '</style>',
     '</head>',
     '<body>',
-    `<img src="${state.objectUrl}" alt="${escapeHtml(title)}">`,
+    ...fullPageScreenshotUrls.map((objectUrl, index) => (
+      `<img src="${objectUrl}" alt="${escapeHtml(title)}${screenshotObjectUrls.length > 1 ? ` ${index + 1}` : ''}">`
+    )),
+    ...(visibleScreenshotUrl && screenshotObjectUrls.length > 1 ? [
+      `<div class="screenshot-separator">${escapeHtml(t("Initial visible-area screenshot"))}</div>`,
+      `<img src="${visibleScreenshotUrl}" alt="${escapeHtml(t("Initial visible-area screenshot"))}">`,
+    ] : []),
     '</body>',
     '</html>',
   ].join('') : '';
@@ -636,9 +648,9 @@ function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
           ) : null}
         </div>
         <div className="mhtml-viewer-header__actions">
-          {screenshot ? <span className="status">{screenshot.width}x{screenshot.height}</span> : null}
+          {screenshot ? <span className="status">{screenshot.width}x{screenshot.height}{screenshot.parts && screenshot.parts.length > 1 ? ` · ${t("$1 parts", screenshot.parts.length)}` : ''}</span> : null}
           <a className="button-link" href={backUrl}>{t("Saved URLs")}</a>
-          <button className="icon-button" type="button" onClick={exportScreenshot} disabled={!state.blob}>
+          <button className="icon-button" type="button" onClick={exportScreenshot} disabled={!state.blobs?.length}>
             <Download size={15} />
             {t("Export PNG")}
           </button>
@@ -936,11 +948,32 @@ function OptionsMain() {
   }
 
   async function exportSelectedScreenshots() {
-    await exportSelectedLocalArtifacts(
-      'screenshot',
-      (snapshot) => readSnapshotScreenshotBlob(snapshot.screenshot),
-      snapshotScreenshotDownloadName,
-    );
+    if (!selectedSnapshotList.length) return;
+    setExportMenuOpen(false);
+
+    let downloaded = 0;
+    let missing = 0;
+    for (const snapshot of selectedSnapshotList) {
+      const blobs = await readSnapshotScreenshotBlobs(snapshot.screenshot);
+      if (blobs.length === 0) {
+        missing += 1;
+        continue;
+      }
+      blobs.forEach((blob, index) => downloadBlob(blob, snapshotScreenshotDownloadName(snapshot, index)));
+      downloaded += blobs.length;
+    }
+
+    if (downloaded === 0) {
+      setSavedUrlStatus({ kind: 'warning', text: t("No selected snapshots have $1", t("screenshots")) });
+      return;
+    }
+
+    setSavedUrlStatus({
+      kind: missing > 0 ? 'warning' : 'success',
+      text: missing > 0
+        ? t("Downloaded $1 $2; $3 missing", downloaded, t("screenshots"), missing)
+        : t("Downloaded $1 $2", downloaded, t("screenshots")),
+    });
   }
 
   async function exportSelectedMhtml() {
@@ -970,31 +1003,12 @@ function OptionsMain() {
       [`${baseName}.json`]: strToU8(snapshotJsonContent(selectedSnapshotList)),
     };
     let includedArtifacts = 0;
-    let missingArtifacts = 0;
 
     for (const snapshot of selectedSnapshotList) {
-      const screenshotBlob = await readSnapshotScreenshotBlob(snapshot.screenshot);
-      if (screenshotBlob) {
-        files[snapshotScreenshotPath(snapshot)] = await blobToUint8Array(screenshotBlob);
+      const snapshotFiles = await readSnapshotOpfsFiles(snapshot);
+      for (const file of snapshotFiles) {
+        files[file.path] = await blobToUint8Array(file.blob);
         includedArtifacts += 1;
-      } else {
-        missingArtifacts += 1;
-      }
-
-      const mhtmlBlob = await readSnapshotMhtmlBlob(snapshot.mhtml);
-      if (mhtmlBlob) {
-        files[snapshotMhtmlPath(snapshot)] = await blobToUint8Array(mhtmlBlob);
-        includedArtifacts += 1;
-      } else {
-        missingArtifacts += 1;
-      }
-
-      const singleFileBlob = await readSnapshotSingleFileBlob(snapshot.singlefile);
-      if (singleFileBlob) {
-        files[snapshotSingleFilePath(snapshot)] = await blobToUint8Array(singleFileBlob);
-        includedArtifacts += 1;
-      } else {
-        missingArtifacts += 1;
       }
     }
 
@@ -1004,10 +1018,8 @@ function OptionsMain() {
       `${baseName}.zip`,
     );
     setSavedUrlStatus({
-      kind: missingArtifacts > 0 ? 'warning' : 'success',
-      text: missingArtifacts > 0
-        ? t("Exported ZIP with $1 local artifacts; $2 missing", includedArtifacts, missingArtifacts)
-        : t("Exported ZIP with $1 local artifacts", includedArtifacts),
+      kind: 'success',
+      text: t("Exported ZIP with $1 local artifacts", includedArtifacts),
     });
   }
 
@@ -1059,11 +1071,17 @@ function OptionsMain() {
     await setConfig(patch);
   }
 
+  function waitForPermissionExplanation(): Promise<void> {
+    return new Promise((resolve) => window.setTimeout(resolve, 30));
+  }
+
   async function testServer() {
     if (!archiveboxServerUrlIsValid) {
       setServerStatus({ kind: 'warning', text: t("Enter a valid http:// or https:// server URL") });
       return;
     }
+    setServerStatus({ kind: 'idle', text: t("ArchiveBox needs permission to connect to this server URL so it can test the connection.") });
+    await waitForPermissionExplanation();
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'test_server_url',
       serverUrl: archiveboxServerBaseUrl,
@@ -1078,6 +1096,8 @@ function OptionsMain() {
       setApiStatus({ kind: 'warning', text: t("Enter a valid http:// or https:// server URL") });
       return;
     }
+    setApiStatus({ kind: 'idle', text: t("ArchiveBox needs permission to connect to this server URL so it can test the API key.") });
+    await waitForPermissionExplanation();
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'test_api_key',
       serverUrl: archiveboxServerBaseUrl,
@@ -1119,6 +1139,8 @@ function OptionsMain() {
     }
 
     try {
+      setTestStatus({ kind: 'idle', text: t("ArchiveBox needs permission to connect to your configured server so it can submit the test URL.") });
+      await waitForPermissionExplanation();
       await addToArchiveBox([url], ['test']);
       setTestStatus({ kind: 'success', text: t("URL was submitted to ArchiveBox") });
       setTestUrl('');
@@ -1129,6 +1151,8 @@ function OptionsMain() {
 
   async function updateAutoArchive(enabled: boolean) {
     if (enabled) {
+      setTestStatus({ kind: 'idle', text: t("Automatic archiving needs tabs and site access so it can detect matching pages as you browse.") });
+      await waitForPermissionExplanation();
       const granted = await browser.permissions.request({
         permissions: ['tabs'],
         origins: ['<all_urls>'],
@@ -1138,24 +1162,25 @@ function OptionsMain() {
     await saveConfig({ enable_auto_archive: enabled });
   }
 
-  async function requestLocalCaptureStorage(): Promise<void> {
-    let unlimitedStorageGranted = false;
-    if (supportsUnlimitedStoragePermission) {
-      unlimitedStorageGranted = await browser.permissions.request({ permissions: ['unlimitedStorage'] }).catch(() => false);
-    }
-
+  async function requestLocalCaptureStorage(): Promise<boolean> {
     const storageManager = navigator.storage as StorageManager & {
       persist?: () => Promise<boolean>;
     };
     const persistentStorage = await storageManager.persist?.().catch(() => false) || false;
+    try {
+      await assertLocalCaptureStorageAvailable();
+    } catch (error) {
+      setLocalCaptureStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
+      return false;
+    }
+
     setLocalCaptureStatus({
       kind: 'success',
-      text: unlimitedStorageGranted
-        ? t("Local capture saving enabled with unlimited storage")
-        : persistentStorage
+      text: persistentStorage
           ? t("Local capture saving enabled with persistent storage")
           : t("Local capture storage enabled"),
     });
+    return true;
   }
 
   async function requestMhtmlCapturePermission(): Promise<boolean> {
@@ -1164,6 +1189,8 @@ function OptionsMain() {
       return false;
     }
 
+    setLocalCaptureStatus({ kind: 'idle', text: t("MHTML capture needs permission to save the current tab as a browser-generated MHTML file.") });
+    await waitForPermissionExplanation();
     const granted = await browser.permissions.request({ permissions: ['pageCapture'] }).catch(() => false);
     if (!granted) {
       setLocalCaptureStatus({ kind: 'error', text: t("MHTML capture permission denied") });
@@ -1172,25 +1199,32 @@ function OptionsMain() {
     return true;
   }
 
+  async function requestScreenshotCapturePermission(): Promise<boolean> {
+    setLocalCaptureStatus({ kind: 'idle', text: t("Full-page screenshots need scripting permission only to scroll the current tab and restore it after capture.") });
+    await waitForPermissionExplanation();
+    const granted = await browser.permissions.request({ permissions: ['scripting'] }).catch(() => false);
+    if (!granted) {
+      setLocalCaptureStatus({ kind: 'error', text: t("Screenshot capture permission denied") });
+      return false;
+    }
+    return true;
+  }
+
   async function updateLocalCaptureSetting(key: LocalCaptureConfigKey, enabled: boolean) {
+    if (enabled && key === 'save_screenshots_locally' && !(await requestScreenshotCapturePermission())) return;
     if (enabled && key === 'save_mhtml_locally' && !(await requestMhtmlCapturePermission())) return;
 
     await saveConfig({ [key]: enabled });
     if (enabled) {
-      await requestLocalCaptureStorage();
+      if (!(await requestLocalCaptureStorage())) {
+        await saveConfig({ [key]: false });
+      }
       return;
     }
 
     if (!enabled) {
-      const otherLocalCaptureEnabled = key === 'save_screenshots_locally'
-        ? config.save_mhtml_locally || config.save_singlefile_locally
-        : key === 'save_mhtml_locally'
-          ? config.save_screenshots_locally || config.save_singlefile_locally
-          : config.save_screenshots_locally || config.save_mhtml_locally;
-      if (!otherLocalCaptureEnabled) {
-        if (supportsUnlimitedStoragePermission) {
-          await browser.permissions.remove({ permissions: ['unlimitedStorage'] }).catch(() => false);
-        }
+      if (key === 'save_screenshots_locally') {
+        await browser.permissions.remove({ permissions: ['scripting'] }).catch(() => false);
       }
       setLocalCaptureStatus({ kind: 'idle', text: '' });
     } else {
@@ -1199,6 +1233,8 @@ function OptionsMain() {
   }
 
   async function loadCookies() {
+    setCookieStatus({ kind: 'idle', text: t("Cookie import needs cookie and site access so selected login cookies can be copied into an archiving profile.") });
+    await waitForPermissionExplanation();
     const granted = await browser.permissions.request({
       permissions: ['cookies'],
       origins: ['*://*/*'],
@@ -1316,6 +1352,8 @@ function OptionsMain() {
   }
 
   async function loadHistory() {
+    setImportStatus({ kind: 'idle', text: t("History import needs history permission so browser history URLs can be added to the saved URL list.") });
+    await waitForPermissionExplanation();
     const granted = await browser.permissions.request({ permissions: ['history'] });
     if (!granted) {
       setImportStatus({ kind: 'error', text: t("History permission denied") });
@@ -1332,6 +1370,8 @@ function OptionsMain() {
   }
 
   async function loadBookmarks() {
+    setImportStatus({ kind: 'idle', text: t("Bookmark import needs bookmarks permission so bookmark URLs can be added to the saved URL list.") });
+    await waitForPermissionExplanation();
     const granted = await browser.permissions.request({ permissions: ['bookmarks'] });
     if (!granted) {
       setImportStatus({ kind: 'error', text: t("Bookmark permission denied") });
@@ -1381,6 +1421,8 @@ function OptionsMain() {
       setSavedUrlStatus({ kind: 'warning', text: t("No snapshots selected") });
       return;
     }
+    setSavedUrlStatus({ kind: 'idle', text: t("ArchiveBox needs permission to connect to your configured server so it can sync selected URLs.") });
+    await waitForPermissionExplanation();
     setSavedUrlStatus({ kind: 'idle', text: t("Syncing $1 snapshots...", selected.length) });
     for (const snapshot of selected) {
       setSyncStatuses((current) => ({
@@ -1439,22 +1481,44 @@ function OptionsMain() {
     setSavedUrlStatus({ kind: 'success', text: t("Updated tags on $1 snapshots", selectedSnapshots.size) });
   }
 
+  async function writeClipboardText(text: string) {
+    if (typeof navigator.clipboard?.writeText !== 'function') {
+      throw new Error(t("Clipboard writing is not available in this browser."));
+    }
+
+    await navigator.clipboard.writeText(text);
+  }
+
   async function copyPersonaCookies(persona: Persona) {
-    const domainCount = Object.keys(persona.cookies).length;
-    const cookieCount = Object.values(persona.cookies).reduce((sum, cookies) => sum + cookies.length, 0);
-    await navigator.clipboard.writeText(formatCookiesForExport(persona.cookies));
-    setPersonaStatus({
-      kind: 'success',
-      text: t("$1 domain logins ($2 cookies) copied for $3", domainCount, cookieCount, persona.name),
-    });
+    try {
+      const domainCount = Object.keys(persona.cookies).length;
+      const cookieCount = Object.values(persona.cookies).reduce((sum, cookies) => sum + cookies.length, 0);
+      await writeClipboardText(formatCookiesForExport(persona.cookies));
+      setPersonaStatus({
+        kind: 'success',
+        text: t("$1 domain logins ($2 cookies) copied for $3", domainCount, cookieCount, persona.name),
+      });
+    } catch (error) {
+      setPersonaStatus({
+        kind: 'error',
+        text: t("Failed to copy cookies: $1", error instanceof Error ? error.message : String(error)),
+      });
+    }
   }
 
   async function copyDomainCookies(domain: string, cookies: StoredCookie[]) {
-    await navigator.clipboard.writeText(formatCookiesForExport({ [domain]: cookies }));
-    setCookieStatus({
-      kind: 'success',
-      text: t("$1 cookies copied for $2", cookies.length, domain),
-    });
+    try {
+      await writeClipboardText(formatCookiesForExport({ [domain]: cookies }));
+      setCookieStatus({
+        kind: 'success',
+        text: t("$1 cookies copied for $2", cookies.length, domain),
+      });
+    } catch (error) {
+      setCookieStatus({
+        kind: 'error',
+        text: t("Failed to copy cookies: $1", error instanceof Error ? error.message : String(error)),
+      });
+    }
   }
 
   return (

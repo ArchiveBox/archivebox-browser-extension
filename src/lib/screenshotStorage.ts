@@ -1,4 +1,4 @@
-import type { Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotSingleFile } from './types';
+import type { Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotScreenshotPart, SnapshotSingleFile } from './types';
 import { t } from './i18n';
 
 function pathSafeSegment(value: string): string {
@@ -26,14 +26,24 @@ function snapshotHostSegment(snapshot: Snapshot): string {
   }
 }
 
-export function snapshotScreenshotPath(snapshot: Snapshot): string {
+export function snapshotDirectoryPath(snapshot: Snapshot): string {
+  return [
+    'snapshots',
+    snapshotDateSegment(snapshot),
+    snapshotHostSegment(snapshot),
+    pathSafeSegment(snapshot.id),
+  ].join('/');
+}
+
+export function snapshotScreenshotPath(snapshot: Snapshot, partIndex = 0): string {
+  const fileName = partIndex === 0 ? 'screenshot.png' : `screenshot-${partIndex}.png`;
   return [
     'snapshots',
     snapshotDateSegment(snapshot),
     snapshotHostSegment(snapshot),
     pathSafeSegment(snapshot.id),
     'chrome_extension_screenshot',
-    'screenshot.png',
+    fileName,
   ].join('/');
 }
 
@@ -79,6 +89,10 @@ async function getDirectory(pathSegments: string[], create: boolean): Promise<Fi
   return directory;
 }
 
+export async function assertLocalCaptureStorageAvailable(): Promise<void> {
+  await getDirectory([], true);
+}
+
 async function writeBytesToFile(directory: FileSystemDirectoryHandle, fileName: string, bytes: ArrayBuffer): Promise<void> {
   let fileHandle: FileSystemFileHandle;
   try {
@@ -119,22 +133,111 @@ export async function writeSnapshotScreenshot(
   width: number,
   height: number,
 ): Promise<SnapshotScreenshot> {
-  const path = snapshotScreenshotPath(snapshot);
-  const segments = path.split('/');
-  const fileName = segments.pop();
-  if (!fileName) throw new Error(t("Invalid local screenshot path."));
+  return writeSnapshotScreenshotParts(snapshot, [{ blob, x: 0, y: 0, width, height }], width, height);
+}
 
-  const directory = await getDirectory(segments, true);
-  await writeBlobToFile(directory, fileName, blob);
+export async function writeSnapshotScreenshotParts(
+  snapshot: Snapshot,
+  partBlobs: Array<{ blob: Blob; x: number; y: number; width: number; height: number }>,
+  width: number,
+  height: number,
+): Promise<SnapshotScreenshot> {
+  if (partBlobs.length === 0) throw new Error(t("No screenshot tiles were captured."));
+  const firstPath = snapshotScreenshotPath(snapshot, 0);
+  const firstSegments = firstPath.split('/');
+  const firstFileName = firstSegments.pop();
+  if (!firstFileName) throw new Error(t("Invalid local screenshot path."));
+
+  const directory = await getDirectory(firstSegments, true);
+  await clearDirectory(directory);
+  const parts: SnapshotScreenshotPart[] = [];
+
+  for (const [index, part] of partBlobs.entries()) {
+    const path = snapshotScreenshotPath(snapshot, index);
+    const fileName = path.split('/').pop();
+    if (!fileName) throw new Error(t("Invalid local screenshot path."));
+    await writeBlobToFile(directory, fileName, part.blob);
+    parts.push({
+      path,
+      x: part.x,
+      y: part.y,
+      width: part.width,
+      height: part.height,
+    });
+  }
 
   return {
     storage: 'opfs',
-    path,
+    path: firstPath,
+    parts,
     mimeType: 'image/png',
     capturedAt: new Date().toISOString(),
     width,
     height,
   };
+}
+
+export async function appendSnapshotScreenshotParts(
+  snapshot: Snapshot,
+  existingScreenshot: SnapshotScreenshot,
+  partBlobs: Array<{ blob: Blob; x: number; y: number; width: number; height: number }>,
+  width: number,
+  height: number,
+): Promise<SnapshotScreenshot> {
+  if (partBlobs.length === 0) return existingScreenshot;
+  const firstPath = existingScreenshot.path || snapshotScreenshotPath(snapshot, 0);
+  const firstSegments = firstPath.split('/');
+  firstSegments.pop();
+  const directory = await getDirectory(firstSegments, true);
+  const existingParts = existingScreenshot.parts?.length
+    ? existingScreenshot.parts
+    : [{
+      path: existingScreenshot.path,
+      x: 0,
+      y: 0,
+      width: existingScreenshot.width,
+      height: existingScreenshot.height,
+  }];
+  const parts: SnapshotScreenshotPart[] = [...existingParts];
+  const startIndex = parts.length;
+
+  for (const [index, part] of partBlobs.entries()) {
+    const path = snapshotScreenshotPath(snapshot, startIndex + index);
+    const fileName = path.split('/').pop();
+    if (!fileName) throw new Error(t("Invalid local screenshot path."));
+    await writeBlobToFile(directory, fileName, part.blob);
+    parts.push({
+      path,
+      x: part.x,
+      y: part.y,
+      width: part.width,
+      height: part.height,
+    });
+  }
+
+  return {
+    ...existingScreenshot,
+    path: firstPath,
+    parts,
+    capturedAt: new Date().toISOString(),
+    width: Math.max(existingScreenshot.width, width),
+    height: existingScreenshot.height + height,
+  };
+}
+
+async function readBlobAtPath(path?: string): Promise<Blob | null> {
+  if (!path) return null;
+  const segments = path.split('/');
+  const fileName = segments.pop();
+  if (!fileName) return null;
+
+  try {
+    const directory = await getDirectory(segments, false);
+    const fileHandle = await directory.getFileHandle(fileName);
+    return await fileHandle.getFile();
+  } catch {
+    return null;
+  }
 }
 
 export async function writeSnapshotMhtml(
@@ -203,17 +306,64 @@ export async function writeSnapshotSingleFileHtml(
 }
 
 export async function readSnapshotScreenshotBlob(screenshot?: SnapshotScreenshot): Promise<Blob | null> {
-  if (!screenshot?.path) return null;
-  const segments = screenshot.path.split('/');
-  const fileName = segments.pop();
-  if (!fileName) return null;
+  return readBlobAtPath(screenshot?.path);
+}
 
+export async function readSnapshotScreenshotBlobs(screenshot?: SnapshotScreenshot): Promise<Blob[]> {
+  if (!screenshot?.path) return [];
+  const parts = screenshot.parts?.length ? screenshot.parts : [{ path: screenshot.path }];
+  const blobs: Blob[] = [];
+  for (const part of parts) {
+    const blob = await readBlobAtPath(part.path);
+    if (blob) blobs.push(blob);
+  }
+  return blobs;
+}
+
+type FileSystemDirectoryHandleWithEntries = FileSystemDirectoryHandle & {
+  entries(): AsyncIterableIterator<[string, FileSystemDirectoryHandle | FileSystemFileHandle]>;
+};
+
+type FileSystemDirectoryHandleWithRemove = FileSystemDirectoryHandle & {
+  removeEntry(name: string, options?: { recursive?: boolean }): Promise<void>;
+};
+
+async function clearDirectory(directory: FileSystemDirectoryHandle): Promise<void> {
+  const entries = (directory as FileSystemDirectoryHandleWithEntries).entries;
+  const removeEntry = (directory as FileSystemDirectoryHandleWithRemove).removeEntry;
+  if (typeof entries !== 'function' || typeof removeEntry !== 'function') return;
+
+  for await (const [name] of entries.call(directory as FileSystemDirectoryHandleWithEntries)) {
+    await removeEntry.call(directory as FileSystemDirectoryHandleWithRemove, name, { recursive: true }).catch(() => undefined);
+  }
+}
+
+async function listDirectoryFiles(
+  directory: FileSystemDirectoryHandle,
+  pathPrefix: string,
+): Promise<Array<{ path: string; blob: Blob }>> {
+  const entries = (directory as FileSystemDirectoryHandleWithEntries).entries;
+  if (typeof entries !== 'function') return [];
+
+  const files: Array<{ path: string; blob: Blob }> = [];
+  for await (const [name, handle] of entries.call(directory as FileSystemDirectoryHandleWithEntries)) {
+    const path = `${pathPrefix}/${name}`;
+    if (handle.kind === 'directory') {
+      files.push(...await listDirectoryFiles(handle, path));
+    } else {
+      files.push({ path, blob: await handle.getFile() });
+    }
+  }
+  return files;
+}
+
+export async function readSnapshotOpfsFiles(snapshot: Snapshot): Promise<Array<{ path: string; blob: Blob }>> {
+  const path = snapshotDirectoryPath(snapshot);
   try {
-    const directory = await getDirectory(segments, false);
-    const fileHandle = await directory.getFileHandle(fileName);
-    return await fileHandle.getFile();
+    const directory = await getDirectory(path.split('/'), false);
+    return listDirectoryFiles(directory, path);
   } catch {
-    return null;
+    return [];
   }
 }
 

@@ -1,16 +1,10 @@
 import { addToArchiveBox, archiveBoxSnapshotUrl, removeFromArchiveBox, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
-import { writeSnapshotMhtmlBytes, writeSnapshotScreenshot, writeSnapshotSingleFileHtml } from '@/src/lib/screenshotStorage';
+import { appendSnapshotScreenshotParts, writeSnapshotMhtmlBytes, writeSnapshotScreenshot, writeSnapshotScreenshotParts, writeSnapshotSingleFileHtml } from '@/src/lib/screenshotStorage';
 import { createSnapshot } from '@/src/lib/snapshots';
 import { getArchiveBoxServerUrl, getConfig, getSnapshots, setSnapshots } from '@/src/lib/storage';
 import type { RuntimeMessage, RuntimeResponse, Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotSingleFile } from '@/src/lib/types';
-
-type ActionClickApi = {
-  onClicked: {
-    addListener(listener: (tab: Browser.tabs.Tab) => void): void;
-  };
-};
 
 type PageMetrics = {
   viewportWidth: number;
@@ -24,6 +18,7 @@ type PageMetrics = {
 type ScrollResult = PageMetrics & {
   scrollX: number;
   scrollY: number;
+  userCanceled?: boolean;
 };
 
 type ChromeRuntimeApi = {
@@ -40,14 +35,16 @@ type ChromePageCaptureApi = {
 };
 
 type ScriptingApi = {
-  executeScript(details: {
-    target: { tabId: number };
-    files: string[];
-  }): Promise<unknown[]>;
-  insertCSS(details: {
-    target: { tabId: number };
-    files: string[];
-  }): Promise<void>;
+  executeScript<T = unknown>(details:
+    | {
+      target: { tabId: number };
+      files: string[];
+    }
+    | {
+      target: { tabId: number };
+      func: () => T;
+    }
+  ): Promise<Array<{ result?: T }>>;
 };
 
 type CaptureArtifactOptions = {
@@ -56,16 +53,53 @@ type CaptureArtifactOptions = {
   singlefile?: boolean;
 };
 
-type CaptureAttachOptions = {
-  hideOverlay?: boolean;
+type ScreenshotPartCanvas = {
+  canvas: OffscreenCanvas;
+  context: OffscreenCanvasRenderingContext2D;
+  height: number;
+  width: number;
+  xStart: number;
+  yStart: number;
 };
 
-function getActionApi(): ActionClickApi | undefined {
-  const extensionBrowser = browser as unknown as {
-    action?: ActionClickApi;
-    browserAction?: ActionClickApi;
-  };
-  return extensionBrowser.action || extensionBrowser.browserAction;
+const maxScreenshotPngDimensionPixels = 10000;
+const minCaptureVisibleTabIntervalMs = 700;
+const maxFullPageScreenshotScrollCaptures = 20;
+let captureVisibleTabReadyAt = 0;
+let captureVisibleTabQueue: Promise<void> = Promise.resolve();
+const canceledScreenshotCaptures = new Set<string>();
+const completedCanceledScreenshotCaptures = new Set<string>();
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+}
+
+async function withCaptureVisibleTabQuota<T>(task: () => Promise<T>): Promise<T> {
+  const previous = captureVisibleTabQueue;
+  let releaseQueue: () => void = () => undefined;
+  captureVisibleTabQueue = new Promise((resolve) => {
+    releaseQueue = resolve;
+  });
+
+  await previous.catch(() => undefined);
+  try {
+    const waitMs = Math.max(0, captureVisibleTabReadyAt - Date.now());
+    if (waitMs > 0) await sleep(waitMs);
+    captureVisibleTabReadyAt = Date.now() + minCaptureVisibleTabIntervalMs;
+
+    try {
+      return await task();
+    } catch (error) {
+      if (!errorMessage(error).includes('MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND')) {
+        throw error;
+      }
+      await sleep(minCaptureVisibleTabIntervalMs * 2);
+      captureVisibleTabReadyAt = Date.now() + minCaptureVisibleTabIntervalMs;
+      return task();
+    }
+  } finally {
+    releaseQueue();
+  }
 }
 
 function getChromeApis(): {
@@ -92,6 +126,35 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+async function blobToArrayBuffer(blob: Blob, label: string): Promise<ArrayBuffer> {
+  try {
+    return await blob.arrayBuffer();
+  } catch (arrayBufferError) {
+    if (typeof FileReader === 'function') {
+      try {
+        return await new Promise<ArrayBuffer>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(reader.error || arrayBufferError);
+          reader.onload = () => {
+            if (reader.result instanceof ArrayBuffer) resolve(reader.result);
+            else reject(new Error(t("Unable to read $1 as binary data.", label)));
+          };
+          reader.readAsArrayBuffer(blob);
+        });
+      } catch {
+        // Try one more standards-based path below; Chromium can represent large
+        // blobs with temporary files, and one reader may fail while another works.
+      }
+    }
+
+    try {
+      return await new Response(blob).arrayBuffer();
+    } catch (responseError) {
+      throw new Error(t("Failed to read $1: $2", label, errorMessage(responseError || arrayBufferError)));
+    }
+  }
+}
+
 async function refreshUiLanguage(): Promise<void> {
   const { ui_language } = await getConfig();
   setUiLanguage(ui_language);
@@ -115,30 +178,187 @@ function capturePositions(size: number, viewportSize: number): number[] {
   return positions;
 }
 
+function createScreenshotPartCanvases(width: number, height: number): ScreenshotPartCanvas[] {
+  const parts: ScreenshotPartCanvas[] = [];
+  for (let yStart = 0; yStart < height; yStart += maxScreenshotPngDimensionPixels) {
+    const partHeight = Math.min(maxScreenshotPngDimensionPixels, height - yStart);
+    for (let xStart = 0; xStart < width; xStart += maxScreenshotPngDimensionPixels) {
+      const partWidth = Math.min(maxScreenshotPngDimensionPixels, width - xStart);
+      const canvas = new OffscreenCanvas(partWidth, partHeight);
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error(t("Unable to prepare screenshot canvas."));
+      parts.push({ canvas, context, height: partHeight, width: partWidth, xStart, yStart });
+    }
+  }
+  return parts;
+}
+
+function drawBitmapIntoScreenshotParts(
+  parts: ScreenshotPartCanvas[],
+  bitmap: ImageBitmap,
+  sourceWidth: number,
+  sourceHeight: number,
+  destinationX: number,
+  destinationY: number,
+  destinationWidth: number,
+  destinationHeight: number,
+): void {
+  const destinationRight = destinationX + destinationWidth;
+  const destinationBottom = destinationY + destinationHeight;
+
+  for (const part of parts) {
+    const intersectLeft = Math.max(destinationX, part.xStart);
+    const intersectTop = Math.max(destinationY, part.yStart);
+    const intersectRight = Math.min(destinationRight, part.xStart + part.width);
+    const intersectBottom = Math.min(destinationBottom, part.yStart + part.height);
+    if (intersectLeft >= intersectRight || intersectTop >= intersectBottom) continue;
+
+    const intersectWidth = intersectRight - intersectLeft;
+    const intersectHeight = intersectBottom - intersectTop;
+    const sourceX = ((intersectLeft - destinationX) / destinationWidth) * sourceWidth;
+    const sourceY = ((intersectTop - destinationY) / destinationHeight) * sourceHeight;
+    const sourceSliceWidth = (intersectWidth / destinationWidth) * sourceWidth;
+    const sourceSliceHeight = (intersectHeight / destinationHeight) * sourceHeight;
+
+    part.context.drawImage(
+      bitmap,
+      sourceX,
+      sourceY,
+      sourceSliceWidth,
+      sourceSliceHeight,
+      intersectLeft - part.xStart,
+      intersectTop - part.yStart,
+      intersectWidth,
+      intersectHeight,
+    );
+  }
+}
+
+async function writeBitmapScreenshotParts(
+  snapshot: Snapshot,
+  bitmap: ImageBitmap,
+  width: number,
+  height: number,
+): Promise<SnapshotScreenshot> {
+  const partCanvases = createScreenshotPartCanvases(width, height);
+  drawBitmapIntoScreenshotParts(
+    partCanvases,
+    bitmap,
+    width,
+    height,
+    0,
+    0,
+    width,
+    height,
+  );
+  const partBlobs = await Promise.all(partCanvases.map(async (part) => ({
+    blob: await part.canvas.convertToBlob({ type: 'image/png' }),
+    x: part.xStart,
+    y: part.yStart,
+    width: part.canvas.width,
+    height: part.canvas.height,
+  })));
+  return writeSnapshotScreenshotParts(snapshot, partBlobs, width, height);
+}
+
 async function captureVisibleTabPng(windowId: number): Promise<Blob> {
   if (typeof browser.tabs.captureVisibleTab !== 'function') {
     throw new Error(t("Screenshot capture is not available in this browser."));
   }
-  const dataUrl = await browser.tabs.captureVisibleTab(windowId, { format: 'png' });
+  const dataUrl = await withCaptureVisibleTabQuota(() => browser.tabs.captureVisibleTab(windowId, { format: 'png' }));
   return dataUrlToBlob(dataUrl);
 }
 
+async function captureVisibleScreenshot(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<SnapshotScreenshot> {
+  if (typeof tab.windowId !== 'number') throw new Error(t("No window ID available for screenshot capture."));
+  if (typeof createImageBitmap !== 'function') {
+    throw new Error(t("Screenshot capture is not available in this browser."));
+  }
+  const blob = await captureVisibleTabPng(tab.windowId);
+  const bitmap = await createImageBitmap(blob);
+  const width = bitmap.width;
+  const height = bitmap.height;
+  if (width > maxScreenshotPngDimensionPixels || height > maxScreenshotPngDimensionPixels) {
+    const screenshot = await writeBitmapScreenshotParts(snapshot, bitmap, width, height);
+    bitmap.close();
+    return screenshot;
+  }
+  bitmap.close();
+  return writeSnapshotScreenshot(snapshot, blob, width, height);
+}
+
+function screenshotProgressTotal(metrics: PageMetrics | ScrollResult, captured: number): number {
+  const scrollY = 'scrollY' in metrics ? metrics.scrollY : 0;
+  const remainingHeight = Math.max(0, metrics.scrollHeight - scrollY - metrics.viewportHeight);
+  const remainingScrolls = Math.ceil(remainingHeight / Math.max(1, metrics.viewportHeight));
+  return Math.min(1 + maxFullPageScreenshotScrollCaptures, Math.max(captured, captured + remainingScrolls));
+}
+
+function sendScreenshotProgress(
+  snapshotId: string,
+  captured: number,
+  total: number,
+  phase: 'visible' | 'scrolling' | 'done' | 'canceled',
+): void {
+  browser.runtime.sendMessage<RuntimeMessage>({
+    type: 'screenshot_capture_progress',
+    snapshotId,
+    captured,
+    total: Math.max(captured, total),
+    phase,
+  }).catch(() => undefined);
+}
+
 async function ensureArchiveBoxContentScript(tab: Browser.tabs.Tab): Promise<void> {
+  if (!tab.id) throw new Error(t("No tab ID available."));
+  const permitted = await browser.permissions.contains({ permissions: ['scripting'] }).catch(() => true);
+  if (!permitted) {
+    throw new Error(t("Screenshot capture permission denied"));
+  }
+
+  const scripting = getScriptingApi();
+  if (!scripting) {
+    throw new Error(t("The scripting API is not available in this browser."));
+  }
+
+  await scripting.executeScript({
+    target: { tabId: tab.id },
+    files: ['content-scripts/archivebox.js'],
+  });
+}
+
+async function measureScreenshotPage(tab: Browser.tabs.Tab): Promise<PageMetrics> {
   if (!tab.id) throw new Error(t("No tab ID available."));
   const scripting = getScriptingApi();
   if (!scripting) {
     throw new Error(t("The scripting API is not available in this browser."));
   }
 
-  await scripting.insertCSS({
+  const [result] = await scripting.executeScript<PageMetrics>({
     target: { tabId: tab.id },
-    files: ['content-scripts/archivebox.css'],
-  }).catch(() => undefined);
-
-  await scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ['content-scripts/archivebox.js'],
+    func: () => {
+      const documentElement = document.documentElement;
+      const body = document.body;
+      return {
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        scrollWidth: Math.max(
+          documentElement.scrollWidth,
+          body?.scrollWidth || 0,
+          documentElement.clientWidth,
+        ),
+        scrollHeight: Math.max(
+          documentElement.scrollHeight,
+          body?.scrollHeight || 0,
+          documentElement.clientHeight,
+        ),
+        originalX: window.scrollX,
+        originalY: window.scrollY,
+      };
+    },
   });
+  if (!result?.result) throw new Error(t("Unable to measure page for screenshot capture."));
+  return result.result;
 }
 
 async function attachScreenshotToSnapshot(snapshotId: string, screenshot: SnapshotScreenshot): Promise<void> {
@@ -165,12 +385,12 @@ async function attachSingleFileToSnapshot(snapshotId: string, singlefile: Snapsh
 async function captureFullPageScreenshot(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<SnapshotScreenshot> {
   if (!tab.id) throw new Error(t("No tab ID available for screenshot capture."));
   if (typeof tab.windowId !== 'number') throw new Error(t("No window ID available for screenshot capture."));
-  if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap !== 'function') {
+  if (typeof createImageBitmap !== 'function') {
     throw new Error(t("Full-page screenshot stitching is not available in this browser."));
   }
   await ensureArchiveBoxContentScript(tab);
 
-  const metrics = await browser.tabs.sendMessage<RuntimeMessage, PageMetrics>(tab.id, {
+  const metrics = await browser.tabs.sendMessage<RuntimeMessage, PageMetrics>(tab.id as number, {
     type: 'screenshot_get_metrics',
   });
 
@@ -178,52 +398,76 @@ async function captureFullPageScreenshot(tab: Browser.tabs.Tab, snapshot: Snapsh
   const viewportHeight = Math.max(1, Math.floor(metrics.viewportHeight));
   const pageWidth = Math.max(viewportWidth, Math.floor(metrics.scrollWidth));
   const pageHeight = Math.max(viewportHeight, Math.floor(metrics.scrollHeight));
-  const xPositions = capturePositions(pageWidth, viewportWidth);
-  const yPositions = capturePositions(pageHeight, viewportHeight);
+  if (pageWidth <= viewportWidth && pageHeight <= viewportHeight) {
+    return snapshot.screenshot || captureVisibleScreenshot(tab, snapshot);
+  }
+
+  let baseScreenshot = snapshot.screenshot;
+  if (!baseScreenshot) {
+    baseScreenshot = await captureVisibleScreenshot(tab, snapshot);
+    await attachScreenshotToSnapshot(snapshot.id, baseScreenshot);
+  }
+
   const capturedPositions = new Set<string>();
-  let canvas: OffscreenCanvas | null = null;
-  let context: OffscreenCanvasRenderingContext2D | null = null;
+  const partBlobs: Array<{ blob: Blob; x: number; y: number; width: number; height: number }> = [];
   let scaleX = 1;
   let scaleY = 1;
+  let outputWidth = baseScreenshot.width;
+  let outputHeight = 0;
+  let scrollTargetY = 0;
+  let canceled = false;
+  sendScreenshotProgress(snapshot.id, 1, screenshotProgressTotal(metrics, 1), 'scrolling');
 
   try {
-    for (const y of yPositions) {
-      for (const x of xPositions) {
-        const scroll = await browser.tabs.sendMessage<RuntimeMessage, ScrollResult>(tab.id, {
-          type: 'screenshot_scroll',
-          x,
-          y,
-        });
-        const key = `${scroll.scrollX}:${scroll.scrollY}`;
-        if (capturedPositions.has(key)) continue;
-        capturedPositions.add(key);
-
-        const blob = await captureVisibleTabPng(tab.windowId);
-        const bitmap = await createImageBitmap(blob);
-        scaleX = bitmap.width / viewportWidth;
-        scaleY = bitmap.height / viewportHeight;
-        if (!canvas) {
-          canvas = new OffscreenCanvas(Math.ceil(pageWidth * scaleX), Math.ceil(pageHeight * scaleY));
-          context = canvas.getContext('2d');
-        }
-        if (!context) throw new Error(t("Unable to prepare screenshot canvas."));
-        const drawingContext = context;
-
-        const visibleCssWidth = Math.min(viewportWidth, pageWidth - scroll.scrollX);
-        const visibleCssHeight = Math.min(viewportHeight, pageHeight - scroll.scrollY);
-        drawingContext.drawImage(
-          bitmap,
-          0,
-          0,
-          Math.ceil(visibleCssWidth * scaleX),
-          Math.ceil(visibleCssHeight * scaleY),
-          Math.ceil(scroll.scrollX * scaleX),
-          Math.ceil(scroll.scrollY * scaleY),
-          Math.ceil(visibleCssWidth * scaleX),
-          Math.ceil(visibleCssHeight * scaleY),
-        );
-        bitmap.close();
+    for (let scrollCount = 0; scrollCount < maxFullPageScreenshotScrollCaptures; scrollCount += 1) {
+      if (canceledScreenshotCaptures.has(snapshot.id)) {
+        canceled = true;
+        break;
       }
+
+      const scroll = await browser.tabs.sendMessage<RuntimeMessage, ScrollResult>(tab.id as number, {
+        type: 'screenshot_scroll',
+        x: 0,
+        y: scrollTargetY,
+      });
+      if (scroll.userCanceled) {
+        canceled = true;
+        break;
+      }
+      const key = `${scroll.scrollX}:${scroll.scrollY}`;
+      if (capturedPositions.has(key)) break;
+      capturedPositions.add(key);
+
+      const blob = await captureVisibleTabPng(tab.windowId);
+      const bitmap = await createImageBitmap(blob);
+      scaleX = bitmap.width / viewportWidth;
+      scaleY = bitmap.height / viewportHeight;
+
+      const visibleCssWidth = Math.min(viewportWidth, Math.max(1, scroll.scrollWidth - scroll.scrollX));
+      const visibleCssHeight = Math.min(viewportHeight, Math.max(1, scroll.scrollHeight - scroll.scrollY));
+      const partWidth = Math.ceil(visibleCssWidth * scaleX);
+      const partHeight = Math.ceil(visibleCssHeight * scaleY);
+      outputWidth = Math.max(outputWidth, partWidth);
+      outputHeight += partHeight;
+      partBlobs.push({
+        blob,
+        x: Math.ceil(scroll.scrollX * scaleX),
+        y: Math.ceil(scroll.scrollY * scaleY),
+        width: partWidth,
+        height: partHeight,
+      });
+      bitmap.close();
+
+      const captured = 1 + partBlobs.length;
+      const total = screenshotProgressTotal(scroll, captured);
+      sendScreenshotProgress(snapshot.id, captured, total, 'scrolling');
+
+      const refreshedMetrics = await browser.tabs.sendMessage<RuntimeMessage, PageMetrics>(tab.id as number, {
+        type: 'screenshot_get_metrics',
+      }).catch(() => scroll);
+      const bottomY = Math.max(0, refreshedMetrics.scrollHeight - refreshedMetrics.viewportHeight);
+      if (scroll.scrollY >= bottomY - 1) break;
+      scrollTargetY = Math.min(bottomY, scroll.scrollY + refreshedMetrics.viewportHeight);
     }
   } finally {
     await browser.tabs.sendMessage<RuntimeMessage, unknown>(tab.id, {
@@ -231,55 +475,56 @@ async function captureFullPageScreenshot(tab: Browser.tabs.Tab, snapshot: Snapsh
       x: metrics.originalX,
       y: metrics.originalY,
     }).catch(() => undefined);
+    canceledScreenshotCaptures.delete(snapshot.id);
   }
 
-  if (!canvas) throw new Error(t("No screenshot tiles were captured."));
-  const blob = await canvas.convertToBlob({ type: 'image/png' });
-  return writeSnapshotScreenshot(snapshot, blob, canvas.width, canvas.height);
+  if (partBlobs.length === 0) {
+    if (canceled) {
+      completedCanceledScreenshotCaptures.add(snapshot.id);
+      sendScreenshotProgress(snapshot.id, 1, 1, 'canceled');
+    }
+    return baseScreenshot;
+  }
+  const screenshot = await appendSnapshotScreenshotParts(snapshot, baseScreenshot, partBlobs, outputWidth, outputHeight);
+  if (canceled) completedCanceledScreenshotCaptures.add(snapshot.id);
+  sendScreenshotProgress(
+    snapshot.id,
+    screenshot.parts?.length || 1,
+    screenshot.parts?.length || 1,
+    canceled ? 'canceled' : 'done',
+  );
+  return screenshot;
 }
 
 async function captureMhtml(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<SnapshotMhtml> {
   if (!tab.id) throw new Error(t("No tab ID available for MHTML capture."));
   if (!supportsMhtmlCapture) throw new Error(mhtmlUnsupportedMessage());
   const hasPermission = await browser.permissions.contains({ permissions: ['pageCapture'] }).catch(() => false);
-  if (!hasPermission) {
-    const granted = await browser.permissions.request({ permissions: ['pageCapture'] }).catch(() => false);
-    if (!granted) throw new Error(t("MHTML capture permission denied"));
-  }
+  if (!hasPermission) throw new Error(t("MHTML capture permission denied"));
 
   const pageCapture = getChromeApis().pageCapture;
   if (!pageCapture) {
     throw new Error(t("MHTML capture is not available in this browser."));
   }
 
-  let blob: Blob | undefined;
-  try {
-    const maybePromise = pageCapture.saveAsMHTML({ tabId: tab.id as number });
-    if (maybePromise && typeof maybePromise.then === 'function') {
-      blob = await maybePromise;
-    } else {
-      blob = await new Promise<Blob | undefined>((resolve, reject) => {
-        pageCapture.saveAsMHTML({ tabId: tab.id as number }, (mhtmlData) => {
-          const error = chromeLastError();
-          if (error) {
-            reject(new Error(`chrome.pageCapture.saveAsMHTML failed: ${error}`));
-            return;
-          }
-          resolve(mhtmlData);
-        });
-      });
-    }
-  } catch (error) {
-    throw new Error(`chrome.pageCapture.saveAsMHTML failed: ${errorMessage(error)}`);
-  }
-
-  if (!blob) throw new Error(t("MHTML capture returned an empty file."));
-
   let bytes: ArrayBuffer;
   try {
-    bytes = await blob.arrayBuffer();
+    bytes = await new Promise<ArrayBuffer>((resolve, reject) => {
+      pageCapture.saveAsMHTML({ tabId: tab.id as number }, (mhtmlData) => {
+        const error = chromeLastError();
+        if (error) {
+          reject(new Error(`chrome.pageCapture.saveAsMHTML failed: ${error}`));
+          return;
+        }
+        if (!mhtmlData) {
+          reject(new Error(t("MHTML capture returned an empty file.")));
+          return;
+        }
+        blobToArrayBuffer(mhtmlData, t("generated MHTML data")).then(resolve, reject);
+      });
+    });
   } catch (error) {
-    throw new Error(`Failed to read generated MHTML data: ${errorMessage(error)}`);
+    throw new Error(errorMessage(error));
   }
 
   return writeSnapshotMhtmlBytes(snapshot, bytes);
@@ -295,7 +540,6 @@ type SingleFileCaptureResult = {
 
 async function captureSingleFileHtml(_tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<SnapshotSingleFile> {
   if (!_tab.id) throw new Error(t("No tab ID available for SingleFile capture."));
-  await ensureArchiveBoxContentScript(_tab);
   const { singlefile_extension_id } = await getConfig();
   const extensionId = singlefile_extension_id.trim() || defaultSingleFileExtensionId;
   if (!extensionId) {
@@ -314,8 +558,8 @@ async function captureSingleFileHtml(_tab: Browser.tabs.Tab, snapshot: Snapshot)
       tabId: _tab.id,
       displayName: t("ArchiveBox"),
     });
-  } catch (error) {
-    throw new Error(t("SingleFile capture failed.", errorMessage(error)));
+  } catch {
+    throw new Error(t("Make sure you have SingleFile installed."));
   }
 
   if (!pageData?.content) {
@@ -328,14 +572,19 @@ async function captureSingleFileHtml(_tab: Browser.tabs.Tab, snapshot: Snapshot)
 async function captureAndAttachSnapshotScreenshot(
   tab: Browser.tabs.Tab,
   snapshot: Snapshot,
-  options: CaptureAttachOptions = {},
+  fullPage = true,
 ): Promise<SnapshotScreenshot> {
-  if (options.hideOverlay !== false && tab.id) {
-    await browser.tabs.sendMessage<RuntimeMessage, unknown>(tab.id, {
-      type: 'hide_archivebox_overlay',
-    }).catch(() => undefined);
+  let screenshot: SnapshotScreenshot;
+  if (!fullPage) {
+    screenshot = await captureVisibleScreenshot(tab, snapshot);
+  } else {
+    try {
+      screenshot = await captureFullPageScreenshot(tab, snapshot);
+    } catch (error) {
+      console.warn(`Falling back to visible-area screenshot for ${snapshot.url}:`, error);
+      screenshot = await captureVisibleScreenshot(tab, snapshot);
+    }
   }
-  const screenshot = await captureFullPageScreenshot(tab, snapshot);
   await attachScreenshotToSnapshot(snapshot.id, screenshot);
   return screenshot;
 }
@@ -343,13 +592,7 @@ async function captureAndAttachSnapshotScreenshot(
 async function captureAndAttachSnapshotMhtml(
   tab: Browser.tabs.Tab,
   snapshot: Snapshot,
-  options: CaptureAttachOptions = {},
 ): Promise<SnapshotMhtml> {
-  if (options.hideOverlay !== false && tab.id) {
-    await browser.tabs.sendMessage<RuntimeMessage, unknown>(tab.id, {
-      type: 'hide_archivebox_overlay',
-    }).catch(() => undefined);
-  }
   const mhtml = await captureMhtml(tab, snapshot);
   await attachMhtmlToSnapshot(snapshot.id, mhtml);
   snapshot.mhtml = mhtml;
@@ -359,13 +602,7 @@ async function captureAndAttachSnapshotMhtml(
 async function captureAndAttachSnapshotSingleFile(
   tab: Browser.tabs.Tab,
   snapshot: Snapshot,
-  options: CaptureAttachOptions = {},
 ): Promise<SnapshotSingleFile> {
-  if (options.hideOverlay !== false && tab.id) {
-    await browser.tabs.sendMessage<RuntimeMessage, unknown>(tab.id, {
-      type: 'hide_archivebox_overlay',
-    }).catch(() => undefined);
-  }
   const singlefile = await captureSingleFileHtml(tab, snapshot);
   await attachSingleFileToSnapshot(snapshot.id, singlefile);
   snapshot.singlefile = singlefile;
@@ -377,12 +614,6 @@ async function captureAndAttachSnapshotArtifacts(
   snapshot: Snapshot,
   options: CaptureArtifactOptions,
 ): Promise<void> {
-  if (tab.id) {
-    await browser.tabs.sendMessage<RuntimeMessage, unknown>(tab.id, {
-      type: 'hide_archivebox_overlay',
-    }).catch(() => undefined);
-  }
-
   if (options.mhtml) {
     await captureAndAttachSnapshotMhtml(tab, snapshot).catch((error) => {
       console.error(`Failed to capture MHTML for ${snapshot.url}:`, error);
@@ -396,7 +627,7 @@ async function captureAndAttachSnapshotArtifacts(
   }
 
   if (options.screenshot) {
-    await captureAndAttachSnapshotScreenshot(tab, snapshot).catch((error) => {
+    await captureAndAttachSnapshotScreenshot(tab, snapshot, true).catch((error) => {
       console.error(`Failed to capture screenshot for ${snapshot.url}:`, error);
     });
   }
@@ -518,16 +749,21 @@ async function configureAutoArchiving(): Promise<void> {
   }
 }
 
-async function showOverlay(tab?: Browser.tabs.Tab): Promise<void> {
-  if (!tab?.id) return;
+async function saveTab(tab?: Browser.tabs.Tab): Promise<void> {
+  if (!tab?.id || !tab.url) return;
   try {
-    await ensureArchiveBoxContentScript(tab);
     const { snapshot, created } = await ensureSnapshotForTab(tab);
     await captureConfiguredSnapshotArtifacts(tab, snapshot, created);
-    await browser.tabs.sendMessage(tab.id, { type: 'show_archivebox_overlay' } satisfies RuntimeMessage);
+    await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0);
   } catch (error) {
-    console.error('Failed to show ArchiveBox overlay:', error);
+    console.error('Failed to save tab to ArchiveBox:', error);
   }
+}
+
+async function getMessageTab(tabId: number): Promise<Browser.tabs.Tab> {
+  const tab = await browser.tabs.get(tabId);
+  if (!tab?.id) throw new Error(t("No tab ID available."));
+  return tab;
 }
 
 export default defineBackground(() => {
@@ -559,22 +795,18 @@ export default defineBackground(() => {
   });
 
   browser.contextMenus.onClicked.addListener((_item, tab) => {
-    showOverlay(tab);
-  });
-
-  getActionApi()?.onClicked.addListener((tab) => {
-    showOverlay(tab);
+    saveTab(tab);
   });
 
   browser.commands.onCommand.addListener(async (command) => {
     if (command !== 'save-to-archivebox-action') return;
     const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
-    await showOverlay(activeTab);
+    await saveTab(activeTab);
   });
 
   browser.runtime.onMessage.addListener((
     message: RuntimeMessage,
-    sender,
+    _sender,
   ): Promise<RuntimeResponse> | RuntimeResponse => {
     switch (message.type) {
       case 'archivebox_add':
@@ -588,39 +820,53 @@ export default defineBackground(() => {
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));
 
       case 'capture_snapshot_screenshot': {
-        const tab = sender.tab;
-        if (!tab?.id) return { ok: false, errorMessage: t("Open the ArchiveBox popup on the page before saving a screenshot.") };
         return getSnapshots()
-          .then((snapshots) => {
+          .then(async (snapshots) => {
+            const tab = await getMessageTab(message.tabId);
             const snapshot = snapshots.find((item) => item.id === message.snapshotId);
             if (!snapshot) throw new Error(t("Saved snapshot not found."));
-            return captureAndAttachSnapshotScreenshot(tab, snapshot, { hideOverlay: false });
+            return captureAndAttachSnapshotScreenshot(tab, snapshot, message.fullPage ?? true);
           })
-          .then((screenshot) => ({ ok: true, screenshot }))
+          .then((screenshot) => {
+            const screenshotCanceled = completedCanceledScreenshotCaptures.delete(message.snapshotId);
+            return { ok: true, screenshot, screenshotCanceled };
+          })
+          .catch((error: Error) => ({ ok: false, errorMessage: error.message }));
+      }
+
+      case 'cancel_snapshot_screenshot':
+        canceledScreenshotCaptures.add(message.snapshotId);
+        return { ok: true };
+
+      case 'measure_screenshot_page': {
+        return getMessageTab(message.tabId)
+          .then(measureScreenshotPage)
+          .then((metrics) => ({
+            ok: true,
+            screenshotNeedsScroll: metrics.scrollWidth > metrics.viewportWidth || metrics.scrollHeight > metrics.viewportHeight,
+          }))
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));
       }
 
       case 'capture_snapshot_mhtml': {
-        const tab = sender.tab;
-        if (!tab?.id) return { ok: false, errorMessage: t("Open the ArchiveBox popup on the page before saving MHTML.") };
         return getSnapshots()
-          .then((snapshots) => {
+          .then(async (snapshots) => {
+            const tab = await getMessageTab(message.tabId);
             const snapshot = snapshots.find((item) => item.id === message.snapshotId);
             if (!snapshot) throw new Error(t("Saved snapshot not found."));
-            return captureAndAttachSnapshotMhtml(tab, snapshot, { hideOverlay: false });
+            return captureAndAttachSnapshotMhtml(tab, snapshot);
           })
           .then((mhtml) => ({ ok: true, mhtml }))
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));
       }
 
       case 'capture_snapshot_singlefile': {
-        const tab = sender.tab;
-        if (!tab?.id) return { ok: false, errorMessage: t("Open the ArchiveBox popup on the page before saving SingleFile HTML.") };
         return getSnapshots()
-          .then((snapshots) => {
+          .then(async (snapshots) => {
+            const tab = await getMessageTab(message.tabId);
             const snapshot = snapshots.find((item) => item.id === message.snapshotId);
             if (!snapshot) throw new Error(t("Saved snapshot not found."));
-            return captureAndAttachSnapshotSingleFile(tab, snapshot, { hideOverlay: false });
+            return captureAndAttachSnapshotSingleFile(tab, snapshot);
           })
           .then((singlefile) => ({ ok: true, singlefile }))
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));

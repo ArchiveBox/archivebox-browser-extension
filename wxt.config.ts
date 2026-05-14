@@ -1,8 +1,14 @@
 import { defineConfig } from 'wxt';
 
+// const chromeProfile = './tmp/chrome_profile';
+
 export default defineConfig({
   modules: ['@wxt-dev/module-react', '@wxt-dev/i18n/module'],
   manifestVersion: 3,
+  // webExt: {
+  //   chromiumProfile: chromeProfile,
+  //   keepProfileChanges: true,
+  // },
   hooks: {
     'build:manifestGenerated': (_wxt, manifest) => {
       if (manifest.content_scripts?.length === 0) {
@@ -19,14 +25,14 @@ export default defineConfig({
       'storage',
       'activeTab',
       'contextMenus',
-      'scripting',
+      ...(['chrome', 'edge', 'firefox'].includes(browser) ? ['unlimitedStorage'] : []),
     ],
     optional_permissions: [
       'cookies',
       'history',
       'bookmarks',
       'tabs',
-      ...(['chrome', 'edge'].includes(browser) ? ['unlimitedStorage'] : []),
+      'scripting',
       ...(['chrome', 'edge'].includes(browser) ? ['pageCapture'] : []),
     ],
     optional_host_permissions: ['<all_urls>'],
@@ -47,6 +53,7 @@ export default defineConfig({
     },
     action: {
       default_title: '__MSG_actionTitle__',
+      default_popup: '/popup.html',
       default_icon: {
         16: '/icon/16.png',
         32: '/icon/32.png',

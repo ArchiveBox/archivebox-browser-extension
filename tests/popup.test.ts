@@ -2,11 +2,10 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
 import { chromium } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import net from 'node:net';
+import path from 'node:path';
 
 type CdpTarget = {
   targetId: string;
@@ -14,8 +13,41 @@ type CdpTarget = {
   url: string;
 };
 
+type DevToolsTarget = {
+  id: string;
+  type: string;
+  url: string;
+  webSocketDebuggerUrl?: string;
+};
+
+type DomQuerySelectorAllResult = {
+  nodeIds: number[];
+};
+
+type DomBoxModelResult = {
+  model: {
+    border: number[];
+    content: number[];
+  };
+};
+
+type CdpEvent<T = Record<string, unknown>> = {
+  method: string;
+  params: T;
+  sessionId?: string;
+};
+
 type CdpClient = {
-  send<T = Record<string, unknown>>(method: string, params?: Record<string, unknown>): Promise<T>;
+  send<T = Record<string, unknown>>(
+    method: string,
+    params?: Record<string, unknown>,
+    sessionId?: string,
+  ): Promise<T>;
+  waitForEvent<T = Record<string, unknown>>(
+    method: string,
+    predicate: (event: CdpEvent<T>) => boolean,
+    timeoutMs?: number,
+  ): Promise<CdpEvent<T>>;
   close(): void;
 };
 
@@ -25,7 +57,22 @@ type BrowserHarness = {
   cdp: CdpClient;
   extensionId: string;
   process: ChildProcess;
+  remoteDebuggingPort: number;
   userDataDir: string;
+};
+
+type NativePopup = {
+  cdp: CdpClient;
+  rootNodeId: number;
+  sessionId?: string;
+  targetId: string;
+};
+
+type Rect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 };
 
 type FixtureServer = {
@@ -35,11 +82,17 @@ type FixtureServer = {
 
 const extensionPath = path.resolve('.output/chrome-mv3');
 const canaryPath = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary';
+const chromeProfilePath = path.resolve('tmp/chrome_profile');
+const shortDelay = 250;
 
 function selectedBrowserExecutable(): string {
   if (existsSync('/usr/bin/chromium')) return '/usr/bin/chromium';
   if (existsSync(canaryPath)) return canaryPath;
   return chromium.executablePath();
+}
+
+function sleep(ms = shortDelay): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function freePort(): Promise<number> {
@@ -62,53 +115,121 @@ async function waitForJson<T>(url: string): Promise<T> {
     } catch {
       // Browser startup races the first few CDP probes.
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await sleep();
   }
   throw new Error(`Timed out waiting for ${url}`);
 }
 
-async function connectBrowserCdp(port: number): Promise<CdpClient> {
-  const version = await waitForJson<{ webSocketDebuggerUrl: string }>(`http://127.0.0.1:${port}/json/version`);
-  const socket = new WebSocket(version.webSocketDebuggerUrl);
+async function connectCdpWebSocket(webSocketDebuggerUrl: string): Promise<CdpClient> {
+  const socket = new WebSocket(webSocketDebuggerUrl);
   await new Promise<void>((resolve, reject) => {
     socket.addEventListener('open', () => resolve(), { once: true });
-    socket.addEventListener('error', () => reject(new Error('Failed to open browser CDP websocket')), { once: true });
+    socket.addEventListener('error', () => reject(new Error('Failed to open CDP websocket')), { once: true });
   });
 
   let nextId = 0;
   const pending = new Map<number, {
+    method: string;
+    sessionId?: string;
+    timeout: ReturnType<typeof setTimeout>;
     resolve: (value: unknown) => void;
     reject: (error: Error) => void;
   }>();
+  const eventWaiters = new Set<{
+    method: string;
+    predicate: (event: CdpEvent) => boolean;
+    resolve: (event: CdpEvent) => void;
+    reject: (error: Error) => void;
+    timeout: ReturnType<typeof setTimeout>;
+  }>();
+  const recentEvents: string[] = [];
 
   socket.addEventListener('message', (event) => {
     const message = JSON.parse(String(event.data));
-    if (!message.id || !pending.has(message.id)) return;
+    if (!message.id) {
+      if (!message.method) return;
+      const cdpEvent = {
+        method: message.method,
+        params: message.params || {},
+        sessionId: message.sessionId,
+      };
+      recentEvents.push(`${message.method} ${JSON.stringify(message.params || {}).slice(0, 300)}`);
+      if (recentEvents.length > 20) recentEvents.shift();
+      for (const waiter of [...eventWaiters]) {
+        if (waiter.method !== message.method || !waiter.predicate(cdpEvent)) continue;
+        clearTimeout(waiter.timeout);
+        eventWaiters.delete(waiter);
+        waiter.resolve(cdpEvent);
+      }
+      return;
+    }
+    if (!pending.has(message.id)) return;
     const callbacks = pending.get(message.id);
     pending.delete(message.id);
     if (!callbacks) return;
+    clearTimeout(callbacks.timeout);
     if (message.error) {
-      callbacks.reject(new Error(`${message.error.message}: ${message.error.data || ''}`.trim()));
+      callbacks.reject(new Error(`${callbacks.method}${callbacks.sessionId ? ` [${callbacks.sessionId}]` : ''}: ${message.error.message}: ${message.error.data || ''}`.trim()));
       return;
     }
     callbacks.resolve(message.result || {});
   });
 
   return {
-    send<T = Record<string, unknown>>(method: string, params: Record<string, unknown> = {}) {
+    send<T = Record<string, unknown>>(
+      method: string,
+      params: Record<string, unknown> = {},
+      sessionId?: string,
+    ) {
       return new Promise<T>((resolve, reject) => {
         const id = nextId += 1;
+        const timeout = setTimeout(() => {
+          pending.delete(id);
+          reject(new Error(`${method}${sessionId ? ` [${sessionId}]` : ''}: timed out waiting for CDP response. Recent events: ${recentEvents.join(' | ')}`));
+        }, 15_000);
         pending.set(id, {
+          method,
+          sessionId,
+          timeout,
           resolve: (value) => resolve(value as T),
           reject,
         });
-        socket.send(JSON.stringify({ id, method, params }));
+        socket.send(JSON.stringify({
+          id,
+          method,
+          params,
+          ...(sessionId ? { sessionId } : {}),
+        }));
+      });
+    },
+    waitForEvent<T = Record<string, unknown>>(
+      method: string,
+      predicate: (event: CdpEvent<T>) => boolean,
+      timeoutMs = 10_000,
+    ) {
+      return new Promise<CdpEvent<T>>((resolve, reject) => {
+        const waiter = {
+          method,
+          predicate: predicate as (event: CdpEvent) => boolean,
+          resolve: resolve as (event: CdpEvent) => void,
+          reject,
+          timeout: setTimeout(() => {
+            eventWaiters.delete(waiter);
+            reject(new Error(`Timed out waiting for CDP event ${method}. Recent events: ${recentEvents.join(' | ')}`));
+          }, timeoutMs),
+        };
+        eventWaiters.add(waiter);
       });
     },
     close() {
       socket.close();
     },
   };
+}
+
+async function connectBrowserCdp(port: number): Promise<CdpClient> {
+  const version = await waitForJson<{ webSocketDebuggerUrl: string }>(`http://127.0.0.1:${port}/json/version`);
+  return connectCdpWebSocket(version.webSocketDebuggerUrl);
 }
 
 async function startFixtureServer(): Promise<FixtureServer> {
@@ -125,15 +246,17 @@ async function startFixtureServer(): Promise<FixtureServer> {
           <title>ArchiveBox Playwright Fixture</title>
           <style>
             body { font-family: system-ui, sans-serif; margin: 24px; }
-            main { min-height: 1800px; max-width: 760px; }
-            section { margin-top: 720px; padding: 24px; border: 1px solid #ccd; }
+            main { min-height: 17280px; max-width: 760px; }
+            section { margin-top: 16880px; padding: 24px; border: 1px solid #ccd; }
           </style>
         </head>
         <body>
           <main>
             <h1>ArchiveBox Playwright Fixture</h1>
             <p id="fixture-marker">archivebox-popup-integration-fixture</p>
-            <section>Lower page content for full-page screenshot capture.</section>
+            <section id="bottom-marker">
+              Bottom page content after 17,000px for full-page screenshot capture.
+            </section>
           </main>
         </body>
       </html>`);
@@ -156,7 +279,9 @@ async function launchHarness(): Promise<BrowserHarness> {
 
   const executablePath = selectedBrowserExecutable();
   const remoteDebuggingPort = await freePort();
-  const userDataDir = await mkdtemp(path.join(tmpdir(), 'archivebox-extension-test-'));
+  await rm(chromeProfilePath, { recursive: true, force: true });
+  await mkdir(chromeProfilePath, { recursive: true });
+  const userDataDir = chromeProfilePath;
   const headlessLinux = process.platform === 'linux' && !process.env.DISPLAY;
   const args = [
     `--user-data-dir=${userDataDir}`,
@@ -184,6 +309,7 @@ async function launchHarness(): Promise<BrowserHarness> {
     cdp,
     extensionId: loaded.id,
     process: browserProcess,
+    remoteDebuggingPort,
     userDataDir,
   };
 }
@@ -194,8 +320,7 @@ async function closeHarness(harness: BrowserHarness): Promise<void> {
   if (!harness.process.killed) {
     harness.process.kill('SIGTERM');
   }
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  await rm(harness.userDataDir, { recursive: true, force: true });
+  await sleep();
 }
 
 async function extensionStoragePage(context: BrowserContext, extensionId: string): Promise<Page> {
@@ -247,63 +372,337 @@ async function extensionHasPermission(context: BrowserContext, extensionId: stri
   return granted;
 }
 
-async function grantMhtmlPermissionFromOptions(context: BrowserContext, extensionId: string): Promise<void> {
-  const page = await extensionStoragePage(context, extensionId);
-  await page.bringToFront();
-  await page.getByRole('button', { name: /Configuration/ }).click();
-  const checkbox = page.getByLabel('Save MHTML snapshots locally');
-  await expect(checkbox).not.toBeChecked();
-  await checkbox.click();
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    if (await extensionHasPermission(context, extensionId, 'pageCapture')) break;
-    await page.keyboard.press('Enter');
-    await page.waitForTimeout(500);
-  }
-  await expect.poll(
-    () => extensionHasPermission(context, extensionId, 'pageCapture'),
-    { timeout: 10_000 },
-  ).toBe(true);
-  await expect(checkbox).toBeChecked();
-  await page.close();
-}
-
 async function waitForTabTarget(cdp: CdpClient, url: string): Promise<CdpTarget> {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const { targetInfos } = await cdp.send<{ targetInfos: CdpTarget[] }>('Target.getTargets', { filter: [{}] });
     const target = targetInfos.find((item) => item.type === 'tab' && item.url === url)
       || targetInfos.find((item) => item.type === 'tab' && item.url.startsWith(url));
     if (target) return target;
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await sleep();
   }
   throw new Error(`Timed out waiting for tab target: ${url}`);
 }
 
-async function triggerAction(harness: BrowserHarness, page: Page): Promise<void> {
+async function extensionPopupTargets(harness: BrowserHarness): Promise<CdpTarget[]> {
+  const { targetInfos } = await harness.cdp.send<{ targetInfos: CdpTarget[] }>('Target.getTargets', { filter: [{}] });
+  const popupUrl = `chrome-extension://${harness.extensionId}/popup.html`;
+  return targetInfos.filter((item) => item.type === 'page' && item.url.startsWith(popupUrl));
+}
+
+async function waitForNoNativePopup(harness: BrowserHarness): Promise<void> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if ((await extensionPopupTargets(harness)).length === 0) return;
+    await sleep();
+  }
+  throw new Error('Timed out waiting for native popup to close');
+}
+
+async function closeExistingNativePopups(harness: BrowserHarness): Promise<void> {
+  const targets = await extensionPopupTargets(harness);
+  await Promise.all(targets.map((target) => (
+    harness.cdp.send('Target.closeTarget', { targetId: target.targetId }).catch(() => undefined)
+  )));
+  if (targets.length > 0) await waitForNoNativePopup(harness);
+}
+
+async function waitForPopupDevToolsTarget(harness: BrowserHarness): Promise<DevToolsTarget> {
+  const popupUrl = `chrome-extension://${harness.extensionId}/popup.html`;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const targets = await waitForJson<DevToolsTarget[]>(`http://127.0.0.1:${harness.remoteDebuggingPort}/json/list`);
+    const target = targets.find((item) => item.url.startsWith(popupUrl) && item.webSocketDebuggerUrl);
+    if (target) return target;
+    await sleep();
+  }
+  throw new Error('Timed out waiting for popup DevTools websocket target');
+}
+
+async function openNativePopup(harness: BrowserHarness, page: Page): Promise<NativePopup> {
+  await closeExistingNativePopups(harness);
   await page.bringToFront();
-  const target = await waitForTabTarget(harness.cdp, page.url());
+  const tabTarget = await waitForTabTarget(harness.cdp, page.url());
   await harness.cdp.send('Extensions.triggerAction', {
     id: harness.extensionId,
-    targetId: target.targetId,
+    targetId: tabTarget.targetId,
   });
+
+  await sleep(1500);
+  const target = await waitForPopupDevToolsTarget(harness);
+  if (!target.webSocketDebuggerUrl) throw new Error('Popup target does not expose a DevTools websocket');
+  const popupCdp = await connectCdpWebSocket(target.webSocketDebuggerUrl);
+  await popupCdp.send('DOM.enable');
+  const { root } = await popupCdp.send<{ root: { nodeId: number } }>('DOM.getDocument', { depth: 0 });
+  const rootNodeId = root.nodeId;
+  const popup = { cdp: popupCdp, rootNodeId, targetId: target.id };
+  await waitForPopupDom(harness, popup, 'native popup React root', '.archivebox-overlay');
+  return popup;
+}
+
+async function popupRootNodeId(popup: NativePopup): Promise<number> {
+  return popup.rootNodeId;
+}
+
+async function refreshPopupRootNodeId(popup: NativePopup): Promise<number> {
+  const { root } = await popup.cdp.send<{ root: { nodeId: number } }>('DOM.getDocument', { depth: 0 }, popup.sessionId);
+  popup.rootNodeId = root.nodeId;
+  return root.nodeId;
+}
+
+async function popupHtml(_harness: BrowserHarness, popup: NativePopup): Promise<string> {
+  const rootNodeId = await popupRootNodeId(popup);
+  try {
+    const { outerHTML } = await popup.cdp.send<{ outerHTML: string }>('DOM.getOuterHTML', { nodeId: rootNodeId }, popup.sessionId);
+    return outerHTML;
+  } catch {
+    const refreshedRootNodeId = await refreshPopupRootNodeId(popup);
+    const { outerHTML } = await popup.cdp.send<{ outerHTML: string }>('DOM.getOuterHTML', { nodeId: refreshedRootNodeId }, popup.sessionId);
+    return outerHTML;
+  }
+}
+
+function htmlText(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cssAttributeValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+async function popupNodeIds(popup: NativePopup, selector: string): Promise<number[]> {
+  const rootNodeId = await popupRootNodeId(popup);
+  try {
+    const { nodeIds } = await popup.cdp.send<DomQuerySelectorAllResult>('DOM.querySelectorAll', {
+      nodeId: rootNodeId,
+      selector,
+    }, popup.sessionId);
+    return nodeIds;
+  } catch {
+    const refreshedRootNodeId = await refreshPopupRootNodeId(popup);
+    const { nodeIds } = await popup.cdp.send<DomQuerySelectorAllResult>('DOM.querySelectorAll', {
+      nodeId: refreshedRootNodeId,
+      selector,
+    }, popup.sessionId);
+    return nodeIds;
+  }
+}
+
+async function popupNodeHtml(popup: NativePopup, nodeId: number): Promise<string> {
+  const { outerHTML } = await popup.cdp.send<{ outerHTML: string }>('DOM.getOuterHTML', { nodeId }, popup.sessionId);
+  return outerHTML;
+}
+
+async function popupElementsHtml(popup: NativePopup, selector: string): Promise<string[]> {
+  const nodeIds = await popupNodeIds(popup, selector);
+  return Promise.all(nodeIds.map((nodeId) => popupNodeHtml(popup, nodeId)));
+}
+
+async function findPopupNodeByText(popup: NativePopup, selector: string, text: string | RegExp): Promise<number> {
+  const nodeIds = await popupNodeIds(popup, selector);
+  for (const nodeId of nodeIds) {
+    const nodeText = htmlText(await popupNodeHtml(popup, nodeId));
+    if (typeof text === 'string' ? nodeText === text : text.test(nodeText)) return nodeId;
+  }
+  throw new Error(`Popup element not found for ${selector} with text ${String(text)}`);
+}
+
+async function waitForPopupDom(
+  harness: BrowserHarness,
+  popup: NativePopup,
+  description: string,
+  selector: string,
+  timeoutMs = 10_000,
+): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const rootNodeId = await popupRootNodeId(popup);
+    const { nodeId } = await popup.cdp.send<{ nodeId: number }>('DOM.querySelector', { nodeId: rootNodeId, selector }, popup.sessionId);
+    if (nodeId) return;
+    await sleep();
+  }
+  throw new Error(`Timed out waiting for ${description}`);
+}
+
+async function waitForPopupHtmlCondition(
+  harness: BrowserHarness,
+  popup: NativePopup,
+  description: string,
+  predicate: (html: string) => boolean,
+  timeoutMs = 10_000,
+): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (predicate(await popupHtml(harness, popup))) return;
+    await sleep();
+  }
+  throw new Error(`Timed out waiting for ${description}`);
+}
+
+async function waitForPopupElementsCondition(
+  harness: BrowserHarness,
+  popup: NativePopup,
+  description: string,
+  selector: string,
+  predicate: (htmlItems: string[]) => boolean,
+  timeoutMs = 10_000,
+): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (predicate(await popupElementsHtml(popup, selector))) return;
+    await sleep();
+  }
+  throw new Error(`Timed out waiting for ${description}. Popup text: ${htmlText(await popupHtml(harness, popup))}`);
+}
+
+async function waitForPopupText(
+  harness: BrowserHarness,
+  popup: NativePopup,
+  text: string | RegExp,
+  timeoutMs = 10_000,
+): Promise<void> {
+  await waitForPopupHtmlCondition(
+    harness,
+    popup,
+    `popup text ${String(text)}`,
+    (html) => {
+      const textContent = htmlText(html);
+      return typeof text === 'string' ? textContent.includes(text) : text.test(textContent);
+    },
+    timeoutMs,
+  );
+}
+
+async function popupElementRect(_harness: BrowserHarness, popup: NativePopup, nodeId: number): Promise<Rect> {
+  const { model } = await popup.cdp.send<DomBoxModelResult>('DOM.getBoxModel', { nodeId }, popup.sessionId);
+  const points = model.border.length ? model.border : model.content;
+  const xs = points.filter((_, index) => index % 2 === 0);
+  const ys = points.filter((_, index) => index % 2 === 1);
+  const left = Math.min(...xs);
+  const right = Math.max(...xs);
+  const top = Math.min(...ys);
+  const bottom = Math.max(...ys);
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+async function clickPopupRect(harness: BrowserHarness, popup: NativePopup, rect: Rect): Promise<void> {
+  const x = rect.x + rect.width / 2;
+  const y = rect.y + rect.height / 2;
+  await popup.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y }, popup.sessionId);
+  await popup.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 }, popup.sessionId);
+  await popup.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 }, popup.sessionId);
+}
+
+async function clickPopupNode(harness: BrowserHarness, popup: NativePopup, nodeId: number): Promise<void> {
+  await clickPopupRect(harness, popup, await popupElementRect(harness, popup, nodeId));
+}
+
+async function clickPopupTitle(harness: BrowserHarness, popup: NativePopup, title: string): Promise<void> {
+  const [nodeId] = await popupNodeIds(popup, `[title="${cssAttributeValue(title)}"]`);
+  if (!nodeId) throw new Error(`Popup title not found: ${title}`);
+  await clickPopupNode(harness, popup, nodeId);
+}
+
+async function clickPopupButtonText(harness: BrowserHarness, popup: NativePopup, text: string | RegExp): Promise<void> {
+  await clickPopupNode(harness, popup, await findPopupNodeByText(popup, 'button', text));
+}
+
+async function focusTagInput(harness: BrowserHarness, popup: NativePopup): Promise<void> {
+  const [nodeId] = await popupNodeIds(popup, 'input[placeholder="+ tag"]');
+  if (!nodeId) throw new Error('Tag input not found');
+  await clickPopupNode(harness, popup, nodeId);
+}
+
+async function pressPopupKey(harness: BrowserHarness, popup: NativePopup, key: string): Promise<void> {
+  const keyCode = key === 'Enter' ? 13 : key === 'Escape' ? 27 : 0;
+  const code = key === 'Enter' ? 'Enter' : key === 'Escape' ? 'Escape' : key;
+  await popup.cdp.send('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key,
+    code,
+    windowsVirtualKeyCode: keyCode,
+    nativeVirtualKeyCode: keyCode,
+  }, popup.sessionId);
+  await popup.cdp.send('Input.dispatchKeyEvent', {
+    type: 'keyUp',
+    key,
+    code,
+    windowsVirtualKeyCode: keyCode,
+    nativeVirtualKeyCode: keyCode,
+  }, popup.sessionId);
+}
+
+async function typeTag(harness: BrowserHarness, popup: NativePopup, tag: string): Promise<void> {
+  await focusTagInput(harness, popup);
+  await popup.cdp.send('Input.insertText', { text: tag }, popup.sessionId);
+  await pressPopupKey(harness, popup, 'Enter');
+}
+
+async function acceptPossiblePermissionPrompt(page: Page): Promise<void> {
+  await page.keyboard.press('Enter').catch(() => undefined);
+  await sleep(500);
+}
+
+async function acceptPossiblePermissionPrompts(page: Page, count = 3): Promise<void> {
+  for (let attempt = 0; attempt < count; attempt += 1) {
+    await acceptPossiblePermissionPrompt(page);
+  }
+}
+
+async function acceptPermissionPromptByKeyboard(page: Page, count = 3): Promise<void> {
+  for (let attempt = 0; attempt < count; attempt += 1) {
+    await page.keyboard.press('Enter').catch(() => undefined);
+    await sleep(200);
+    await page.keyboard.press('Tab').catch(() => undefined);
+    await sleep(100);
+    await page.keyboard.press('Enter').catch(() => undefined);
+    await sleep(500);
+  }
+}
+
+async function grantExtensionPermissionViaCdp(harness: BrowserHarness, permission: string): Promise<void> {
+  const origin = `chrome-extension://${harness.extensionId}`;
+  await harness.cdp.send('Browser.setPermission', {
+    permission: { name: permission },
+    setting: 'granted',
+    origin,
+  }).catch(() => undefined);
+  await harness.cdp.send('Browser.grantPermissions', {
+    permissions: [permission],
+    origin,
+  }).catch(() => undefined);
 }
 
 async function savedEntries(context: BrowserContext, extensionId: string): Promise<Array<Record<string, unknown>>> {
   return (await getExtensionStorage<Array<Record<string, unknown>>>(context, extensionId, 'entries')) || [];
 }
 
-function overlayLocator(page: Page, selector = '', options?: Parameters<Page['locator']>[1]) {
-  return page.locator(`#archivebox-extension-root${selector ? ` ${selector}` : ''}`, options);
+async function waitForSavedEntry(
+  context: BrowserContext,
+  extensionId: string,
+  url: string,
+  predicate: (entry: Record<string, unknown>) => boolean,
+  description: string,
+  timeoutMs = 30_000,
+): Promise<Record<string, unknown>> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const entry = (await savedEntries(context, extensionId)).find((item) => item.url === url);
+    if (entry && predicate(entry)) return entry;
+    await sleep();
+  }
+  throw new Error(`Timed out waiting for saved entry ${description}`);
 }
 
-async function expectOverlayPinnedToViewport(page: Page): Promise<void> {
-  const box = await page.locator('xpath=//*[local-name()="archivebox-extension-root"]').boundingBox();
-  expect(box).toBeTruthy();
-  expect(box?.y).toBeGreaterThanOrEqual(18);
-  expect(box?.y).toBeLessThanOrEqual(22);
-  expect(box?.x).toBeGreaterThan(0);
-}
-
-test('popup overlay supports local save, tags, depth, captures, navigation, and dismissal', async () => {
+test('native action popup supports local save, tags, depth, captures, navigation, and dismissal', async () => {
   const server = await startFixtureServer();
   const harness = await launchHarness();
 
@@ -325,46 +724,87 @@ test('popup overlay supports local save, tags, depth, captures, navigation, and 
     const page = await harness.context.newPage();
     const testPageUrl = `${server.url}?archivebox_test=1`;
     await page.goto(testPageUrl, { waitUntil: 'domcontentloaded' });
+    expect(await extensionHasPermission(harness.context, harness.extensionId, 'scripting')).toBe(false);
+    expect(await extensionHasPermission(harness.context, harness.extensionId, 'pageCapture')).toBe(false);
 
-    await triggerAction(harness, page);
-    const overlay = overlayLocator(page, '.archivebox-overlay');
-    await expect(overlay).toBeVisible();
-    await expectOverlayPinnedToViewport(page);
-    await expect(overlay.getByText('ArchiveBox Playwright Fixture')).toBeVisible();
-    await expect(overlay.getByText(server.url)).toBeVisible();
-    await expect(overlay.locator('.archivebox-overlay__pill--saved', { hasText: 'Saved' })).toBeVisible();
+    let popup = await openNativePopup(harness, page);
+    await waitForPopupText(harness, popup, 'ArchiveBox Playwright Fixture');
+    await waitForPopupText(harness, popup, testPageUrl);
+    await waitForPopupText(harness, popup, 'Saved');
+    await waitForPopupText(harness, popup, 'Server not connected');
+
+    await clickPopupButtonText(harness, popup, /^existing\s*\+$/);
+    await waitForPopupElementsCondition(
+      harness,
+      popup,
+      'added suggested tag',
+      '.archivebox-tag-chip--current',
+      (htmlItems) => htmlItems.some((html) => htmlText(html).includes('existing')),
+    );
+
+    await clickPopupTitle(harness, popup, 'Remove tag existing');
+    await waitForPopupElementsCondition(
+      harness,
+      popup,
+      'removed existing tag',
+      '.archivebox-tag-chip--current',
+      (htmlItems) => !htmlItems.some((html) => htmlText(html).includes('existing')),
+    );
+
+    await typeTag(harness, popup, 'typedtag');
+    await waitForPopupElementsCondition(
+      harness,
+      popup,
+      'typed tag',
+      '.archivebox-tag-chip--current',
+      (htmlItems) => htmlItems.some((html) => htmlText(html).includes('typedtag')),
+    );
+
+    await clickPopupButtonText(harness, popup, 'Crawl');
+    await clickPopupButtonText(harness, popup, /^Depth 2:/);
+    await waitForPopupText(harness, popup, 'Crawl Depth: 2');
+
+    const mhtmlButtonRect = await popupElementRect(harness, popup, await findPopupNodeByText(popup, 'button', 'MHTML'));
+    await clickPopupButtonText(harness, popup, 'Screenshot');
+    await acceptPossiblePermissionPrompts(page, 6);
+    await waitForSavedEntry(
+      harness.context,
+      harness.extensionId,
+      testPageUrl,
+      (entry) => Boolean(entry.screenshot),
+      'screenshot',
+      180_000,
+    );
+
+    await clickPopupRect(harness, popup, mhtmlButtonRect);
+    await sleep(500);
+    await acceptPermissionPromptByKeyboard(page, 6);
+    if (!(await extensionHasPermission(harness.context, harness.extensionId, 'pageCapture'))) {
+      await grantExtensionPermissionViaCdp(harness, 'pageCapture');
+    }
+    if (await extensionHasPermission(harness.context, harness.extensionId, 'pageCapture')) {
+      await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId }).catch(() => undefined);
+      popup.cdp.close();
+      await waitForNoNativePopup(harness);
+      popup = await openNativePopup(harness, page);
+      await clickPopupButtonText(harness, popup, 'MHTML');
+    }
+    await waitForSavedEntry(
+      harness.context,
+      harness.extensionId,
+      testPageUrl,
+      (entry) => Boolean(entry.mhtml),
+      'MHTML',
+      30_000,
+    );
+
+    await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId }).catch(() => undefined);
+    popup.cdp.close();
+    await waitForNoNativePopup(harness);
+    expect(await extensionHasPermission(harness.context, harness.extensionId, 'scripting')).toBe(true);
+    expect(await extensionHasPermission(harness.context, harness.extensionId, 'pageCapture')).toBe(true);
 
     let entries = await savedEntries(harness.context, harness.extensionId);
-    expect(entries.some((entry) => entry.url === testPageUrl)).toBe(true);
-
-    await overlayLocator(page, 'button.archivebox-tag-chip--suggestion', { hasText: 'existing' }).click();
-    await expect(overlayLocator(page, '.archivebox-tag-chip--current', { hasText: 'existing' })).toBeVisible();
-
-    await overlayLocator(page).getByTitle('Remove tag existing').click();
-    await expect(overlayLocator(page, '.archivebox-tag-chip--current', { hasText: 'existing' })).toHaveCount(0);
-
-    const tagInput = overlayLocator(page).getByPlaceholder('+ tag');
-    await tagInput.fill('typedtag');
-    await tagInput.press('Enter');
-    await expect(overlayLocator(page, '.archivebox-tag-chip--current', { hasText: 'typedtag' })).toBeVisible();
-
-    await overlayLocator(page).getByRole('button', { name: 'Crawl' }).click();
-    await overlayLocator(page).getByRole('menuitem', { name: /Depth 2:/ }).click();
-    await expect(overlayLocator(page).getByRole('button', { name: 'Crawl Depth: 2' })).toBeVisible();
-
-    await overlayLocator(page).getByRole('button', { name: 'Screenshot' }).click();
-    await expect(overlayLocator(page, 'button.archivebox-overlay__capture-button--saved', { hasText: 'Screenshot' })).toBeVisible({ timeout: 30_000 });
-    await expectOverlayPinnedToViewport(page);
-
-    await overlayLocator(page).getByRole('button', { name: 'MHTML' }).click();
-    await expect(overlayLocator(page).getByText(/MHTML capture permission denied/)).toBeVisible();
-    expect(await extensionHasPermission(harness.context, harness.extensionId, 'pageCapture')).toBe(false);
-    await grantMhtmlPermissionFromOptions(harness.context, harness.extensionId);
-    await page.bringToFront();
-    await overlayLocator(page).getByRole('button', { name: 'MHTML' }).click();
-    await expect(overlayLocator(page, 'button.archivebox-overlay__capture-button--saved', { hasText: 'MHTML' })).toBeVisible({ timeout: 30_000 });
-
-    entries = await savedEntries(harness.context, harness.extensionId);
     const snapshot = entries.find((entry) => entry.url === testPageUrl);
     expect(snapshot?.tags).toContain('typedtag');
     expect(snapshot?.depth).toBe(2);
@@ -373,40 +813,35 @@ test('popup overlay supports local save, tags, depth, captures, navigation, and 
     const snapshotId = String(snapshot?.id || '');
     expect(snapshotId).toBeTruthy();
 
-    const closeButton = overlayLocator(page).getByTitle('Close');
-    await closeButton.click();
-    await expect(overlay).toHaveCount(0);
+    expect(entries.some((entry) => entry.url === testPageUrl)).toBe(true);
+
+    popup = await openNativePopup(harness, page);
+    await pressPopupKey(harness, popup, 'Escape');
+    await waitForNoNativePopup(harness);
     entries = await savedEntries(harness.context, harness.extensionId);
     expect(entries.some((entry) => entry.url === testPageUrl)).toBe(true);
 
-    await triggerAction(harness, page);
-    await expect(overlay).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(overlay).toHaveCount(0);
-    entries = await savedEntries(harness.context, harness.extensionId);
-    expect(entries.some((entry) => entry.url === testPageUrl)).toBe(true);
-
-    await triggerAction(harness, page);
-    await expect(overlay).toBeVisible();
-
+    popup = await openNativePopup(harness, page);
     const optionsFromGear = harness.context.waitForEvent('page');
-    await overlayLocator(page).getByTitle('Open options').click();
+    await clickPopupTitle(harness, popup, 'Open options');
     const gearPage = await optionsFromGear;
     await gearPage.waitForLoadState('domcontentloaded');
     await expect(gearPage).toHaveURL(/chrome-extension:\/\/[^/]+\/options\.html/);
     await gearPage.close();
-    await page.bringToFront();
+    await waitForNoNativePopup(harness);
 
+    popup = await openNativePopup(harness, page);
     const optionsFromLocalView = harness.context.waitForEvent('page');
-    await overlayLocator(page).getByTitle('Show in Saved URLs').click();
+    await clickPopupTitle(harness, popup, 'Show in Saved URLs');
     const localViewPage = await optionsFromLocalView;
     await localViewPage.waitForLoadState('domcontentloaded');
     expect(localViewPage.url()).toContain(`highlight=${encodeURIComponent(snapshotId)}`);
     await localViewPage.close();
-    await page.bringToFront();
+    await waitForNoNativePopup(harness);
 
-    await overlayLocator(page).getByTitle('Remove from local saved URLs').click();
-    await expect(overlay).toHaveCount(0, { timeout: 5_000 });
+    popup = await openNativePopup(harness, page);
+    await clickPopupTitle(harness, popup, 'Remove from local saved URLs');
+    await waitForNoNativePopup(harness);
     entries = await savedEntries(harness.context, harness.extensionId);
     expect(entries.some((entry) => entry.url === testPageUrl)).toBe(false);
   } finally {
