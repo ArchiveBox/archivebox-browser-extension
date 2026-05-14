@@ -8,3 +8,4 @@ node_modules
 !.env.example
 test-results/
 tmp/chrome_profile/
+tmp/chrome-mv3-playwright/
