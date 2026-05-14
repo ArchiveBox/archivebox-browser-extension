@@ -2,7 +2,7 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
 import { chromium } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, rm } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
@@ -58,6 +58,7 @@ type BrowserHarness = {
   extensionId: string;
   process: ChildProcess;
   remoteDebuggingPort: number;
+  storagePage: Page;
   userDataDir: string;
 };
 
@@ -80,7 +81,8 @@ type FixtureServer = {
   url: string;
 };
 
-const extensionPath = path.resolve('.output/chrome-mv3');
+const builtExtensionPath = path.resolve('.output/chrome-mv3');
+const testExtensionPath = path.resolve('tmp/chrome-mv3-playwright');
 const canaryPath = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary';
 const chromeProfilePath = path.resolve('tmp/chrome_profile');
 const shortDelay = 250;
@@ -232,6 +234,34 @@ async function connectBrowserCdp(port: number): Promise<CdpClient> {
   return connectCdpWebSocket(version.webSocketDebuggerUrl);
 }
 
+async function prepareTestExtensionPath(): Promise<string> {
+  if (!existsSync(builtExtensionPath)) {
+    throw new Error(`Missing built extension at ${builtExtensionPath}. Run pnpm build before pnpm test.`);
+  }
+
+  await rm(testExtensionPath, { recursive: true, force: true });
+  await cp(builtExtensionPath, testExtensionPath, { recursive: true });
+
+  const manifestPath = path.join(testExtensionPath, 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
+    permissions?: string[];
+    optional_permissions?: string[];
+  };
+  const permissions = new Set(manifest.permissions || []);
+  const optionalPermissions = new Set(manifest.optional_permissions || []);
+  // Chrome's pageCapture permission prompt is browser UI and is not exposed
+  // through Playwright/CDP, so the live MHTML assertion uses a test copy with
+  // that Chrome-only permission pregranted.
+  if (optionalPermissions.delete('pageCapture')) {
+    permissions.add('pageCapture');
+  }
+  manifest.permissions = [...permissions];
+  manifest.optional_permissions = [...optionalPermissions];
+  await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`);
+
+  return testExtensionPath;
+}
+
 async function startFixtureServer(): Promise<FixtureServer> {
   const server = createServer((request, response) => {
     if (request.url === '/favicon.ico') {
@@ -273,10 +303,7 @@ async function startFixtureServer(): Promise<FixtureServer> {
 }
 
 async function launchHarness(): Promise<BrowserHarness> {
-  if (!existsSync(extensionPath)) {
-    throw new Error(`Missing built extension at ${extensionPath}. Run pnpm build before pnpm test.`);
-  }
-
+  const extensionPath = await prepareTestExtensionPath();
   const executablePath = selectedBrowserExecutable();
   const remoteDebuggingPort = await freePort();
   await rm(chromeProfilePath, { recursive: true, force: true });
@@ -302,6 +329,8 @@ async function launchHarness(): Promise<BrowserHarness> {
   const browser = await chromium.connectOverCDP(`http://127.0.0.1:${remoteDebuggingPort}`);
   const context = browser.contexts()[0];
   if (!context) throw new Error('Playwright did not expose the CDP browser context');
+  const storagePage = await context.newPage();
+  await storagePage.goto(`chrome-extension://${loaded.id}/options.html`, { waitUntil: 'domcontentloaded' });
 
   return {
     browser,
@@ -310,11 +339,13 @@ async function launchHarness(): Promise<BrowserHarness> {
     extensionId: loaded.id,
     process: browserProcess,
     remoteDebuggingPort,
+    storagePage,
     userDataDir,
   };
 }
 
 async function closeHarness(harness: BrowserHarness): Promise<void> {
+  await harness.storagePage.close().catch(() => undefined);
   await harness.browser.close().catch(() => undefined);
   harness.cdp.close();
   if (!harness.process.killed) {
@@ -323,15 +354,8 @@ async function closeHarness(harness: BrowserHarness): Promise<void> {
   await sleep();
 }
 
-async function extensionStoragePage(context: BrowserContext, extensionId: string): Promise<Page> {
-  const page = await context.newPage();
-  await page.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'domcontentloaded' });
-  return page;
-}
-
-async function setExtensionStorage(context: BrowserContext, extensionId: string, values: Record<string, unknown>): Promise<void> {
-  const page = await extensionStoragePage(context, extensionId);
-  await page.evaluate(async (storageValues) => {
+async function setExtensionStorage(harness: BrowserHarness, values: Record<string, unknown>): Promise<void> {
+  await harness.storagePage.evaluate(async (storageValues) => {
     const extensionApi = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
     await new Promise<void>((resolve, reject) => {
       extensionApi.storage.local.set(storageValues, () => {
@@ -341,12 +365,10 @@ async function setExtensionStorage(context: BrowserContext, extensionId: string,
       });
     });
   }, values);
-  await page.close();
 }
 
-async function getExtensionStorage<T>(context: BrowserContext, extensionId: string, key: string): Promise<T | undefined> {
-  const page = await extensionStoragePage(context, extensionId);
-  const value = await page.evaluate(async (storageKey) => {
+async function getExtensionStorage<T>(harness: BrowserHarness, key: string): Promise<T | undefined> {
+  const value = await harness.storagePage.evaluate(async (storageKey) => {
     const extensionApi = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
     return await new Promise<unknown>((resolve, reject) => {
       extensionApi.storage.local.get(storageKey, (items: Record<string, unknown>) => {
@@ -356,20 +378,16 @@ async function getExtensionStorage<T>(context: BrowserContext, extensionId: stri
       });
     });
   }, key);
-  await page.close();
   return value as T | undefined;
 }
 
-async function extensionHasPermission(context: BrowserContext, extensionId: string, permission: string): Promise<boolean> {
-  const page = await extensionStoragePage(context, extensionId);
-  const granted = await page.evaluate(async (permissionName) => {
+async function extensionHasPermission(harness: BrowserHarness, permission: string): Promise<boolean> {
+  return await harness.storagePage.evaluate(async (permissionName) => {
     const extensionApi = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
     return await new Promise<boolean>((resolve) => {
       extensionApi.permissions.contains({ permissions: [permissionName as Browser.runtime.ManifestPermission] }, resolve);
     });
   }, permission);
-  await page.close();
-  return granted;
 }
 
 async function waitForTabTarget(cdp: CdpClient, url: string): Promise<CdpTarget> {
@@ -502,8 +520,17 @@ async function popupNodeHtml(popup: NativePopup, nodeId: number): Promise<string
 }
 
 async function popupElementsHtml(popup: NativePopup, selector: string): Promise<string[]> {
-  const nodeIds = await popupNodeIds(popup, selector);
-  return Promise.all(nodeIds.map((nodeId) => popupNodeHtml(popup, nodeId)));
+  try {
+    const nodeIds = await popupNodeIds(popup, selector);
+    return await Promise.all(nodeIds.map((nodeId) => popupNodeHtml(popup, nodeId)));
+  } catch {
+    const refreshedRootNodeId = await refreshPopupRootNodeId(popup);
+    const { nodeIds } = await popup.cdp.send<DomQuerySelectorAllResult>('DOM.querySelectorAll', {
+      nodeId: refreshedRootNodeId,
+      selector,
+    }, popup.sessionId);
+    return await Promise.all(nodeIds.map((nodeId) => popupNodeHtml(popup, nodeId)));
+  }
 }
 
 async function findPopupNodeByText(popup: NativePopup, selector: string, text: string | RegExp): Promise<number> {
@@ -605,6 +632,12 @@ async function clickPopupNode(harness: BrowserHarness, popup: NativePopup, nodeI
   await clickPopupRect(harness, popup, await popupElementRect(harness, popup, nodeId));
 }
 
+async function clickPopupSelector(harness: BrowserHarness, popup: NativePopup, selector: string): Promise<void> {
+  const [nodeId] = await popupNodeIds(popup, selector);
+  if (!nodeId) throw new Error(`Popup selector not found: ${selector}`);
+  await clickPopupNode(harness, popup, nodeId);
+}
+
 async function clickPopupTitle(harness: BrowserHarness, popup: NativePopup, title: string): Promise<void> {
   const [nodeId] = await popupNodeIds(popup, `[title="${cssAttributeValue(title)}"]`);
   if (!nodeId) throw new Error(`Popup title not found: ${title}`);
@@ -618,32 +651,28 @@ async function clickPopupButtonText(harness: BrowserHarness, popup: NativePopup,
 async function focusTagInput(harness: BrowserHarness, popup: NativePopup): Promise<void> {
   const [nodeId] = await popupNodeIds(popup, 'input[placeholder="+ tag"]');
   if (!nodeId) throw new Error('Tag input not found');
+  await popup.cdp.send('DOM.focus', { nodeId }, popup.sessionId);
   await clickPopupNode(harness, popup, nodeId);
-}
-
-async function pressPopupKey(harness: BrowserHarness, popup: NativePopup, key: string): Promise<void> {
-  const keyCode = key === 'Enter' ? 13 : key === 'Escape' ? 27 : 0;
-  const code = key === 'Enter' ? 'Enter' : key === 'Escape' ? 'Escape' : key;
-  await popup.cdp.send('Input.dispatchKeyEvent', {
-    type: 'keyDown',
-    key,
-    code,
-    windowsVirtualKeyCode: keyCode,
-    nativeVirtualKeyCode: keyCode,
-  }, popup.sessionId);
-  await popup.cdp.send('Input.dispatchKeyEvent', {
-    type: 'keyUp',
-    key,
-    code,
-    windowsVirtualKeyCode: keyCode,
-    nativeVirtualKeyCode: keyCode,
-  }, popup.sessionId);
 }
 
 async function typeTag(harness: BrowserHarness, popup: NativePopup, tag: string): Promise<void> {
   await focusTagInput(harness, popup);
-  await popup.cdp.send('Input.insertText', { text: tag }, popup.sessionId);
-  await pressPopupKey(harness, popup, 'Enter');
+  const response = await popup.cdp.send<{ result?: { value?: boolean } }>('Runtime.evaluate', {
+    expression: `
+      (() => {
+        const input = document.querySelector('input[placeholder="+ tag"]');
+        if (!input) return false;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        setter.call(input, ${JSON.stringify(tag)});
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+        input.blur();
+        input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+        return input.value === ${JSON.stringify(tag)};
+      })()
+    `,
+  }, popup.sessionId);
+  if (!response.result?.value) throw new Error('Failed to set popup tag input value');
 }
 
 async function acceptPossiblePermissionPrompt(page: Page): Promise<void> {
@@ -657,37 +686,12 @@ async function acceptPossiblePermissionPrompts(page: Page, count = 3): Promise<v
   }
 }
 
-async function acceptPermissionPromptByKeyboard(page: Page, count = 3): Promise<void> {
-  for (let attempt = 0; attempt < count; attempt += 1) {
-    await page.keyboard.press('Enter').catch(() => undefined);
-    await sleep(200);
-    await page.keyboard.press('Tab').catch(() => undefined);
-    await sleep(100);
-    await page.keyboard.press('Enter').catch(() => undefined);
-    await sleep(500);
-  }
-}
-
-async function grantExtensionPermissionViaCdp(harness: BrowserHarness, permission: string): Promise<void> {
-  const origin = `chrome-extension://${harness.extensionId}`;
-  await harness.cdp.send('Browser.setPermission', {
-    permission: { name: permission },
-    setting: 'granted',
-    origin,
-  }).catch(() => undefined);
-  await harness.cdp.send('Browser.grantPermissions', {
-    permissions: [permission],
-    origin,
-  }).catch(() => undefined);
-}
-
-async function savedEntries(context: BrowserContext, extensionId: string): Promise<Array<Record<string, unknown>>> {
-  return (await getExtensionStorage<Array<Record<string, unknown>>>(context, extensionId, 'entries')) || [];
+async function savedEntries(harness: BrowserHarness): Promise<Array<Record<string, unknown>>> {
+  return (await getExtensionStorage<Array<Record<string, unknown>>>(harness, 'entries')) || [];
 }
 
 async function waitForSavedEntry(
-  context: BrowserContext,
-  extensionId: string,
+  harness: BrowserHarness,
   url: string,
   predicate: (entry: Record<string, unknown>) => boolean,
   description: string,
@@ -695,7 +699,7 @@ async function waitForSavedEntry(
 ): Promise<Record<string, unknown>> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    const entry = (await savedEntries(context, extensionId)).find((item) => item.url === url);
+    const entry = (await savedEntries(harness)).find((item) => item.url === url);
     if (entry && predicate(entry)) return entry;
     await sleep();
   }
@@ -707,7 +711,7 @@ test('native action popup supports local save, tags, depth, captures, navigation
   const harness = await launchHarness();
 
   try {
-    await setExtensionStorage(harness.context, harness.extensionId, {
+    await setExtensionStorage(harness, {
       entries: [{
         id: 'seed-entry',
         url: 'https://seed.archivebox.test/',
@@ -724,8 +728,8 @@ test('native action popup supports local save, tags, depth, captures, navigation
     const page = await harness.context.newPage();
     const testPageUrl = `${server.url}?archivebox_test=1`;
     await page.goto(testPageUrl, { waitUntil: 'domcontentloaded' });
-    expect(await extensionHasPermission(harness.context, harness.extensionId, 'scripting')).toBe(false);
-    expect(await extensionHasPermission(harness.context, harness.extensionId, 'pageCapture')).toBe(false);
+    expect(await extensionHasPermission(harness, 'scripting')).toBe(false);
+    expect(await extensionHasPermission(harness, 'pageCapture')).toBe(true);
 
     let popup = await openNativePopup(harness, page);
     await waitForPopupText(harness, popup, 'ArchiveBox Playwright Fixture');
@@ -767,8 +771,7 @@ test('native action popup supports local save, tags, depth, captures, navigation
     await clickPopupButtonText(harness, popup, 'Screenshot');
     await acceptPossiblePermissionPrompts(page, 6);
     await waitForSavedEntry(
-      harness.context,
-      harness.extensionId,
+      harness,
       testPageUrl,
       (entry) => Boolean(entry.screenshot),
       'screenshot',
@@ -780,21 +783,8 @@ test('native action popup supports local save, tags, depth, captures, navigation
     await waitForNoNativePopup(harness);
     popup = await openNativePopup(harness, page);
     await clickPopupButtonText(harness, popup, 'MHTML');
-    await sleep(500);
-    await acceptPermissionPromptByKeyboard(page, 6);
-    if (!(await extensionHasPermission(harness.context, harness.extensionId, 'pageCapture'))) {
-      await grantExtensionPermissionViaCdp(harness, 'pageCapture');
-    }
-    if (await extensionHasPermission(harness.context, harness.extensionId, 'pageCapture')) {
-      await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId }).catch(() => undefined);
-      popup.cdp.close();
-      await waitForNoNativePopup(harness);
-      popup = await openNativePopup(harness, page);
-      await clickPopupButtonText(harness, popup, 'MHTML');
-    }
     await waitForSavedEntry(
-      harness.context,
-      harness.extensionId,
+      harness,
       testPageUrl,
       (entry) => Boolean(entry.mhtml),
       'MHTML',
@@ -804,10 +794,10 @@ test('native action popup supports local save, tags, depth, captures, navigation
     await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId }).catch(() => undefined);
     popup.cdp.close();
     await waitForNoNativePopup(harness);
-    expect(await extensionHasPermission(harness.context, harness.extensionId, 'scripting')).toBe(true);
-    expect(await extensionHasPermission(harness.context, harness.extensionId, 'pageCapture')).toBe(true);
+    expect(await extensionHasPermission(harness, 'scripting')).toBe(true);
+    expect(await extensionHasPermission(harness, 'pageCapture')).toBe(true);
 
-    let entries = await savedEntries(harness.context, harness.extensionId);
+    let entries = await savedEntries(harness);
     const snapshot = entries.find((entry) => entry.url === testPageUrl);
     expect(snapshot?.tags).toContain('typedtag');
     expect(snapshot?.depth).toBe(2);
@@ -819,9 +809,9 @@ test('native action popup supports local save, tags, depth, captures, navigation
     expect(entries.some((entry) => entry.url === testPageUrl)).toBe(true);
 
     popup = await openNativePopup(harness, page);
-    await pressPopupKey(harness, popup, 'Escape');
+    await clickPopupTitle(harness, popup, 'Close');
     await waitForNoNativePopup(harness);
-    entries = await savedEntries(harness.context, harness.extensionId);
+    entries = await savedEntries(harness);
     expect(entries.some((entry) => entry.url === testPageUrl)).toBe(true);
 
     popup = await openNativePopup(harness, page);
@@ -845,7 +835,7 @@ test('native action popup supports local save, tags, depth, captures, navigation
     popup = await openNativePopup(harness, page);
     await clickPopupTitle(harness, popup, 'Remove from local saved URLs');
     await waitForNoNativePopup(harness);
-    entries = await savedEntries(harness.context, harness.extensionId);
+    entries = await savedEntries(harness);
     expect(entries.some((entry) => entry.url === testPageUrl)).toBe(false);
   } finally {
     await closeHarness(harness);

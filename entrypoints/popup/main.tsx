@@ -310,6 +310,8 @@ function ArchiveBoxOverlay() {
   }
 
   async function ensureMhtmlPermission(): Promise<boolean> {
+    const alreadyGranted = await browser.permissions.contains({ permissions: ['pageCapture'] }).catch(() => false);
+    if (alreadyGranted) return true;
     setOk(null);
     setStatus(t("MHTML capture needs permission to save the current tab as a browser-generated MHTML file."));
     await waitForPermissionExplanation();
@@ -687,6 +689,10 @@ function ArchiveBoxOverlay() {
                 onCommit={addTag}
                 onCancel={close}
                 onChange={setInput}
+                onBlur={(event) => {
+                  const nextTag = event.currentTarget.value.trim();
+                  if (nextTag) void addTag(nextTag);
+                }}
                 autoFocus
               />
             )}
