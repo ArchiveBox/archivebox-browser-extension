@@ -764,7 +764,6 @@ test('native action popup supports local save, tags, depth, captures, navigation
     await clickPopupButtonText(harness, popup, /^Depth 2:/);
     await waitForPopupText(harness, popup, 'Crawl Depth: 2');
 
-    const mhtmlButtonRect = await popupElementRect(harness, popup, await findPopupNodeByText(popup, 'button', 'MHTML'));
     await clickPopupButtonText(harness, popup, 'Screenshot');
     await acceptPossiblePermissionPrompts(page, 6);
     await waitForSavedEntry(
@@ -776,7 +775,11 @@ test('native action popup supports local save, tags, depth, captures, navigation
       180_000,
     );
 
-    await clickPopupRect(harness, popup, mhtmlButtonRect);
+    await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId }).catch(() => undefined);
+    popup.cdp.close();
+    await waitForNoNativePopup(harness);
+    popup = await openNativePopup(harness, page);
+    await clickPopupButtonText(harness, popup, 'MHTML');
     await sleep(500);
     await acceptPermissionPromptByKeyboard(page, 6);
     if (!(await extensionHasPermission(harness.context, harness.extensionId, 'pageCapture'))) {
