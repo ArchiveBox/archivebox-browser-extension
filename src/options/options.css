@@ -1060,6 +1060,24 @@ code {
   background: var(--ab-paper-2);
 }
 
+.persona-sync-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.persona-sync-link--synced {
+  border-color: rgba(90, 107, 60, 0.45);
+  background: rgba(90, 107, 60, 0.12);
+  color: var(--ab-moss);
+}
+
+.persona-sync-link--synced:hover,
+.persona-sync-link--synced:focus-visible {
+  border-color: var(--ab-moss);
+  background: rgba(90, 107, 60, 0.18);
+}
+
 .tag-line,
 .domain-chips {
   display: flex;

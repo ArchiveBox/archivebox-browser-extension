@@ -6,6 +6,7 @@ import {
   CircleDashed,
   Database,
   Download,
+  ExternalLink,
   FileInput,
   Pencil,
   Search,
@@ -17,7 +18,7 @@ import {
 } from 'lucide-react';
 import { strToU8, zipSync } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { addToArchiveBox } from '@/src/lib/archivebox';
+import { addToArchiveBox, requestServerHostPermission } from '@/src/lib/archivebox';
 import { defaultSingleFileExtensionId, defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { loadBookmarkSnapshots, loadHistorySnapshots } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
@@ -40,6 +41,7 @@ import { renderMhtmlToHtml } from '@/src/lib/mhtml';
 import { createSnapshot, filterSnapshots, uniqueTags } from '@/src/lib/snapshots';
 import { matchingTagSuggestions } from '@/src/lib/tags';
 import { setUiLanguage, t } from '@/src/lib/i18n';
+import { syncPersonaToArchiveBox } from '@/src/lib/personaSync';
 import {
   defaultConfig,
   defaultPersona,
@@ -58,6 +60,7 @@ type Tab = 'urls' | 'config' | 'profiles' | 'import';
 type Status = { kind: 'idle' | 'success' | 'error' | 'warning'; text: string };
 type ImportItem = Snapshot & { selected: boolean; isNew: boolean };
 type PersonaSettingKey = keyof Persona['settings'];
+type EditablePersonaSettingKey = Exclude<PersonaSettingKey, 'geolocation'>;
 type SavedUrlSortKey = 'date' | 'url' | 'tags' | 'sync';
 type SortDirection = 'asc' | 'desc';
 type OptionTab = { id: Tab; label: string; Icon: LucideIcon };
@@ -181,6 +184,7 @@ async function currentPersonaSettings() {
     language: navigator.language,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     viewport: `${window.innerWidth}x${window.innerHeight}`,
+    viewportScale: String(window.devicePixelRatio || 1),
     operatingSystem: detectOS(),
     geography: await detectGeography(),
   };
@@ -1142,7 +1146,12 @@ function OptionsMain() {
       return;
     }
     setServerStatus({ kind: 'idle', text: t("ArchiveBox needs permission to connect to this server URL so it can test the connection.") });
-    await waitForPermissionExplanation();
+    try {
+      await requestServerHostPermission(archiveboxServerBaseUrl);
+    } catch (error) {
+      setServerStatus({ kind: 'error', text: (error as Error).message });
+      return;
+    }
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'test_server_url',
       serverUrl: archiveboxServerBaseUrl,
@@ -1158,7 +1167,12 @@ function OptionsMain() {
       return;
     }
     setApiStatus({ kind: 'idle', text: t("ArchiveBox needs permission to connect to this server URL so it can test the API key.") });
-    await waitForPermissionExplanation();
+    try {
+      await requestServerHostPermission(archiveboxServerBaseUrl);
+    } catch (error) {
+      setApiStatus({ kind: 'error', text: (error as Error).message });
+      return;
+    }
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'test_api_key',
       serverUrl: archiveboxServerBaseUrl,
@@ -1201,7 +1215,11 @@ function OptionsMain() {
 
     try {
       setTestStatus({ kind: 'idle', text: t("ArchiveBox needs permission to connect to your configured server so it can submit the test URL.") });
-      await waitForPermissionExplanation();
+      if (!archiveboxServerUrlIsValid) {
+        setTestStatus({ kind: 'warning', text: t("Enter a valid http:// or https:// server URL") });
+        return;
+      }
+      await requestServerHostPermission(archiveboxServerBaseUrl);
       await addToArchiveBox([url], ['test']);
       setTestStatus({ kind: 'success', text: t("URL was submitted to ArchiveBox") });
       setTestUrl('');
@@ -1397,7 +1415,31 @@ function OptionsMain() {
     setPersonaStatus({ kind: 'success', text: t("Updated browser settings for $1", persona.name) });
   }
 
-  async function updatePersonaSetting(persona: Persona, key: PersonaSettingKey, value: string) {
+  async function syncPersona(persona: Persona) {
+    setPersonaStatus({ kind: 'idle', text: t("Syncing $1 to ArchiveBox...", persona.name) });
+    try {
+      const response = await syncPersonaToArchiveBox(persona);
+      const serverPersonaId = response.persona?.id;
+      const serverPersonaUrl = serverPersonaId
+        ? `${archiveboxServerBaseUrl}/admin/personas/persona/${serverPersonaId}/change/`
+        : persona.serverPersonaUrl;
+      await savePersona(persona, {
+        lastUsed: new Date().toISOString(),
+        serverPersonaId,
+        serverPersonaUrl,
+      });
+      setPersonaStatus({
+        kind: 'success',
+        text: response.created
+          ? t("Created ArchiveBox persona $1", response.persona?.name || persona.name)
+          : t("Updated ArchiveBox persona $1", response.persona?.name || persona.name),
+      });
+    } catch (error) {
+      setPersonaStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  async function updatePersonaSetting(persona: Persona, key: EditablePersonaSettingKey, value: string) {
     await savePersona(persona, {
       settings: {
         ...persona.settings,
@@ -1507,7 +1549,16 @@ function OptionsMain() {
       return;
     }
     setSavedUrlStatus({ kind: 'idle', text: t("ArchiveBox needs permission to connect to your configured server so it can sync selected URLs.") });
-    await waitForPermissionExplanation();
+    if (!archiveboxServerUrlIsValid) {
+      setSavedUrlStatus({ kind: 'warning', text: t("Enter a valid http:// or https:// server URL") });
+      return;
+    }
+    try {
+      await requestServerHostPermission(archiveboxServerBaseUrl);
+    } catch (error) {
+      setSavedUrlStatus({ kind: 'error', text: (error as Error).message });
+      return;
+    }
     setSavedUrlStatus({ kind: 'idle', text: t("Syncing $1 snapshots...", selected.length) });
     for (const snapshot of selected) {
       setSyncStatuses((current) => ({
@@ -1956,17 +2007,18 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
                 <input value={persona.name} onChange={(event) => savePersona(persona, { name: event.currentTarget.value })} />
                 <p>{t("$1 domains · Last used $2", Object.keys(persona.cookies || {}).length, persona.lastUsed ? new Date(persona.lastUsed).toLocaleString() : t("never"))}</p>
                 <div className="settings-grid">
-                  {[
+                  {([
                     ['userAgent', t("User Agent")],
                     ['geography', t("Geography")],
                     ['timezone', t("Timezone")],
                     ['language', t("Language")],
                     ['operatingSystem', t("Operating System")],
                     ['viewport', t("Viewport Size")],
-                  ].map(([key, label]) => (
+                    ['viewportScale', t("CSS Pixel Scale")],
+                  ] satisfies Array<[EditablePersonaSettingKey, string]>).map(([key, label]) => (
                     <label key={key}>
                       <span>{label}</span>
-                      <input value={persona.settings[key as PersonaSettingKey] || ''} onChange={(event) => updatePersonaSetting(persona, key as PersonaSettingKey, event.currentTarget.value)} />
+                      <input value={persona.settings[key] || ''} onChange={(event) => updatePersonaSetting(persona, key, event.currentTarget.value)} />
                     </label>
                   ))}
                 </div>
@@ -1976,6 +2028,15 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
                   ))}
                 </div>
                 <div className="row-actions">
+                  {persona.serverPersonaUrl ? (
+                    <a className="persona-sync-link persona-sync-link--synced" href={persona.serverPersonaUrl} target="_blank" rel="noopener noreferrer" title={t("Open ArchiveBox persona")}>
+                      <CheckCircle2 size={15} aria-hidden="true" />
+                      <span>{t("Synced")}</span>
+                      <ExternalLink size={13} aria-hidden="true" />
+                    </a>
+                  ) : (
+                    <button onClick={() => syncPersona(persona)}>{t("Sync to Server")}</button>
+                  )}
                   <button onClick={() => detectPersonaSettings(persona)}>{t("Detect Settings")}</button>
                   <button onClick={() => copyPersonaCookies(persona)}>{t("Export cookies.txt")}</button>
                   <button onClick={() => deletePersona(persona.id)}>{t("Delete")}</button>

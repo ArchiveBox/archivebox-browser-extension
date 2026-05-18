@@ -20,20 +20,30 @@ function apiHeaders(apiKey: string): Record<string, string> {
   };
 }
 
-function serverOriginPattern(serverUrl: string): string {
+function serverHostPermissionPattern(serverUrl: string): string {
   const url = new URL(serverUrl);
-  return `${url.origin}/*`;
+  // Host permission patterns are origin-level grants. Keep the configured
+  // hostname/IP, but omit the port and path so local and non-local ArchiveBox
+  // servers work across browser match-pattern implementations.
+  return `${url.protocol}//${url.hostname}/*`;
 }
 
-async function ensureServerOriginPermission(serverUrl: string): Promise<void> {
-  const origins = [serverOriginPattern(serverUrl)];
-  const hasPermission = await browser.permissions.contains({ origins }).catch(() => false);
-  if (hasPermission) return;
-
+export async function requestServerHostPermission(serverUrl: string): Promise<void> {
+  requireHttpServerUrl(serverUrl);
+  const origins = [serverHostPermissionPattern(serverUrl)];
   const granted = await browser.permissions.request({ origins }).catch(() => false);
   if (!granted) {
     throw new Error(t("Permission denied for ArchiveBox server URL."));
   }
+}
+
+async function ensureServerHostPermission(serverUrl: string): Promise<void> {
+  requireHttpServerUrl(serverUrl);
+  const origins = [serverHostPermissionPattern(serverUrl)];
+  const hasPermission = await browser.permissions.contains({ origins }).catch(() => false);
+  if (hasPermission) return;
+
+  await requestServerHostPermission(serverUrl);
 }
 
 export function archiveBoxSnapshotUrl(serverUrl: string, url: string): string {
@@ -54,8 +64,7 @@ export async function addToArchiveBox(
   if (!archiveboxServerUrl) {
     throw new Error(t("Server not configured"));
   }
-  requireHttpServerUrl(archiveboxServerUrl);
-  await ensureServerOriginPermission(archiveboxServerUrl);
+  await ensureServerHostPermission(archiveboxServerUrl);
 
   if (archivebox_api_key) {
     const response = await fetch(`${archiveboxServerUrl}/api/v1/cli/add`, {
@@ -94,8 +103,7 @@ export async function removeFromArchiveBox(url: string): Promise<void> {
   if (!archiveboxServerUrl) {
     throw new Error(t("Server not configured"));
   }
-  requireHttpServerUrl(archiveboxServerUrl);
-  await ensureServerOriginPermission(archiveboxServerUrl);
+  await ensureServerHostPermission(archiveboxServerUrl);
 
   const response = await fetch(`${archiveboxServerUrl}/api/v1/cli/remove`, {
     headers: apiHeaders(archivebox_api_key),
@@ -120,8 +128,7 @@ export async function removeFromArchiveBox(url: string): Promise<void> {
 }
 
 export async function testServerUrl(serverUrl: string): Promise<void> {
-  requireHttpServerUrl(serverUrl);
-  await ensureServerOriginPermission(serverUrl);
+  await ensureServerHostPermission(serverUrl);
 
   let response = await fetch(`${serverUrl}/api/`, {
     method: 'GET',
@@ -142,8 +149,7 @@ export async function testServerUrl(serverUrl: string): Promise<void> {
 }
 
 export async function testApiKey(serverUrl: string, apiKey: string): Promise<string | number> {
-  requireHttpServerUrl(serverUrl);
-  await ensureServerOriginPermission(serverUrl);
+  await ensureServerHostPermission(serverUrl);
   if (!apiKey) {
     throw new Error(t("API key required"));
   }

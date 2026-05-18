@@ -53,8 +53,18 @@ export type PersonaSettings = {
   language?: string;
   timezone?: string;
   viewport?: string;
+  viewportScale?: string;
   operatingSystem?: string;
   geography?: string;
+  geolocation?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    altitude?: number | null;
+    altitudeAccuracy?: number | null;
+    heading?: number | null;
+    speed?: number | null;
+  } | null;
 };
 
 export type StoredCookie = {
@@ -73,6 +83,8 @@ export type Persona = {
   name: string;
   created: string;
   lastUsed: string | null;
+  serverPersonaId?: string;
+  serverPersonaUrl?: string;
   cookies: Record<string, StoredCookie[]>;
   settings: PersonaSettings;
 };
