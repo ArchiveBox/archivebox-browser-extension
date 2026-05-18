@@ -1,0 +1,43 @@
+src/lib/types.ts
+  s_463e8607ca6021::t_532cd300e66037 56,59-67
+  s_463e8607ca6021::t_45b24af947c514 86-87
+wxt.config.ts
+  s_463e8607ca6021::t_a6a30528b938a8 23
+src/lib/archivebox.ts
+  s_463e8607ca6021::t_9528dde8e04c78 23,28,31-33,40-48,67,106,131,152
+  s_463e8607ca6021::t_3353179c8f3dc4 25-27
+src/lib/cookies.ts
+  s_463e8607ca6021::t_3c213a4f87310d 27-64
+package.json
+  s_463e8607ca6021::t_3ea533343d6e01 5,22-26
+README.md
+  s_463e8607ca6021::t_4d7ad1d4c40899 137
+src/options/options.css
+  s_463e8607ca6021::t_d011b264c01e47 1063-1080
+src/options/OptionsApp.tsx
+  s_463e8607ca6021::t_f705c530d72deb 44,187,1418-1421,1431-1441,2017
+  s_463e8607ca6021::t_b16cd7d31aa7d4 21,1149-1154,1170-1175,1218-1222,1552-1561
+  s_463e8607ca6021::t_77a2da9eea67b6 2010
+  s_463e8607ca6021::t_87954dc899532b 9,1422-1430,2031-2039
+  s_463e8607ca6021::t_f311028452d9b9 63,1442,2018,2021
+src/lib/personaSync.ts
+  s_463e8607ca6021::t_fb5815335c40b3 1-205,211-266,268-323
+  s_463e8607ca6021::t_3d74feb4b1c300 206-210
+  s_463e8607ca6021::t_b7fbe3910c1fe1 267
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "4be477e6491def0319d47cce27b2eb1b231e104e",
+  "prompts": {},
+  "sessions": {
+    "s_463e8607ca6021": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e39eb-05c2-7253-a218-467aed1abfef",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
