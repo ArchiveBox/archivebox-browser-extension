@@ -72,7 +72,14 @@ export async function addToArchiveBox(
       method: 'POST',
       credentials: 'include',
       mode: 'cors',
-      body: JSON.stringify({ urls, formattedTags, depth, update, update_all }),
+      body: JSON.stringify({
+        urls,
+        tag: formattedTags,
+        formattedTags,
+        depth,
+        update,
+        update_all,
+      }),
     });
 
     if (response.ok) return;

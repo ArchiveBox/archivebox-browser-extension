@@ -1566,7 +1566,7 @@ function OptionsMain() {
         [snapshot.id]: { kind: 'warning', text: t("Syncing...") },
       }));
       try {
-        await addToArchiveBox([snapshot.url], snapshot.tags);
+        await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0);
         setSyncStatuses((current) => ({
           ...current,
           [snapshot.id]: { kind: 'success', text: t("Synced") },
