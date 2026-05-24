@@ -1,4 +1,4 @@
-import { addToArchiveBox, archiveBoxSnapshotUrl, removeFromArchiveBox, syncArchiveBoxSnapshotMetadata, testApiKey, testServerUrl } from '@/src/lib/archivebox';
+import { addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, syncArchiveBoxSnapshotMetadata, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
@@ -719,8 +719,9 @@ async function ensureSnapshotForTab(tab: Browser.tabs.Tab): Promise<{
 
 async function shouldAutoArchive(url: string): Promise<boolean> {
   try {
-    const { enable_auto_archive, match_urls, exclude_urls } = await getConfig();
+    const { archivebox_server_url, enable_auto_archive, match_urls, exclude_urls } = await getConfig();
     if (!enable_auto_archive || !match_urls.trim()) return false;
+    if (archiveBoxServerUrlMatches(archivebox_server_url, url)) return false;
 
     if (!new RegExp(match_urls).test(url)) return false;
     if (exclude_urls.trim() && new RegExp(exclude_urls).test(url)) return false;
@@ -811,6 +812,7 @@ async function configureAutoArchiving(): Promise<void> {
 
 async function saveTab(tab?: Browser.tabs.Tab): Promise<void> {
   if (!tab?.id || !tab.url) return;
+  if (await isConfiguredArchiveBoxUrl(tab.url)) return;
   try {
     const { snapshot, created } = await ensureSnapshotForTab(tab);
     await captureConfiguredSnapshotArtifacts(tab, snapshot, created);

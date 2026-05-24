@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { hasServerHostPermission, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
+import { archiveBoxServerUrlMatches, hasServerHostPermission, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
@@ -42,9 +42,10 @@ function crawlDepthOptions(): Array<{
 }
 
 async function getActivePage(): Promise<ActivePage> {
+  const { archivebox_server_url } = await getConfig();
   const extensionOrigin = browser.runtime.getURL('');
   const isOwnExtensionPage = (url = '') => url.startsWith(extensionOrigin);
-  const isArchiveablePage = (url = '') => /^(https?|file):/i.test(url);
+  const isArchiveablePage = (url = '') => /^(https?|file):/i.test(url) && !archiveBoxServerUrlMatches(archivebox_server_url, url);
   const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
   const tab = activeTab?.url && !isOwnExtensionPage(activeTab.url) && isArchiveablePage(activeTab.url)
     ? activeTab

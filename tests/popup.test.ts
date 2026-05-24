@@ -55,6 +55,7 @@ type BrowserHarness = {
   browser: Browser;
   context: BrowserContext;
   cdp: CdpClient;
+  extensionPath: string;
   extensionId: string;
   process: ChildProcess;
   remoteDebuggingPort: number;
@@ -82,9 +83,9 @@ type FixtureServer = {
 };
 
 const builtExtensionPath = path.resolve('.output/chrome-mv3');
-const testExtensionPath = path.resolve('tmp/chrome-mv3-playwright');
+const testExtensionBasePath = path.resolve('tmp/chrome-mv3-playwright');
 const canaryPath = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary';
-const chromeProfilePath = path.resolve('tmp/chrome_profile');
+const chromeProfileBasePath = path.resolve('tmp/chrome_profile');
 const shortDelay = 50;
 
 function selectedBrowserExecutable(): string {
@@ -235,15 +236,16 @@ async function connectBrowserCdp(port: number): Promise<CdpClient> {
   return connectCdpWebSocket(version.webSocketDebuggerUrl);
 }
 
-async function prepareTestExtensionPath(): Promise<string> {
+async function prepareTestExtensionPath(extensionPath: string): Promise<string> {
   if (!existsSync(builtExtensionPath)) {
     throw new Error(`Missing built extension at ${builtExtensionPath}. Run pnpm build before pnpm test.`);
   }
 
-  await rm(testExtensionPath, { recursive: true, force: true });
-  await cp(builtExtensionPath, testExtensionPath, { recursive: true });
+  await mkdir(path.dirname(extensionPath), { recursive: true });
+  await rm(extensionPath, { recursive: true, force: true });
+  await cp(builtExtensionPath, extensionPath, { recursive: true });
 
-  const manifestPath = path.join(testExtensionPath, 'manifest.json');
+  const manifestPath = path.join(extensionPath, 'manifest.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
     host_permissions?: string[];
     permissions?: string[];
@@ -277,7 +279,7 @@ async function prepareTestExtensionPath(): Promise<string> {
   manifest.optional_permissions = [...optionalPermissions];
   await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`);
 
-  return testExtensionPath;
+  return extensionPath;
 }
 
 async function startFixtureServer(): Promise<FixtureServer> {
@@ -321,12 +323,13 @@ async function startFixtureServer(): Promise<FixtureServer> {
 }
 
 async function launchHarness(): Promise<BrowserHarness> {
-  const extensionPath = await prepareTestExtensionPath();
+  const runId = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const extensionPath = await prepareTestExtensionPath(path.join(testExtensionBasePath, runId));
   const executablePath = selectedBrowserExecutable();
   const remoteDebuggingPort = await freePort();
-  await rm(chromeProfilePath, { recursive: true, force: true });
-  await mkdir(chromeProfilePath, { recursive: true });
-  const userDataDir = chromeProfilePath;
+  const userDataDir = path.join(chromeProfileBasePath, runId);
+  await rm(userDataDir, { recursive: true, force: true });
+  await mkdir(userDataDir, { recursive: true });
   const headlessLinux = process.platform === 'linux' && !process.env.DISPLAY;
   const args = [
     `--user-data-dir=${userDataDir}`,
@@ -354,12 +357,24 @@ async function launchHarness(): Promise<BrowserHarness> {
     browser,
     context,
     cdp,
+    extensionPath,
     extensionId: loaded.id,
     process: browserProcess,
     remoteDebuggingPort,
     storagePage,
     userDataDir,
   };
+}
+
+async function waitForProcessExit(process: ChildProcess, timeoutMs = 2_000): Promise<void> {
+  if (process.exitCode !== null || process.signalCode !== null) return;
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(resolve, timeoutMs);
+    process.once('exit', () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+  });
 }
 
 async function closeHarness(harness: BrowserHarness): Promise<void> {
@@ -369,7 +384,9 @@ async function closeHarness(harness: BrowserHarness): Promise<void> {
   if (!harness.process.killed) {
     harness.process.kill('SIGTERM');
   }
-  await sleep();
+  await waitForProcessExit(harness.process);
+  await rm(harness.userDataDir, { recursive: true, force: true }).catch(() => undefined);
+  await rm(harness.extensionPath, { recursive: true, force: true }).catch(() => undefined);
 }
 
 async function setExtensionStorage(harness: BrowserHarness, values: Record<string, unknown>): Promise<void> {
@@ -397,6 +414,20 @@ async function getExtensionStorage<T>(harness: BrowserHarness, key: string): Pro
     });
   }, key);
   return value as T | undefined;
+}
+
+async function sendExtensionMessage<T>(harness: BrowserHarness, message: Record<string, unknown>): Promise<T> {
+  const response = await harness.storagePage.evaluate(async (runtimeMessage) => {
+    const extensionApi = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
+    return await new Promise<unknown>((resolve, reject) => {
+      extensionApi.runtime.sendMessage(runtimeMessage, (result) => {
+        const error = extensionApi.runtime.lastError;
+        if (error) reject(new Error(error.message));
+        else resolve(result);
+      });
+    });
+  }, message);
+  return response as T;
 }
 
 async function extensionHasPermission(harness: BrowserHarness, permission: string): Promise<boolean> {
@@ -760,6 +791,39 @@ async function waitForNoSavedEntry(harness: BrowserHarness, url: string, timeout
   }
   throw new Error(`Timed out waiting for saved entry removal: ${url}`);
 }
+
+test('ArchiveBox server URLs are ignored before archive requests', async () => {
+  const harness = await launchHarness();
+
+  try {
+    await setExtensionStorage(harness, {
+      entries: [],
+      archivebox_server_url: 'https://api.example.com',
+      archivebox_api_key: 'test-key',
+    });
+
+    for (const url of ['https://example.com/docs/', 'https://admin.example.com/admin/']) {
+      const response = await sendExtensionMessage<Record<string, unknown>>(harness, {
+        type: 'archivebox_add',
+        body: {
+          urls: [url],
+          tags: [],
+          depth: 0,
+          snapshotIds: ['019e77ba-63c2-7000-9000-000000000001'],
+          titles: ['ArchiveBox'],
+        },
+      });
+      expect(response).toMatchObject({
+        ok: false,
+        errorMessage: 'ArchiveBox server URLs are ignored.',
+      });
+    }
+
+    expect(await savedEntries(harness)).toEqual([]);
+  } finally {
+    await closeHarness(harness);
+  }
+});
 
 test('native action popup supports local save, tags, depth, captures, navigation, and dismissal', async () => {
   test.setTimeout(45_000);

@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { strToU8, zipSync } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { addToArchiveBox, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
+import { addToArchiveBox, archiveBoxServerUrlMatches, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
 import { defaultSingleFileExtensionId, defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { loadBookmarkSnapshots, loadHistorySnapshots } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
@@ -1205,6 +1205,10 @@ function OptionsMain() {
       setTestStatus({ kind: 'error', text: t("Please enter a URL to test") });
       return;
     }
+    if (archiveBoxServerUrlMatches(config.archivebox_server_url, url)) {
+      setTestStatus({ kind: 'warning', text: t("ArchiveBox server URLs are ignored.") });
+      return;
+    }
 
     let shouldArchive = false;
     try {
@@ -1564,6 +1568,21 @@ function OptionsMain() {
       setSavedUrlStatus({ kind: 'warning', text: t("No snapshots selected") });
       return;
     }
+    const archiveableSelected = selected.filter((snapshot) => !archiveBoxServerUrlMatches(config.archivebox_server_url, snapshot.url));
+    const ignoredSelected = selected.filter((snapshot) => archiveBoxServerUrlMatches(config.archivebox_server_url, snapshot.url));
+    if (ignoredSelected.length) {
+      setSyncStatuses((current) => ({
+        ...current,
+        ...Object.fromEntries(ignoredSelected.map((snapshot) => [
+          snapshot.id,
+          { kind: 'warning' as const, text: t("ArchiveBox server URLs are ignored.") },
+        ])),
+      }));
+    }
+    if (!archiveableSelected.length) {
+      setSavedUrlStatus({ kind: 'warning', text: t("ArchiveBox server URLs are ignored.") });
+      return;
+    }
     setSavedUrlStatus({ kind: 'idle', text: t("ArchiveBox needs permission to connect to your configured server so it can sync selected URLs.") });
     if (!archiveboxServerUrlIsValid) {
       setSavedUrlStatus({ kind: 'warning', text: t("Enter a valid http:// or https:// server URL") });
@@ -1575,8 +1594,8 @@ function OptionsMain() {
       setSavedUrlStatus({ kind: 'error', text: (error as Error).message });
       return;
     }
-    setSavedUrlStatus({ kind: 'idle', text: t("Syncing $1 snapshots...", selected.length) });
-    for (const snapshot of selected) {
+    setSavedUrlStatus({ kind: 'idle', text: t("Syncing $1 snapshots...", archiveableSelected.length) });
+    for (const snapshot of archiveableSelected) {
       setSyncStatuses((current) => ({
         ...current,
         [snapshot.id]: { kind: 'warning', text: t("Syncing...") },
@@ -1610,7 +1629,7 @@ function OptionsMain() {
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
-    setSavedUrlStatus({ kind: 'success', text: t("Finished syncing $1 snapshots", selected.length) });
+    setSavedUrlStatus({ kind: 'success', text: t("Finished syncing $1 snapshots", archiveableSelected.length) });
   }
 
   function openTagEditor() {

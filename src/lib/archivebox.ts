@@ -25,6 +25,7 @@ export type ArchiveResultUploadResponse = {
 export const archiveResultUploadChunkSize = 32 * 1024 * 1024;
 const archiveResultCreateRetryDelayMs = 500;
 const archiveResultCreateMaxAttempts = 24;
+const commonSecondLevelTlds = new Set(['ac', 'co', 'com', 'edu', 'gov', 'net', 'org']);
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
@@ -61,6 +62,56 @@ function apiAuthHeaders(apiKey: string): Record<string, string> {
 function serverBaseUrl(serverUrl: string): string {
   requireHttpServerUrl(serverUrl);
   return new URL(serverUrl).origin;
+}
+
+function normalizeHostname(hostname: string): string {
+  return hostname.replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '').toLowerCase();
+}
+
+function isIpAddressOrLocalhost(hostname: string): boolean {
+  return hostname === 'localhost'
+    || hostname.includes(':')
+    || /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname);
+}
+
+function registrableDomain(hostname: string): string {
+  const labels = hostname.split('.').filter(Boolean);
+  if (labels.length <= 2 || isIpAddressOrLocalhost(hostname)) return hostname;
+
+  const tld = labels[labels.length - 1] as string;
+  const secondLevel = labels[labels.length - 2] as string;
+  if (tld.length === 2 && commonSecondLevelTlds.has(secondLevel) && labels.length >= 3) {
+    return labels.slice(-3).join('.');
+  }
+  return labels.slice(-2).join('.');
+}
+
+function hostnameMatchesDomain(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
+export function archiveBoxServerUrlMatches(serverUrl: string, targetUrl: string): boolean {
+  if (!serverUrl || !targetUrl) return false;
+
+  try {
+    const server = new URL(serverUrl);
+    const target = new URL(targetUrl);
+    const serverHostname = normalizeHostname(server.hostname);
+    const targetHostname = normalizeHostname(target.hostname);
+    if (!serverHostname || !targetHostname) return false;
+
+    const domains = new Set([
+      serverHostname,
+      registrableDomain(serverHostname),
+    ]);
+    return [...domains].some((domain) => hostnameMatchesDomain(targetHostname, domain));
+  } catch {
+    return false;
+  }
+}
+
+export async function isConfiguredArchiveBoxUrl(targetUrl: string): Promise<boolean> {
+  return archiveBoxServerUrlMatches(await getArchiveBoxServerUrl(), targetUrl);
 }
 
 async function getConfiguredServerBaseUrl(): Promise<string> {
@@ -113,8 +164,27 @@ export async function addToArchiveBox(
   snapshotIds: string[] = [],
   titles: string[] = [],
 ): Promise<ArchiveBoxAddResult | null> {
+  const configuredServerUrl = await getArchiveBoxServerUrl();
+  if (!configuredServerUrl) {
+    throw new Error(t("Server not configured"));
+  }
+  const archiveboxServerUrl = serverBaseUrl(configuredServerUrl);
+  const archiveableItems = urls
+    .map((url, index) => ({ url, index }))
+    .filter(({ url }) => !archiveBoxServerUrlMatches(configuredServerUrl, url));
+
+  if (!archiveableItems.length) {
+    throw new Error(t("ArchiveBox server URLs are ignored."));
+  }
+
+  const archiveableUrls = archiveableItems.map(({ url }) => url);
+  const archiveableSnapshotIds = snapshotIds.length
+    ? archiveableItems.map(({ index }) => snapshotIds[index] || '')
+    : [];
+  const archiveableTitles = titles.length
+    ? archiveableItems.map(({ index }) => titles[index] || '')
+    : [];
   const formattedTags = tags.join(',');
-  const archiveboxServerUrl = await getConfiguredServerBaseUrl();
   const { archivebox_api_key } = await getConfig();
 
   await ensureServerHostPermission(archiveboxServerUrl);
@@ -126,12 +196,12 @@ export async function addToArchiveBox(
       credentials: 'include',
       mode: 'cors',
       body: JSON.stringify({
-        urls,
+        urls: archiveableUrls,
         tag: formattedTags,
         formattedTags,
         depth,
-        snapshot_ids: snapshotIds,
-        titles,
+        snapshot_ids: archiveableSnapshotIds,
+        titles: archiveableTitles,
         update,
         update_all,
       }),
@@ -144,7 +214,7 @@ export async function addToArchiveBox(
   }
 
   const body = new FormData();
-  body.append('url', urls.join('\n'));
+  body.append('url', archiveableUrls.join('\n'));
   body.append('tag', formattedTags);
   body.append('parser', 'auto');
   body.append('depth', String(depth));
