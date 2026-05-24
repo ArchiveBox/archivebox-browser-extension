@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
+import { hasServerHostPermission, requestServerHostPermission, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
+import { uploadSnapshotCaptureArtifactsToArchiveBox, uploadSnapshotMhtmlToArchiveBox, uploadSnapshotScreenshotToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { assertLocalCaptureStorageAvailable } from '@/src/lib/screenshotStorage';
@@ -10,7 +12,7 @@ import { matchingTagSuggestions } from '@/src/lib/tags';
 import type { ArchiveDepth, RuntimeMessage, RuntimeResponse, Snapshot } from '@/src/lib/types';
 import './style.css';
 
-type RemoteArchiveStatus = 'not_archived' | 'archived' | 'server_not_connected';
+type RemoteArchiveStatus = 'not_archived' | 'archived' | 'sync_failed';
 type LocalArchiveStatus = 'saved' | 'unsaved' | 'removed';
 type ScreenshotCaptureState = {
   phase: 'idle' | 'visible' | 'capturing' | 'canceling';
@@ -40,7 +42,15 @@ function crawlDepthOptions(): Array<{
 }
 
 async function getActivePage(): Promise<ActivePage> {
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  const extensionOrigin = browser.runtime.getURL('');
+  const isOwnExtensionPage = (url = '') => url.startsWith(extensionOrigin);
+  const isArchiveablePage = (url = '') => /^(https?|file):/i.test(url);
+  const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
+  const tab = activeTab?.url && !isOwnExtensionPage(activeTab.url) && isArchiveablePage(activeTab.url)
+    ? activeTab
+    : (await browser.tabs.query({ currentWindow: true }))
+      .filter((candidate) => candidate.id && candidate.url && !isOwnExtensionPage(candidate.url) && isArchiveablePage(candidate.url))
+      .sort((left, right) => (right.lastAccessed || 0) - (left.lastAccessed || 0))[0];
   if (!tab?.id || !tab.url) throw new Error(t("No URL found for the current tab."));
   return {
     favIconUrl: tab.favIconUrl || null,
@@ -145,16 +155,90 @@ function ArchiveBoxOverlay() {
     return new Promise((resolve) => window.setTimeout(resolve, 30));
   }
 
+  async function ensureConfiguredServerPermission(requestPermission: boolean): Promise<void> {
+    const { archivebox_server_url } = await getConfig();
+    if (!archivebox_server_url) throw new Error(t("Server not configured"));
+    if (await hasServerHostPermission(archivebox_server_url)) return;
+    if (!requestPermission) {
+      throw new Error(t("Click Sync to grant ArchiveBox server permission."));
+    }
+    await requestServerHostPermission(archivebox_server_url);
+  }
+
+  async function uploadCapturedArtifactIfArchived(
+    snapshotId: string,
+    kind: 'screenshot' | 'mhtml' | 'singlefile',
+    artifactLabel: string,
+  ): Promise<void> {
+    if (kind === 'singlefile') return;
+    const snapshots = await getSnapshots();
+    const latestSnapshot = snapshots.find((item) => item.id === snapshotId);
+    if (!latestSnapshot?.archiveboxCrawlId) return;
+
+    try {
+      setOk(null);
+      setStatus(t("Uploading $1 to ArchiveBox Server...", artifactLabel));
+      if (kind === 'screenshot') {
+        await uploadSnapshotScreenshotToArchiveBox(latestSnapshot);
+      } else {
+        await uploadSnapshotMhtmlToArchiveBox(latestSnapshot);
+      }
+      setOk(true);
+      setRemoteStatus('archived');
+      setRemoteDetail('');
+      setStatus(t("Saved local $1 and uploaded to ArchiveBox Server", artifactLabel));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setOk(false);
+      setRemoteStatus('archived');
+      setRemoteDetail('');
+      setStatus(t("Saved local $1. Failed to upload artifact: $2", artifactLabel, errorMessage));
+    }
+  }
+
+  async function uploadCurrentArtifactsIfArchived(snapshotId: string): Promise<void> {
+    const snapshots = await getSnapshots();
+    const latestSnapshot = snapshots.find((item) => item.id === snapshotId);
+    if (!latestSnapshot?.archiveboxCrawlId) return;
+
+    try {
+      await uploadSnapshotCaptureArtifactsToArchiveBox(latestSnapshot);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setOk(false);
+      setRemoteStatus('archived');
+      setRemoteDetail('');
+      setStatus(t("Saved URL. Failed to upload local artifacts: $1", errorMessage));
+    }
+  }
+
   async function saveTags(tags: string[]) {
     const nextActivePage = activePage || await getActivePage();
     setActivePage(nextActivePage);
     const { currentSnapshot, snapshots } = await getCurrentSnapshot(nextActivePage);
+    const previousTags = currentSnapshot.tags;
     currentSnapshot.tags = tags;
     currentSnapshot.depth = depth;
     await setSnapshots(snapshots);
     setSnapshot({ ...currentSnapshot });
     setLocalStatus('saved');
-    await sendToArchiveBox(currentSnapshot.url, tags, depth);
+    if (currentSnapshot.archiveboxCrawlId) {
+      try {
+        await syncArchiveBoxSnapshotTags(currentSnapshot.id, previousTags, tags);
+        setOk(true);
+        setRemoteStatus('archived');
+        setRemoteDetail('');
+        setStatus(t("Saved to ArchiveBox Server at depth $1", depth));
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        setOk(false);
+        setRemoteStatus('sync_failed');
+        setRemoteDetail(errorMessage);
+        setStatus(t("Saved locally. Failed to archive on server: $1", errorMessage));
+      }
+    } else {
+      await sendToArchiveBox(currentSnapshot.url, tags, depth, currentSnapshot.id, true);
+    }
   }
 
   async function saveDepth(nextDepth: ArchiveDepth) {
@@ -167,27 +251,66 @@ function ArchiveBoxOverlay() {
     await setSnapshots(snapshots);
     setSnapshot({ ...currentSnapshot });
     setLocalStatus('saved');
-    await sendToArchiveBox(currentSnapshot.url, currentSnapshot.tags, nextDepth);
+    await sendToArchiveBox(currentSnapshot.url, currentSnapshot.tags, nextDepth, currentSnapshot.id, true);
   }
 
-  async function sendToArchiveBox(url: string, tags: string[], archiveDepth: ArchiveDepth) {
+  async function sendToArchiveBox(
+    url: string,
+    tags: string[],
+    archiveDepth: ArchiveDepth,
+    localSnapshotId?: string,
+    requestPermission = false,
+  ) {
     setRemoteStatus('not_archived');
     setRemoteDetail('');
     setStatus(t("ArchiveBox needs permission to connect to your configured server so it can upload this URL."));
     await waitForPermissionExplanation();
+    try {
+      await ensureConfiguredServerPermission(requestPermission);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setOk(false);
+      setRemoteStatus('sync_failed');
+      setRemoteDetail(errorMessage);
+      setStatus(t("Saved locally. Failed to archive on server: $1", errorMessage));
+      return;
+    }
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'archivebox_add',
-      body: { urls: [url], tags, depth: archiveDepth },
+      body: { urls: [url], tags, depth: archiveDepth, snapshotIds: localSnapshotId ? [localSnapshotId] : [] },
     });
     if (response.ok) {
+      const archiveboxSnapshotId = response.archivebox?.snapshot_ids?.[0];
+      const archiveboxCrawlId = response.archivebox?.crawl_id;
+      if (localSnapshotId && archiveboxSnapshotId && archiveboxSnapshotId !== localSnapshotId) {
+        const errorMessage = t("ArchiveBox returned a different snapshot ID than the extension sent.");
+        setOk(false);
+        setRemoteStatus('sync_failed');
+        setRemoteDetail(errorMessage);
+        setStatus(t("Saved locally. Failed to archive on server: $1", errorMessage));
+        return;
+      }
+      if (localSnapshotId && archiveboxCrawlId) {
+        const snapshots = await getSnapshots();
+        const nextSnapshots = snapshots.map((item) => item.id === localSnapshotId
+          ? { ...item, archiveboxCrawlId }
+          : item);
+        await setSnapshots(nextSnapshots);
+        setSnapshot((current) => current?.id === localSnapshotId
+          ? { ...current, archiveboxCrawlId }
+          : current);
+      }
       setOk(true);
       setRemoteStatus('archived');
       setRemoteDetail('');
       setStatus(t("Saved to ArchiveBox Server at depth $1", archiveDepth));
+      if (localSnapshotId) {
+        await uploadCurrentArtifactsIfArchived(localSnapshotId);
+      }
     } else {
       const errorMessage = response.errorMessage || response.error || t("Unknown error");
       setOk(false);
-      setRemoteStatus('server_not_connected');
+      setRemoteStatus('sync_failed');
       setRemoteDetail(errorMessage);
       setStatus(t("Saved locally. Failed to archive on server: $1", errorMessage));
     }
@@ -206,12 +329,17 @@ function ArchiveBoxOverlay() {
   }, []);
 
   useEffect(() => {
-    if (snapshot) sendToArchiveBox(snapshot.url, snapshot.tags, snapshot.depth ?? 0);
+    if (snapshot) sendToArchiveBox(snapshot.url, snapshot.tags, snapshot.depth ?? 0, snapshot.id);
   }, [snapshot?.id]);
 
   useEffect(() => {
     setFaviconFailed(false);
   }, [snapshot?.url, snapshot?.favIconUrl]);
+
+  async function syncRemoteSnapshot() {
+    if (!snapshot) return;
+    await sendToArchiveBox(snapshot.url, snapshot.tags, snapshot.depth ?? depth, snapshot.id, true);
+  }
 
   const suggestions = useMemo(() => {
     if (!snapshot || localStatus === 'removed') return [];
@@ -277,7 +405,7 @@ function ArchiveBoxOverlay() {
     } else {
       const errorMessage = response.errorMessage || response.error || t("Unknown error");
       setOk(false);
-      setRemoteStatus('server_not_connected');
+      setRemoteStatus('sync_failed');
       setRemoteDetail(errorMessage);
       setStatus(t("Failed to remove from server: $1", errorMessage));
     }
@@ -294,7 +422,7 @@ function ArchiveBoxOverlay() {
     if (!response.ok) {
       const errorMessage = response.errorMessage || response.error || t("Unknown error");
       setOk(false);
-      setRemoteStatus('server_not_connected');
+      setRemoteStatus('sync_failed');
       setRemoteDetail(errorMessage);
       setStatus(t("Failed to open archived copy: $1", errorMessage));
     }
@@ -532,6 +660,7 @@ function ArchiveBoxOverlay() {
       }
       if (!hasScrollPermission) {
         setScreenshotCapture({ phase: 'idle', captured: 0, total: 0 });
+        await uploadCapturedArtifactIfArchived(currentSnapshot.id, 'screenshot', t("visible-area screenshot"));
         return;
       }
 
@@ -540,6 +669,7 @@ function ArchiveBoxOverlay() {
         setOk(true);
         setStatus(t("Saved local $1", t("screenshot")));
         setScreenshotCapture({ phase: 'idle', captured: 0, total: 0 });
+        await uploadCapturedArtifactIfArchived(currentSnapshot.id, 'screenshot', t("screenshot"));
         return;
       }
 
@@ -569,6 +699,7 @@ function ArchiveBoxOverlay() {
         setOk(false);
         setStatus(t("Saved visible-area screenshot. Failed to save full-page screenshot: $1", errorMessage));
         setScreenshotCapture({ phase: 'idle', captured: 0, total: 0 });
+        await uploadCapturedArtifactIfArchived(currentSnapshot.id, 'screenshot', t("visible-area screenshot"));
         return;
       }
 
@@ -577,6 +708,7 @@ function ArchiveBoxOverlay() {
         ? t("Saved partial local $1", artifactLabel)
         : t("Saved local $1", artifactLabel));
       setScreenshotCapture({ phase: 'idle', captured: 0, total: 0 });
+      await uploadCapturedArtifactIfArchived(currentSnapshot.id, 'screenshot', artifactLabel);
       return;
     }
     const artifactLabel = kind === 'mhtml' ? t("MHTML snapshot") : t("SingleFile HTML");
@@ -615,6 +747,7 @@ function ArchiveBoxOverlay() {
     setLocalStatus('saved');
     setOk(true);
     setStatus(t("Saved local $1", artifactLabel));
+    await uploadCapturedArtifactIfArchived(currentSnapshot.id, kind, artifactLabel);
   }
 
   async function addTag(tag: string) {
@@ -776,7 +909,7 @@ function ArchiveBoxOverlay() {
             👁
           </button>
         </div>
-        <div className={`archivebox-overlay__state-row${remoteStatus === 'server_not_connected' ? ' archivebox-overlay__state-row--status-only' : ''}`}>
+        <div className="archivebox-overlay__state-row">
           <span className="archivebox-overlay__state-label">{t("Server")}</span>
           <span
             className={`archivebox-overlay__pill archivebox-overlay__pill--${remoteStatus}`}
@@ -784,11 +917,15 @@ function ArchiveBoxOverlay() {
           >
             {remoteStatus === 'archived'
               ? t("Archived")
-              : remoteStatus === 'server_not_connected'
-                ? t("Server not connected")
+              : remoteStatus === 'sync_failed'
+                ? t("Sync failed")
                 : t("Not yet archived")}
           </span>
-          {remoteStatus !== 'server_not_connected' && (
+          {remoteStatus !== 'archived' ? (
+            <button className="archivebox-overlay__action" onClick={syncRemoteSnapshot} title={t("Sync to ArchiveBox server")}>
+              ↑
+            </button>
+          ) : (
             <>
               <button className="archivebox-overlay__action" onClick={removeRemoteSnapshot} disabled={remoteStatus !== 'archived'} title={t("Remove from ArchiveBox server")}>
                 🗑

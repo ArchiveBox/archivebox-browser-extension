@@ -1,10 +1,11 @@
 import { addToArchiveBox, archiveBoxSnapshotUrl, removeFromArchiveBox, testApiKey, testServerUrl } from '@/src/lib/archivebox';
+import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { appendSnapshotScreenshotParts, writeSnapshotMhtmlBytes, writeSnapshotScreenshot, writeSnapshotScreenshotParts, writeSnapshotSingleFileHtml } from '@/src/lib/screenshotStorage';
 import { createSnapshot } from '@/src/lib/snapshots';
 import { getArchiveBoxServerUrl, getConfig, getSnapshots, setSnapshots } from '@/src/lib/storage';
-import type { RuntimeMessage, RuntimeResponse, Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotSingleFile } from '@/src/lib/types';
+import type { ArchiveBoxAddResult, RuntimeMessage, RuntimeResponse, Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotSingleFile } from '@/src/lib/types';
 
 type PageMetrics = {
   viewportWidth: number;
@@ -65,6 +66,7 @@ type ScreenshotPartCanvas = {
 const maxScreenshotPngDimensionPixels = 10000;
 const minCaptureVisibleTabIntervalMs = 700;
 const maxFullPageScreenshotScrollCaptures = 20;
+const testScreenshotPngDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
 let captureVisibleTabReadyAt = 0;
 let captureVisibleTabQueue: Promise<void> = Promise.resolve();
 const canceledScreenshotCaptures = new Set<string>();
@@ -165,6 +167,11 @@ function dataUrlToBlob(dataUrl: string): Blob {
   const mimeType = header.match(/^data:(.*?);base64$/)?.[1] || 'image/png';
   const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
   return new Blob([bytes], { type: mimeType });
+}
+
+async function usesFastTestCapture(): Promise<boolean> {
+  const { archivebox_test_fast_capture = false } = await browser.storage.local.get('archivebox_test_fast_capture');
+  return archivebox_test_fast_capture === true;
 }
 
 function capturePositions(size: number, viewportSize: number): number[] {
@@ -270,10 +277,12 @@ async function captureVisibleTabPng(windowId: number): Promise<Blob> {
 }
 
 async function captureVisibleScreenshot(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<SnapshotScreenshot> {
+  if (typeof tab.id !== 'number') throw new Error(t("No tab ID available for screenshot capture."));
   if (typeof tab.windowId !== 'number') throw new Error(t("No window ID available for screenshot capture."));
   if (typeof createImageBitmap !== 'function') {
     throw new Error(t("Screenshot capture is not available in this browser."));
   }
+  await browser.tabs.update(tab.id, { active: true }).catch(() => undefined);
   const blob = await captureVisibleTabPng(tab.windowId);
   const bitmap = await createImageBitmap(blob);
   const width = bitmap.width;
@@ -574,6 +583,12 @@ async function captureAndAttachSnapshotScreenshot(
   snapshot: Snapshot,
   fullPage = true,
 ): Promise<SnapshotScreenshot> {
+  if (await usesFastTestCapture()) {
+    const screenshot = await writeSnapshotScreenshot(snapshot, dataUrlToBlob(testScreenshotPngDataUrl), 1, 1);
+    await attachScreenshotToSnapshot(snapshot.id, screenshot);
+    return screenshot;
+  }
+
   let screenshot: SnapshotScreenshot;
   if (!fullPage) {
     screenshot = await captureVisibleScreenshot(tab, snapshot);
@@ -593,6 +608,19 @@ async function captureAndAttachSnapshotMhtml(
   tab: Browser.tabs.Tab,
   snapshot: Snapshot,
 ): Promise<SnapshotMhtml> {
+  if (await usesFastTestCapture()) {
+    const bytes = new TextEncoder().encode([
+      'MIME-Version: 1.0',
+      'Content-Type: text/html; charset=utf-8',
+      '',
+      '<!doctype html><title>ArchiveBox test MHTML</title><p>archivebox-popup-integration-fixture</p>',
+    ].join('\r\n')).buffer;
+    const mhtml = await writeSnapshotMhtmlBytes(snapshot, bytes);
+    await attachMhtmlToSnapshot(snapshot.id, mhtml);
+    snapshot.mhtml = mhtml;
+    return mhtml;
+  }
+
   const mhtml = await captureMhtml(tab, snapshot);
   await attachMhtmlToSnapshot(snapshot.id, mhtml);
   snapshot.mhtml = mhtml;
@@ -704,6 +732,30 @@ async function shouldAutoArchive(url: string): Promise<boolean> {
   }
 }
 
+async function markSnapshotSynced(snapshotId: string, archivebox: ArchiveBoxAddResult | null): Promise<void> {
+  const returnedSnapshotId = archivebox?.snapshot_ids?.[0];
+  if (returnedSnapshotId && returnedSnapshotId !== snapshotId) {
+    throw new Error(t("ArchiveBox returned a different snapshot ID than the extension sent."));
+  }
+  if (!archivebox?.crawl_id) return;
+
+  const snapshots = await getSnapshots();
+  await setSnapshots(snapshots.map((snapshot) => snapshot.id === snapshotId
+    ? { ...snapshot, archiveboxCrawlId: archivebox.crawl_id }
+    : snapshot));
+}
+
+async function getSnapshotById(snapshotId: string): Promise<Snapshot | null> {
+  const snapshots = await getSnapshots();
+  return snapshots.find((snapshot) => snapshot.id === snapshotId) || null;
+}
+
+async function uploadSyncedSnapshotArtifacts(snapshotId: string): Promise<void> {
+  const snapshot = await getSnapshotById(snapshotId);
+  if (!snapshot?.archiveboxCrawlId) return;
+  await uploadSnapshotCaptureArtifactsToArchiveBox(snapshot);
+}
+
 async function autoArchive(
   _tabId: number,
   changeInfo: { status?: string },
@@ -724,12 +776,15 @@ async function autoArchive(
   snapshots.push(snapshot);
   await setSnapshots(snapshots);
 
-  captureConfiguredSnapshotArtifacts(tab, snapshot, true).catch((error) => {
+  const capturePromise = captureConfiguredSnapshotArtifacts(tab, snapshot, true).catch((error) => {
     console.error(`Failed to capture local artifacts for ${snapshot.url}:`, error);
   });
 
   try {
-    await addToArchiveBox([snapshot.url], snapshot.tags);
+    const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id]);
+    await markSnapshotSynced(snapshot.id, archivebox);
+    await capturePromise;
+    await uploadSyncedSnapshotArtifacts(snapshot.id);
   } catch (error) {
     console.error(`Failed to automatically archive ${snapshot.url}:`, error);
   }
@@ -754,7 +809,9 @@ async function saveTab(tab?: Browser.tabs.Tab): Promise<void> {
   try {
     const { snapshot, created } = await ensureSnapshotForTab(tab);
     await captureConfiguredSnapshotArtifacts(tab, snapshot, created);
-    await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0);
+    const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id]);
+    await markSnapshotSynced(snapshot.id, archivebox);
+    await uploadSyncedSnapshotArtifacts(snapshot.id);
   } catch (error) {
     console.error('Failed to save tab to ArchiveBox:', error);
   }
@@ -810,8 +867,8 @@ export default defineBackground(() => {
   ): Promise<RuntimeResponse> | RuntimeResponse => {
     switch (message.type) {
       case 'archivebox_add':
-        return addToArchiveBox(message.body.urls, message.body.tags, message.body.depth ?? 0)
-          .then(() => ({ ok: true }))
+        return addToArchiveBox(message.body.urls, message.body.tags, message.body.depth ?? 0, false, false, message.body.snapshotIds || [])
+          .then((archivebox) => ({ ok: true, archivebox }))
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));
 
       case 'archivebox_remove':

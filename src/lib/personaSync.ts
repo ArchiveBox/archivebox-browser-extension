@@ -34,7 +34,9 @@ function getScriptingApi(): ScriptingApi | undefined {
 }
 
 function normalizeServerUrl(serverUrl: string): string {
-  return serverUrl.trim().replace(/\/+$/, '');
+  const trimmed = serverUrl.trim();
+  if (!trimmed) return '';
+  return new URL(trimmed).origin;
 }
 
 function apiHeaders(apiKey: string): Record<string, string> {

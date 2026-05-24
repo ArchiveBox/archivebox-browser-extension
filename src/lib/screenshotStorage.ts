@@ -320,6 +320,103 @@ export async function readSnapshotScreenshotBlobs(screenshot?: SnapshotScreensho
   return blobs;
 }
 
+async function blobToImageBitmap(blob: Blob): Promise<ImageBitmap | HTMLImageElement> {
+  if (typeof createImageBitmap === 'function') {
+    return createImageBitmap(blob);
+  }
+
+  if (typeof Image === 'undefined' || typeof URL === 'undefined') {
+    throw new Error(t("Full-page screenshot stitching is not available in this browser."));
+  }
+
+  const image = new Image();
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error(t("Unable to prepare screenshot canvas.")));
+      image.src = objectUrl;
+    });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+  return image;
+}
+
+async function canvasToPngBlob(canvas: OffscreenCanvas | HTMLCanvasElement): Promise<Blob> {
+  if ('convertToBlob' in canvas && typeof canvas.convertToBlob === 'function') {
+    return canvas.convertToBlob({ type: 'image/png' });
+  }
+
+  if ('toBlob' in canvas && typeof canvas.toBlob === 'function') {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error(t("Unable to prepare screenshot canvas.")));
+      }, 'image/png');
+    });
+  }
+
+  throw new Error(t("Full-page screenshot stitching is not available in this browser."));
+}
+
+export async function composeSnapshotScreenshotBlob(screenshot?: SnapshotScreenshot): Promise<Blob | null> {
+  if (!screenshot?.path) return null;
+
+  const parts = screenshot.parts?.length
+    ? screenshot.parts
+    : [{
+      path: screenshot.path,
+      x: 0,
+      y: 0,
+      width: screenshot.width,
+      height: screenshot.height,
+    }];
+  const blobs = await Promise.all(parts.map((part) => readBlobAtPath(part.path)));
+  const available = parts
+    .map((part, index) => ({ part, blob: blobs[index] }))
+    .filter((item): item is { part: SnapshotScreenshotPart; blob: Blob } => Boolean(item.blob));
+
+  if (!available.length) return null;
+  const onlyAvailable = available[0];
+  if (
+    available.length === 1
+    && onlyAvailable
+    && onlyAvailable.part.x === 0
+    && onlyAvailable.part.y === 0
+    && onlyAvailable.part.width === screenshot.width
+    && onlyAvailable.part.height === screenshot.height
+  ) {
+    return onlyAvailable.blob;
+  }
+
+  const width = Math.max(1, Math.floor(screenshot.width));
+  const height = Math.max(1, Math.floor(screenshot.height));
+  const canvas = typeof OffscreenCanvas === 'function'
+    ? new OffscreenCanvas(width, height)
+    : (() => {
+      if (typeof document === 'undefined') {
+        throw new Error(t("Full-page screenshot stitching is not available in this browser."));
+      }
+      const element = document.createElement('canvas');
+      element.width = width;
+      element.height = height;
+      return element;
+    })();
+  const context = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null;
+  if (!context) throw new Error(t("Unable to prepare screenshot canvas."));
+
+  for (const { part, blob } of available) {
+    const image = await blobToImageBitmap(blob);
+    context.drawImage(image, part.x, part.y, part.width, part.height);
+    if ('close' in image && typeof image.close === 'function') {
+      image.close();
+    }
+  }
+
+  return canvasToPngBlob(canvas);
+}
+
 type FileSystemDirectoryHandleWithEntries = FileSystemDirectoryHandle & {
   entries(): AsyncIterableIterator<[string, FileSystemDirectoryHandle | FileSystemFileHandle]>;
 };

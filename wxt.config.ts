@@ -20,7 +20,7 @@ export default defineConfig({
     name: '__MSG_extensionName__',
     description: '__MSG_extensionDescription__',
     default_locale: 'en',
-    version: '3.2.1',
+    version: '3.2.2',
     permissions: [
       'storage',
       'activeTab',

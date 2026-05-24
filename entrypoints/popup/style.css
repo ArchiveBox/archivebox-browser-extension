@@ -582,7 +582,7 @@ button.archivebox-overlay__tag-chip {
   color: #5e5750;
 }
 
-.archivebox-overlay__pill--server_not_connected {
+.archivebox-overlay__pill--sync_failed {
   border-color: #efb8bc;
   background: #fdebec;
   color: #9d2029;

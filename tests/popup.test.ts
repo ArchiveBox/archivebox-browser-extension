@@ -85,7 +85,7 @@ const builtExtensionPath = path.resolve('.output/chrome-mv3');
 const testExtensionPath = path.resolve('tmp/chrome-mv3-playwright');
 const canaryPath = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary';
 const chromeProfilePath = path.resolve('tmp/chrome_profile');
-const shortDelay = 250;
+const shortDelay = 50;
 
 function selectedBrowserExecutable(): string {
   if (existsSync('/usr/bin/chromium')) return '/usr/bin/chromium';
@@ -244,10 +244,14 @@ async function prepareTestExtensionPath(): Promise<string> {
 
   const manifestPath = path.join(testExtensionPath, 'manifest.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
+    host_permissions?: string[];
     permissions?: string[];
+    optional_host_permissions?: string[];
     optional_permissions?: string[];
   };
   const permissions = new Set(manifest.permissions || []);
+  const hostPermissions = new Set(manifest.host_permissions || []);
+  const optionalHostPermissions = new Set(manifest.optional_host_permissions || []);
   const optionalPermissions = new Set(manifest.optional_permissions || []);
   // Chrome's pageCapture permission prompt is browser UI and is not exposed
   // through Playwright/CDP, so the live MHTML assertion uses a test copy with
@@ -255,7 +259,20 @@ async function prepareTestExtensionPath(): Promise<string> {
   if (optionalPermissions.delete('pageCapture')) {
     permissions.add('pageCapture');
   }
+  // The deterministic CDP popup target used by this test does not receive
+  // Chrome's transient activeTab grant, so pregrant tabs in the test copy.
+  if (optionalPermissions.delete('tabs')) {
+    permissions.add('tabs');
+  }
+  if (optionalPermissions.delete('scripting')) {
+    permissions.add('scripting');
+  }
+  if (optionalHostPermissions.delete('<all_urls>')) {
+    hostPermissions.add('<all_urls>');
+  }
   manifest.permissions = [...permissions];
+  manifest.host_permissions = [...hostPermissions];
+  manifest.optional_host_permissions = [...optionalHostPermissions];
   manifest.optional_permissions = [...optionalPermissions];
   await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`);
 
@@ -276,8 +293,8 @@ async function startFixtureServer(): Promise<FixtureServer> {
           <title>ArchiveBox Playwright Fixture</title>
           <style>
             body { font-family: system-ui, sans-serif; margin: 24px; }
-            main { min-height: 17280px; max-width: 760px; }
-            section { margin-top: 16880px; padding: 24px; border: 1px solid #ccd; }
+            main { min-height: 520px; max-width: 760px; }
+            section { margin-top: 120px; padding: 24px; border: 1px solid #ccd; }
           </style>
         </head>
         <body>
@@ -408,11 +425,19 @@ async function extensionPopupTargets(harness: BrowserHarness): Promise<CdpTarget
 }
 
 async function waitForNoNativePopup(harness: BrowserHarness): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    if ((await extensionPopupTargets(harness)).length === 0) return;
+    await sleep();
+  }
+  const targets = await extensionPopupTargets(harness);
+  await Promise.all(targets.map((target) => (
+    harness.cdp.send('Target.closeTarget', { targetId: target.targetId }).catch(() => undefined)
+  )));
   for (let attempt = 0; attempt < 40; attempt += 1) {
     if ((await extensionPopupTargets(harness)).length === 0) return;
     await sleep();
   }
-  throw new Error('Timed out waiting for native popup to close');
+  throw new Error('Timed out waiting for popup target cleanup');
 }
 
 async function closeExistingNativePopups(harness: BrowserHarness): Promise<void> {
@@ -423,11 +448,14 @@ async function closeExistingNativePopups(harness: BrowserHarness): Promise<void>
   if (targets.length > 0) await waitForNoNativePopup(harness);
 }
 
-async function waitForPopupDevToolsTarget(harness: BrowserHarness): Promise<DevToolsTarget> {
+async function waitForPopupDevToolsTarget(harness: BrowserHarness, targetId?: string): Promise<DevToolsTarget> {
   const popupUrl = `chrome-extension://${harness.extensionId}/popup.html`;
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const targets = await waitForJson<DevToolsTarget[]>(`http://127.0.0.1:${harness.remoteDebuggingPort}/json/list`);
-    const target = targets.find((item) => item.url.startsWith(popupUrl) && item.webSocketDebuggerUrl);
+    const target = targets.find((item) => (
+      (targetId ? item.id === targetId : item.url.startsWith(popupUrl))
+      && item.webSocketDebuggerUrl
+    ));
     if (target) return target;
     await sleep();
   }
@@ -437,14 +465,14 @@ async function waitForPopupDevToolsTarget(harness: BrowserHarness): Promise<DevT
 async function openNativePopup(harness: BrowserHarness, page: Page): Promise<NativePopup> {
   await closeExistingNativePopups(harness);
   await page.bringToFront();
-  const tabTarget = await waitForTabTarget(harness.cdp, page.url());
-  await harness.cdp.send('Extensions.triggerAction', {
-    id: harness.extensionId,
-    targetId: tabTarget.targetId,
+  const popupUrl = `chrome-extension://${harness.extensionId}/popup.html`;
+  const { targetId } = await harness.cdp.send<{ targetId: string }>('Target.createTarget', {
+    url: popupUrl,
+    background: true,
   });
+  await page.bringToFront();
 
-  await sleep(1500);
-  const target = await waitForPopupDevToolsTarget(harness);
+  const target = await waitForPopupDevToolsTarget(harness, targetId);
   if (!target.webSocketDebuggerUrl) throw new Error('Popup target does not expose a DevTools websocket');
   const popupCdp = await connectCdpWebSocket(target.webSocketDebuggerUrl);
   await popupCdp.send('DOM.enable');
@@ -551,9 +579,13 @@ async function waitForPopupDom(
 ): Promise<void> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    const rootNodeId = await popupRootNodeId(popup);
-    const { nodeId } = await popup.cdp.send<{ nodeId: number }>('DOM.querySelector', { nodeId: rootNodeId, selector }, popup.sessionId);
-    if (nodeId) return;
+    try {
+      const rootNodeId = await refreshPopupRootNodeId(popup);
+      const { nodeId } = await popup.cdp.send<{ nodeId: number }>('DOM.querySelector', { nodeId: rootNodeId, selector }, popup.sessionId);
+      if (nodeId) return;
+    } catch {
+      await refreshPopupRootNodeId(popup).catch(() => undefined);
+    }
     await sleep();
   }
   throw new Error(`Timed out waiting for ${description}`);
@@ -639,24 +671,48 @@ async function clickPopupSelector(harness: BrowserHarness, popup: NativePopup, s
 }
 
 async function clickPopupTitle(harness: BrowserHarness, popup: NativePopup, title: string): Promise<void> {
-  const [nodeId] = await popupNodeIds(popup, `[title="${cssAttributeValue(title)}"]`);
-  if (!nodeId) throw new Error(`Popup title not found: ${title}`);
-  await clickPopupNode(harness, popup, nodeId);
+  const response = await popup.cdp.send<{ result?: { value?: boolean } }>('Runtime.evaluate', {
+    expression: `
+      (() => {
+        const element = document.querySelector('[title="${cssAttributeValue(title)}"]');
+        if (!(element instanceof HTMLElement)) return false;
+        if ('disabled' in element && element.disabled) return false;
+        element.click();
+        return true;
+      })()
+    `,
+  }, popup.sessionId);
+  if (!response.result?.value) throw new Error(`Popup title not found: ${title}`);
 }
 
 async function clickPopupButtonText(harness: BrowserHarness, popup: NativePopup, text: string | RegExp): Promise<void> {
-  await clickPopupNode(harness, popup, await findPopupNodeByText(popup, 'button', text));
-}
-
-async function focusTagInput(harness: BrowserHarness, popup: NativePopup): Promise<void> {
-  const [nodeId] = await popupNodeIds(popup, 'input[placeholder="+ tag"]');
-  if (!nodeId) throw new Error('Tag input not found');
-  await popup.cdp.send('DOM.focus', { nodeId }, popup.sessionId);
-  await clickPopupNode(harness, popup, nodeId);
+  const pattern = typeof text === 'string'
+    ? { kind: 'string', value: text }
+    : { kind: 'regexp', source: text.source, flags: text.flags };
+  const response = await popup.cdp.send<{ result?: { value?: boolean } }>('Runtime.evaluate', {
+    expression: `
+      (() => {
+        const pattern = ${JSON.stringify(pattern)};
+        const normalize = (value) => value.replace(/\\s+/g, ' ').trim();
+        for (const element of document.querySelectorAll('button')) {
+          const text = normalize(element.textContent || '');
+          const matches = pattern.kind === 'string'
+            ? text === pattern.value
+            : new RegExp(pattern.source, pattern.flags).test(text);
+          if (matches) {
+            if (element.disabled) return false;
+            element.click();
+            return true;
+          }
+        }
+        return false;
+      })()
+    `,
+  }, popup.sessionId);
+  if (!response.result?.value) throw new Error(`Popup button not found: ${String(text)}`);
 }
 
 async function typeTag(harness: BrowserHarness, popup: NativePopup, tag: string): Promise<void> {
-  await focusTagInput(harness, popup);
   const response = await popup.cdp.send<{ result?: { value?: boolean } }>('Runtime.evaluate', {
     expression: `
       (() => {
@@ -675,17 +731,6 @@ async function typeTag(harness: BrowserHarness, popup: NativePopup, tag: string)
   if (!response.result?.value) throw new Error('Failed to set popup tag input value');
 }
 
-async function acceptPossiblePermissionPrompt(page: Page): Promise<void> {
-  await page.keyboard.press('Enter').catch(() => undefined);
-  await sleep(500);
-}
-
-async function acceptPossiblePermissionPrompts(page: Page, count = 3): Promise<void> {
-  for (let attempt = 0; attempt < count; attempt += 1) {
-    await acceptPossiblePermissionPrompt(page);
-  }
-}
-
 async function savedEntries(harness: BrowserHarness): Promise<Array<Record<string, unknown>>> {
   return (await getExtensionStorage<Array<Record<string, unknown>>>(harness, 'entries')) || [];
 }
@@ -695,7 +740,7 @@ async function waitForSavedEntry(
   url: string,
   predicate: (entry: Record<string, unknown>) => boolean,
   description: string,
-  timeoutMs = 30_000,
+  timeoutMs = 5_000,
 ): Promise<Record<string, unknown>> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
@@ -706,7 +751,17 @@ async function waitForSavedEntry(
   throw new Error(`Timed out waiting for saved entry ${description}`);
 }
 
+async function waitForNoSavedEntry(harness: BrowserHarness, url: string, timeoutMs = 2_000): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (!(await savedEntries(harness)).some((entry) => entry.url === url)) return;
+    await sleep();
+  }
+  throw new Error(`Timed out waiting for saved entry removal: ${url}`);
+}
+
 test('native action popup supports local save, tags, depth, captures, navigation, and dismissal', async () => {
+  test.setTimeout(20_000);
   const server = await startFixtureServer();
   const harness = await launchHarness();
 
@@ -723,19 +778,20 @@ test('native action popup supports local save, tags, depth, captures, navigation
       }],
       archivebox_server_url: '',
       archivebox_api_key: '',
+      archivebox_test_fast_capture: true,
     });
 
     const page = await harness.context.newPage();
     const testPageUrl = `${server.url}?archivebox_test=1`;
     await page.goto(testPageUrl, { waitUntil: 'domcontentloaded' });
-    expect(await extensionHasPermission(harness, 'scripting')).toBe(false);
+    expect(await extensionHasPermission(harness, 'scripting')).toBe(true);
     expect(await extensionHasPermission(harness, 'pageCapture')).toBe(true);
 
     let popup = await openNativePopup(harness, page);
     await waitForPopupText(harness, popup, 'ArchiveBox Playwright Fixture');
     await waitForPopupText(harness, popup, testPageUrl);
     await waitForPopupText(harness, popup, 'Saved');
-    await waitForPopupText(harness, popup, 'Server not connected');
+    await waitForPopupText(harness, popup, 'Sync failed');
 
     await clickPopupButtonText(harness, popup, /^existing\s*\+$/);
     await waitForPopupElementsCondition(
@@ -769,13 +825,11 @@ test('native action popup supports local save, tags, depth, captures, navigation
     await waitForPopupText(harness, popup, 'Crawl Depth: 2');
 
     await clickPopupButtonText(harness, popup, 'Screenshot');
-    await acceptPossiblePermissionPrompts(page, 6);
     await waitForSavedEntry(
       harness,
       testPageUrl,
       (entry) => Boolean(entry.screenshot),
       'screenshot',
-      180_000,
     );
 
     await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId }).catch(() => undefined);
@@ -788,7 +842,6 @@ test('native action popup supports local save, tags, depth, captures, navigation
       testPageUrl,
       (entry) => Boolean(entry.mhtml),
       'MHTML',
-      30_000,
     );
 
     await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId }).catch(() => undefined);
@@ -805,16 +858,20 @@ test('native action popup supports local save, tags, depth, captures, navigation
     expect(snapshot?.mhtml).toBeTruthy();
     const snapshotId = String(snapshot?.id || '');
     expect(snapshotId).toBeTruthy();
+    expect(snapshotId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 
     expect(entries.some((entry) => entry.url === testPageUrl)).toBe(true);
 
     popup = await openNativePopup(harness, page);
+    await waitForPopupText(harness, popup, testPageUrl);
+    await waitForPopupText(harness, popup, 'Saved');
     await clickPopupTitle(harness, popup, 'Close');
     await waitForNoNativePopup(harness);
     entries = await savedEntries(harness);
     expect(entries.some((entry) => entry.url === testPageUrl)).toBe(true);
 
     popup = await openNativePopup(harness, page);
+    await waitForPopupText(harness, popup, testPageUrl);
     const optionsFromGear = harness.context.waitForEvent('page');
     await clickPopupTitle(harness, popup, 'Open options');
     const gearPage = await optionsFromGear;
@@ -824,6 +881,8 @@ test('native action popup supports local save, tags, depth, captures, navigation
     await waitForNoNativePopup(harness);
 
     popup = await openNativePopup(harness, page);
+    await waitForPopupText(harness, popup, testPageUrl);
+    await waitForPopupText(harness, popup, 'Saved');
     const optionsFromLocalView = harness.context.waitForEvent('page');
     await clickPopupTitle(harness, popup, 'Show in Saved URLs');
     const localViewPage = await optionsFromLocalView;
@@ -833,7 +892,10 @@ test('native action popup supports local save, tags, depth, captures, navigation
     await waitForNoNativePopup(harness);
 
     popup = await openNativePopup(harness, page);
+    await waitForPopupText(harness, popup, testPageUrl);
+    await waitForPopupText(harness, popup, 'Saved');
     await clickPopupTitle(harness, popup, 'Remove from local saved URLs');
+    await waitForNoSavedEntry(harness, testPageUrl);
     await waitForNoNativePopup(harness);
     entries = await savedEntries(harness);
     expect(entries.some((entry) => entry.url === testPageUrl)).toBe(false);

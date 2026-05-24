@@ -8,6 +8,7 @@ export type Snapshot = {
   title: string;
   favIconUrl?: string | null;
   depth?: ArchiveDepth;
+  archiveboxCrawlId?: string;
   screenshot?: SnapshotScreenshot;
   mhtml?: SnapshotMhtml;
   singlefile?: SnapshotSingleFile;
@@ -109,6 +110,7 @@ export type ArchiveboxAddMessage = {
     urls: string[];
     tags: string[];
     depth?: ArchiveDepth;
+    snapshotIds?: string[];
   };
 };
 
@@ -214,6 +216,7 @@ export type RuntimeMessage =
 
 export type RuntimeResponse = {
   ok: boolean;
+  archivebox?: ArchiveBoxAddResult | null;
   error?: string;
   errorMessage?: string;
   user_id?: string | number;
@@ -222,4 +225,11 @@ export type RuntimeResponse = {
   screenshot?: SnapshotScreenshot;
   mhtml?: SnapshotMhtml;
   singlefile?: SnapshotSingleFile;
+};
+
+export type ArchiveBoxAddResult = {
+  crawl_id?: string;
+  num_snapshots?: number;
+  queued_urls?: string[];
+  snapshot_ids?: string[];
 };

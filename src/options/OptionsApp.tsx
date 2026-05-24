@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { strToU8, zipSync } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { addToArchiveBox, requestServerHostPermission } from '@/src/lib/archivebox';
+import { addToArchiveBox, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
 import { defaultSingleFileExtensionId, defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { loadBookmarkSnapshots, loadHistorySnapshots } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
@@ -42,6 +42,7 @@ import { createSnapshot, filterSnapshots, uniqueTags } from '@/src/lib/snapshots
 import { matchingTagSuggestions } from '@/src/lib/tags';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { syncPersonaToArchiveBox } from '@/src/lib/personaSync';
+import { uuidv7 } from '@/src/lib/uuid';
 import {
   defaultConfig,
   defaultPersona,
@@ -214,7 +215,13 @@ function isHttpUrl(value: string): boolean {
 }
 
 function serverUrlBase(value: string): string {
-  return value.trim().replace(/\/+$/, '');
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return trimmed.replace(/\/+$/, '');
+  }
 }
 
 function safeFileSegment(value: string): string {
@@ -1103,6 +1110,15 @@ function OptionsMain() {
   }
 
   async function updateSnapshotTags(snapshotId: string, tags: string[], message: string) {
+    const existingSnapshot = snapshots.find((snapshot) => snapshot.id === snapshotId);
+    if (existingSnapshot?.archiveboxCrawlId) {
+      try {
+        await syncArchiveBoxSnapshotTags(existingSnapshot.id, existingSnapshot.tags, tags);
+      } catch (error) {
+        setSavedUrlStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
+        return;
+      }
+    }
     const nextSnapshots = snapshots.map((snapshot) => (
       snapshot.id === snapshotId ? { ...snapshot, tags } : snapshot
     ));
@@ -1520,7 +1536,7 @@ function OptionsMain() {
     const selectedIds = new Set(selected.map((item) => item.id));
     const imported = selected.map(({ selected: _selected, isNew: _isNew, ...snapshot }) => ({
       ...snapshot,
-      id: crypto.randomUUID(),
+      id: uuidv7(),
       timestamp: new Date().toISOString(),
       tags: [...new Set([...snapshot.tags, ...tagsToAdd])],
     }));
@@ -1566,7 +1582,18 @@ function OptionsMain() {
         [snapshot.id]: { kind: 'warning', text: t("Syncing...") },
       }));
       try {
-        await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0);
+        const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id]);
+        const archiveboxSnapshotId = archivebox?.snapshot_ids?.[0];
+        const archiveboxCrawlId = archivebox?.crawl_id;
+        if (archiveboxSnapshotId && archiveboxSnapshotId !== snapshot.id) {
+          throw new Error(t("ArchiveBox returned a different snapshot ID than the extension sent."));
+        }
+        if (archiveboxCrawlId) {
+          const nextSnapshots = (await getSnapshots()).map((item) => item.id === snapshot.id
+            ? { ...item, archiveboxCrawlId }
+            : item);
+          await persistSnapshots(nextSnapshots);
+        }
         setSyncStatuses((current) => ({
           ...current,
           [snapshot.id]: { kind: 'success', text: t("Synced") },
@@ -1609,6 +1636,15 @@ function OptionsMain() {
   }
 
   async function saveTagChanges() {
+    for (const snapshot of snapshots.filter((item) => selectedSnapshots.has(item.id))) {
+      if (!snapshot.archiveboxCrawlId) continue;
+      try {
+        await syncArchiveBoxSnapshotTags(snapshot.id, snapshot.tags, modalTags);
+      } catch (error) {
+        setSavedUrlStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
+        return;
+      }
+    }
     const nextSnapshots = snapshots.map((snapshot) => selectedSnapshots.has(snapshot.id)
       ? { ...snapshot, tags: modalTags }
       : snapshot);
@@ -1715,6 +1751,16 @@ function OptionsMain() {
               </div>
               <button disabled={!selectedSnapshots.size} onClick={async () => {
                 if (!confirm(t("Delete $1 snapshots?", selectedSnapshots.size))) return;
+                const snapshotsToDelete = snapshots.filter((snapshot) => selectedSnapshots.has(snapshot.id));
+                for (const snapshot of snapshotsToDelete) {
+                  if (!snapshot.archiveboxCrawlId) continue;
+                  try {
+                    await removeFromArchiveBox(snapshot.url);
+                  } catch (error) {
+                    setSavedUrlStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
+                    return;
+                  }
+                }
                 await persistSnapshots(snapshots.filter((snapshot) => !selectedSnapshots.has(snapshot.id)));
                 setSelectedSnapshots(new Set());
                 setSavedUrlStatus({ kind: 'success', text: t("Deleted selected snapshots") });

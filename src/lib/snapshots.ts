@@ -1,4 +1,5 @@
 import type { ArchiveDepth, Snapshot } from './types';
+import { uuidv7 } from './uuid';
 
 export function createSnapshot(
   url: string,
@@ -8,7 +9,7 @@ export function createSnapshot(
   depth: ArchiveDepth = 0,
 ): Snapshot {
   return {
-    id: crypto.randomUUID(),
+    id: uuidv7(),
     url,
     timestamp: new Date().toISOString(),
     tags,

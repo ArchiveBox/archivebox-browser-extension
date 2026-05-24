@@ -225,7 +225,56 @@ function rewriteSrcset(value: string, baseUrl: string, resources: Map<string, st
   }).join(', ');
 }
 
+function escapeAttribute(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;');
+}
+
+function rewriteHtmlWithoutDomParser(html: string, baseUrl: string, resources: Map<string, string>): { html: string; title?: string } {
+  let rewritten = html.replace(/\s(src|href|poster)=("([^"]*)"|'([^']*)'|([^\s>]+))/gi, (match, attribute: string, _raw: string, doubleValue: string, singleValue: string, bareValue: string) => {
+    const value = doubleValue ?? singleValue ?? bareValue ?? '';
+    if (attribute.toLowerCase() === 'href' && /^#/i.test(value)) return match;
+    const replacement = lookupResource(resources, value, baseUrl);
+    if (!replacement) return match;
+    return ` ${attribute}="${escapeAttribute(replacement)}"`;
+  });
+
+  rewritten = rewritten.replace(/\ssrcset=("([^"]*)"|'([^']*)'|([^\s>]+))/gi, (match, _raw: string, doubleValue: string, singleValue: string, bareValue: string) => {
+    const value = doubleValue ?? singleValue ?? bareValue ?? '';
+    return ` srcset="${escapeAttribute(rewriteSrcset(value, baseUrl, resources))}"`;
+  });
+
+  rewritten = rewritten.replace(/\sstyle=("([^"]*)"|'([^']*)')/gi, (_match, _raw: string, doubleValue: string, singleValue: string) => {
+    const value = doubleValue ?? singleValue ?? '';
+    return ` style="${escapeAttribute(rewriteCssUrls(value, baseUrl, resources))}"`;
+  });
+
+  rewritten = rewritten.replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (_match, attributes: string, css: string) => (
+    `<style${attributes}>${rewriteCssUrls(css, baseUrl, resources)}</style>`
+  ));
+
+  if (!/<base\b/i.test(rewritten)) {
+    const baseTag = `<base href="${escapeAttribute(baseUrl)}" target="_blank">`;
+    if (/<head\b[^>]*>/i.test(rewritten)) {
+      rewritten = rewritten.replace(/<head\b([^>]*)>/i, `<head$1>${baseTag}`);
+    } else {
+      rewritten = `<head>${baseTag}</head>${rewritten}`;
+    }
+  }
+
+  const title = rewritten.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim();
+  return {
+    html: rewritten.trimStart().toLowerCase().startsWith('<!doctype')
+      ? rewritten
+      : `<!doctype html>\n${rewritten}`,
+    title,
+  };
+}
+
 function rewriteHtml(html: string, baseUrl: string, resources: Map<string, string>): { html: string; title?: string } {
+  if (typeof DOMParser === 'undefined') {
+    return rewriteHtmlWithoutDomParser(html, baseUrl, resources);
+  }
+
   const document = new DOMParser().parseFromString(html, 'text/html');
 
   for (const element of [...document.querySelectorAll<HTMLElement>('[src]')]) {
