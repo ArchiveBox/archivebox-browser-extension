@@ -1,0 +1,30 @@
+src/lib/archiveboxArtifacts.ts
+  s_463e8607ca6021::t_c7c708cbc108d8 20,40,46,49-50,61,67-83,87-89,92,94,131-132,134-135,138-140
+  s_463e8607ca6021::t_af6972a63817ae 4,14,54-58,96-99,112-125,128
+entrypoints/popup/main.tsx
+  s_463e8607ca6021::t_52cd465f8b710f 5,180
+package.json
+  s_463e8607ca6021::t_814398c7bda543 5
+src/lib/archivebox.ts
+  s_463e8607ca6021::t_4c5107aa585cb6 224,244
+  s_463e8607ca6021::t_c3620dc6acd014 11-24,251,292
+  s_463e8607ca6021::t_5451eeec3022e3 26-31,260-278,281-289,291,293-299,301-302
+wxt.config.ts
+  s_463e8607ca6021::t_814398c7bda543 23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "628e38963e23a27b6e321b32ff8ad023c8a6e71c",
+  "prompts": {},
+  "sessions": {
+    "s_463e8607ca6021": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e39eb-05c2-7253-a218-467aed1abfef",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
