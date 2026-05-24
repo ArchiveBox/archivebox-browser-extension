@@ -797,10 +797,20 @@ test('ArchiveBox server URLs are ignored before archive requests', async () => {
 
   try {
     await setExtensionStorage(harness, {
-      entries: [],
+      entries: [{
+        id: 'server-url-entry',
+        url: 'https://admin.example.com/admin/core/snapshot/',
+        timestamp: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+        tags: [],
+        title: 'ArchiveBox Admin',
+        favIconUrl: null,
+        depth: 0,
+      }],
       archivebox_server_url: 'https://api.example.com',
       archivebox_api_key: 'test-key',
     });
+    await harness.storagePage.reload({ waitUntil: 'domcontentloaded' });
+    await expect(harness.storagePage.locator('body')).not.toContainText('https://admin.example.com/admin/core/snapshot/');
 
     for (const url of ['https://example.com/docs/', 'https://admin.example.com/admin/']) {
       const response = await sendExtensionMessage<Record<string, unknown>>(harness, {
@@ -819,7 +829,7 @@ test('ArchiveBox server URLs are ignored before archive requests', async () => {
       });
     }
 
-    expect(await savedEntries(harness)).toEqual([]);
+    expect(await savedEntries(harness)).toHaveLength(1);
   } finally {
     await closeHarness(harness);
   }

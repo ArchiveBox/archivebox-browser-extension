@@ -1,4 +1,5 @@
 import type { ConfigState, Persona, Snapshot } from './types';
+import { archiveBoxServerUrlMatches } from './archiveboxUrlExclusions';
 
 const defaultConfig: ConfigState = {
   archivebox_server_url: '',
@@ -63,11 +64,17 @@ export async function getArchiveBoxServerUrl(): Promise<string> {
 
 export async function getSnapshots(): Promise<Snapshot[]> {
   const { entries = [] } = await browser.storage.local.get('entries');
-  return Array.isArray(entries) ? (entries as Snapshot[]) : [];
+  return filterConfiguredArchiveBoxSnapshots(Array.isArray(entries) ? (entries as Snapshot[]) : []);
 }
 
 export async function setSnapshots(entries: Snapshot[]): Promise<void> {
-  await browser.storage.local.set({ entries });
+  await browser.storage.local.set({ entries: await filterConfiguredArchiveBoxSnapshots(entries) });
+}
+
+async function filterConfiguredArchiveBoxSnapshots(entries: Snapshot[]): Promise<Snapshot[]> {
+  const serverUrl = await getArchiveBoxServerUrl();
+  if (!serverUrl) return entries;
+  return entries.filter((snapshot) => !archiveBoxServerUrlMatches(serverUrl, snapshot.url));
 }
 
 export async function getPersonas(): Promise<{
