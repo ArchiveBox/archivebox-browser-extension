@@ -8,7 +8,27 @@ export type ArchiveResultUploadFile = {
   mimeType?: string;
 };
 
+export type ArchiveResultOutputFile = {
+  size?: number;
+  mimetype?: string;
+  upload?: {
+    complete?: boolean;
+    chunked?: boolean;
+  };
+};
+
+export type ArchiveResultUploadResponse = {
+  id?: string;
+  output_files?: Record<string, ArchiveResultOutputFile>;
+};
+
 export const archiveResultUploadChunkSize = 32 * 1024 * 1024;
+const archiveResultCreateRetryDelayMs = 500;
+const archiveResultCreateMaxAttempts = 24;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+}
 
 function requireHttpServerUrl(serverUrl: string): void {
   try {
@@ -201,7 +221,7 @@ export async function removeFromArchiveBox(url: string): Promise<void> {
 
 export async function uploadSnapshotArchiveResult(
   snapshotId: string,
-  plugin: 'screenshot' | 'dom' | string,
+  plugin: string,
   blob: Blob,
   options: {
     outputPath: string;
@@ -221,15 +241,14 @@ export async function uploadSnapshotArchiveResult(
 
 export async function uploadSnapshotArchiveResultFiles(
   snapshotId: string,
-  plugin: 'screenshot' | 'dom' | string,
+  plugin: string,
   files: ArchiveResultUploadFile[],
   options: {
     outputStr?: string;
     outputJson?: Record<string, unknown>;
     status?: string;
   } = {},
-): Promise<{ id?: string }> {
-  if (files.length === 0) return {};
+): Promise<ArchiveResultUploadResponse> {
   const archiveboxServerUrl = await getConfiguredServerBaseUrl();
   const { archivebox_api_key } = await getConfig();
   if (!archivebox_api_key) {
@@ -238,36 +257,49 @@ export async function uploadSnapshotArchiveResultFiles(
 
   await ensureServerHostPermission(archiveboxServerUrl);
 
-  const body = new FormData();
-  body.append('snapshot_id', snapshotId);
-  body.append('plugin', plugin);
-  if (options.outputStr) {
-    body.append('output_str', options.outputStr);
-  }
-  if (options.outputJson) {
-    body.append('output_json', JSON.stringify(options.outputJson));
-  }
-  if (options.status) {
-    body.append('status', options.status);
-  }
-  for (const file of files) {
-    body.append('files', file.blob, file.outputPath);
-    body.append('output_paths', file.outputPath);
-    body.append('mime_types', file.mimeType || file.blob.type || 'application/octet-stream');
+  function buildBody(): FormData {
+    const body = new FormData();
+    body.append('snapshot_id', snapshotId);
+    body.append('plugin', plugin);
+    if (options.outputStr) {
+      body.append('output_str', options.outputStr);
+    }
+    if (options.outputJson) {
+      body.append('output_json', JSON.stringify(options.outputJson));
+    }
+    if (options.status) {
+      body.append('status', options.status);
+    }
+    for (const file of files) {
+      body.append('files', file.blob, file.outputPath);
+      body.append('output_paths', file.outputPath);
+      body.append('mime_types', file.mimeType || file.blob.type || 'application/octet-stream');
+    }
+    return body;
   }
 
-  const response = await fetch(`${archiveboxServerUrl}/api/v1/core/archiveresults`, {
-    headers: apiAuthHeaders(archivebox_api_key),
-    method: 'POST',
-    credentials: 'include',
-    mode: 'cors',
-    body,
-  });
+  let lastError = '';
+  for (let attempt = 1; attempt <= archiveResultCreateMaxAttempts; attempt += 1) {
+    const response = await fetch(`${archiveboxServerUrl}/api/v1/core/archiveresults`, {
+      headers: apiAuthHeaders(archivebox_api_key),
+      method: 'POST',
+      credentials: 'include',
+      mode: 'cors',
+      body: buildBody(),
+    });
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    if (response.ok) {
+      return await response.json().catch(() => ({})) as ArchiveResultUploadResponse;
+    }
+
+    lastError = `HTTP ${response.status}: ${response.statusText}`;
+    if (response.status !== 404 || attempt === archiveResultCreateMaxAttempts) {
+      throw new Error(lastError);
+    }
+    await sleep(archiveResultCreateRetryDelayMs);
   }
-  return await response.json().catch(() => ({})) as { id?: string };
+
+  throw new Error(lastError || 'ArchiveResult upload failed');
 }
 
 export async function addFilesToSnapshotArchiveResult(

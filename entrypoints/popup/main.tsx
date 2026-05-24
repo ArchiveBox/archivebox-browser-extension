@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { hasServerHostPermission, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
-import { uploadSnapshotCaptureArtifactsToArchiveBox, uploadSnapshotMhtmlToArchiveBox, uploadSnapshotScreenshotToArchiveBox, uploadSnapshotSingleFileToArchiveBox } from '@/src/lib/archiveboxArtifacts';
+import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { assertLocalCaptureStorageAvailable } from '@/src/lib/screenshotStorage';
@@ -177,13 +177,7 @@ function ArchiveBoxOverlay() {
     try {
       setOk(null);
       setStatus(t("Uploading $1 to ArchiveBox Server...", artifactLabel));
-      if (kind === 'screenshot') {
-        await uploadSnapshotScreenshotToArchiveBox(latestSnapshot);
-      } else if (kind === 'mhtml') {
-        await uploadSnapshotMhtmlToArchiveBox(latestSnapshot);
-      } else {
-        await uploadSnapshotSingleFileToArchiveBox(latestSnapshot);
-      }
+      await uploadSnapshotCaptureArtifactsToArchiveBox(latestSnapshot);
       setOk(true);
       setRemoteStatus('archived');
       setRemoteDetail('');
