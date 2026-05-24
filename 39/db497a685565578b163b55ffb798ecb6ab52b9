@@ -1,0 +1,37 @@
+entrypoints/background.ts
+  s_463e8607ca6021::t_38c4add9c5e027 1,743,745-750,789,817,875
+tests/popup.test.ts
+  s_463e8607ca6021::t_5eecc67b7ec8b9 112-114,765
+src/lib/archiveboxArtifacts.ts
+  s_463e8607ca6021::t_b4fb7cbaf43be7 1-5,7-12,16,18-101,107-140,142,144-166,168-171,174,176,178-187,189-227,229-242,244-245,247-275,282-283,287,289-291,293-295,299-319,323-324,329-330,333-338
+  s_463e8607ca6021::t_5b2122aa86b1b8 102-106,276-281,284,286,288,292
+src/options/OptionsApp.tsx
+  s_463e8607ca6021::t_040f0465d61933 21,1585,1596-1599
+src/lib/types.ts
+  s_463e8607ca6021::t_54f66b788925c0 114
+src/lib/archivebox.ts
+  s_463e8607ca6021::t_4a75f14eb53752 5-10,225,229,250-252,275,279,297-299,317-326,329-357,359-381
+  s_463e8607ca6021::t_fbdb91765a2606 327-328,358
+  s_463e8607ca6021::t_cf2e11ce59fb90 3,94,114,146-173,231-232,270-274,276-278,280-296,300-309
+  s_463e8607ca6021::t_966fd3316155ae 11
+entrypoints/popup/main.tsx
+  s_463e8607ca6021::t_cffae9a2a743e6 4,309-312
+  s_463e8607ca6021::t_8e0d3f2d3cc305 5,182,184-185
+  s_463e8607ca6021::t_8c6e2fef70fe24 281-287
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "39db497a685565578b163b55ffb798ecb6ab52b9",
+  "prompts": {},
+  "sessions": {
+    "s_463e8607ca6021": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e39eb-05c2-7253-a218-467aed1abfef",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
