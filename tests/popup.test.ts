@@ -702,19 +702,24 @@ async function clickPopupSelector(harness: BrowserHarness, popup: NativePopup, s
   await clickPopupNode(harness, popup, nodeId);
 }
 
-async function clickPopupTitle(harness: BrowserHarness, popup: NativePopup, title: string): Promise<void> {
-  const response = await popup.cdp.send<{ result?: { value?: boolean } }>('Runtime.evaluate', {
-    expression: `
-      (() => {
-        const element = document.querySelector('[title="${cssAttributeValue(title)}"]');
-        if (!(element instanceof HTMLElement)) return false;
-        if ('disabled' in element && element.disabled) return false;
-        element.click();
-        return true;
-      })()
-    `,
-  }, popup.sessionId);
-  if (!response.result?.value) throw new Error(`Popup title not found: ${title}`);
+async function clickPopupTitle(harness: BrowserHarness, popup: NativePopup, title: string, timeoutMs = 5_000): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const response = await popup.cdp.send<{ result?: { value?: boolean } }>('Runtime.evaluate', {
+      expression: `
+        (() => {
+          const element = document.querySelector('[title="${cssAttributeValue(title)}"]');
+          if (!(element instanceof HTMLElement)) return false;
+          if ('disabled' in element && element.disabled) return false;
+          element.click();
+          return true;
+        })()
+      `,
+    }, popup.sessionId);
+    if (response.result?.value) return;
+    await sleep();
+  }
+  throw new Error(`Popup title not found: ${title}. Popup text: ${htmlText(await popupHtml(harness, popup))}`);
 }
 
 async function clickPopupButtonText(harness: BrowserHarness, popup: NativePopup, text: string | RegExp): Promise<void> {

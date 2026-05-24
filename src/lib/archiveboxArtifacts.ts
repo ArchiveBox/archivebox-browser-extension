@@ -12,6 +12,7 @@ import type { Snapshot } from './types';
 
 const extensionArtifactSource = 'archivebox-browser-extension';
 const snapshotSyncLocks = new Map<string, Promise<{ opfs: boolean }>>();
+const emptySyncResult = { opfs: false };
 
 type SnapshotArtifactGroup = {
   plugin: string;
@@ -112,10 +113,10 @@ async function uploadSnapshotArtifactGroup(snapshot: Snapshot, group: SnapshotAr
 export async function uploadSnapshotCaptureArtifactsToArchiveBox(snapshot: Snapshot): Promise<{
   opfs: boolean;
 }> {
-  const existingSync = snapshotSyncLocks.get(snapshot.id);
-  if (existingSync) return existingSync;
-
-  const sync = uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked(snapshot)
+  const previousSync = snapshotSyncLocks.get(snapshot.id) || Promise.resolve(emptySyncResult);
+  const sync = previousSync
+    .catch(() => emptySyncResult)
+    .then(() => uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked(snapshot))
     .finally(() => {
       if (snapshotSyncLocks.get(snapshot.id) === sync) {
         snapshotSyncLocks.delete(snapshot.id);
