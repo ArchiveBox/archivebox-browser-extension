@@ -1,0 +1,21 @@
+tests/popup.test.ts
+  s_463e8607ca6021::t_34b3247ba6d328 705-722
+src/lib/archiveboxArtifacts.ts
+  s_463e8607ca6021::t_9f08172294197a 15,116-119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "ea15b785bb810a553491b826598d7d7fb4cafa27",
+  "prompts": {},
+  "sessions": {
+    "s_463e8607ca6021": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e39eb-05c2-7253-a218-467aed1abfef",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
