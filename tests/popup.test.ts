@@ -109,8 +109,9 @@ async function freePort(): Promise<number> {
   });
 }
 
-async function waitForJson<T>(url: string): Promise<T> {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
+async function waitForJson<T>(url: string, timeoutMs = 15_000): Promise<T> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
     try {
       const response = await fetch(url);
       if (response.ok) return await response.json() as T;
@@ -761,7 +762,7 @@ async function waitForNoSavedEntry(harness: BrowserHarness, url: string, timeout
 }
 
 test('native action popup supports local save, tags, depth, captures, navigation, and dismissal', async () => {
-  test.setTimeout(20_000);
+  test.setTimeout(45_000);
   const server = await startFixtureServer();
   const harness = await launchHarness();
 

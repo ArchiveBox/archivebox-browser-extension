@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { hasServerHostPermission, requestServerHostPermission, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
-import { uploadSnapshotCaptureArtifactsToArchiveBox, uploadSnapshotMhtmlToArchiveBox, uploadSnapshotScreenshotToArchiveBox } from '@/src/lib/archiveboxArtifacts';
+import { hasServerHostPermission, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
+import { uploadSnapshotCaptureArtifactsToArchiveBox, uploadSnapshotMhtmlToArchiveBox, uploadSnapshotScreenshotToArchiveBox, uploadSnapshotSingleFileToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { assertLocalCaptureStorageAvailable } from '@/src/lib/screenshotStorage';
@@ -170,7 +170,6 @@ function ArchiveBoxOverlay() {
     kind: 'screenshot' | 'mhtml' | 'singlefile',
     artifactLabel: string,
   ): Promise<void> {
-    if (kind === 'singlefile') return;
     const snapshots = await getSnapshots();
     const latestSnapshot = snapshots.find((item) => item.id === snapshotId);
     if (!latestSnapshot?.archiveboxCrawlId) return;
@@ -180,8 +179,10 @@ function ArchiveBoxOverlay() {
       setStatus(t("Uploading $1 to ArchiveBox Server...", artifactLabel));
       if (kind === 'screenshot') {
         await uploadSnapshotScreenshotToArchiveBox(latestSnapshot);
-      } else {
+      } else if (kind === 'mhtml') {
         await uploadSnapshotMhtmlToArchiveBox(latestSnapshot);
+      } else {
+        await uploadSnapshotSingleFileToArchiveBox(latestSnapshot);
       }
       setOk(true);
       setRemoteStatus('archived');
@@ -277,7 +278,13 @@ function ArchiveBoxOverlay() {
     }
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'archivebox_add',
-      body: { urls: [url], tags, depth: archiveDepth, snapshotIds: localSnapshotId ? [localSnapshotId] : [] },
+      body: {
+        urls: [url],
+        tags,
+        depth: archiveDepth,
+        snapshotIds: localSnapshotId ? [localSnapshotId] : [],
+        titles: snapshot?.title ? [snapshot.title] : [],
+      },
     });
     if (response.ok) {
       const archiveboxSnapshotId = response.archivebox?.snapshot_ids?.[0];
@@ -299,6 +306,10 @@ function ArchiveBoxOverlay() {
         setSnapshot((current) => current?.id === localSnapshotId
           ? { ...current, archiveboxCrawlId }
           : current);
+        const syncedSnapshot = nextSnapshots.find((item) => item.id === localSnapshotId);
+        if (syncedSnapshot) {
+          await syncArchiveBoxSnapshotMetadata(syncedSnapshot);
+        }
       }
       setOk(true);
       setRemoteStatus('archived');

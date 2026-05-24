@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { strToU8, zipSync } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { addToArchiveBox, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
+import { addToArchiveBox, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
 import { defaultSingleFileExtensionId, defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { loadBookmarkSnapshots, loadHistorySnapshots } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
@@ -1582,7 +1582,7 @@ function OptionsMain() {
         [snapshot.id]: { kind: 'warning', text: t("Syncing...") },
       }));
       try {
-        const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id]);
+        const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id], [snapshot.title]);
         const archiveboxSnapshotId = archivebox?.snapshot_ids?.[0];
         const archiveboxCrawlId = archivebox?.crawl_id;
         if (archiveboxSnapshotId && archiveboxSnapshotId !== snapshot.id) {
@@ -1593,6 +1593,10 @@ function OptionsMain() {
             ? { ...item, archiveboxCrawlId }
             : item);
           await persistSnapshots(nextSnapshots);
+          const syncedSnapshot = nextSnapshots.find((item) => item.id === snapshot.id);
+          if (syncedSnapshot) {
+            await syncArchiveBoxSnapshotMetadata(syncedSnapshot);
+          }
         }
         setSyncStatuses((current) => ({
           ...current,

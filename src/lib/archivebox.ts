@@ -1,6 +1,14 @@
 import { getConfig, getArchiveBoxServerUrl } from './storage';
 import { t } from './i18n';
-import type { ArchiveBoxAddResult, ArchiveDepth } from './types';
+import type { ArchiveBoxAddResult, ArchiveDepth, Snapshot } from './types';
+
+export type ArchiveResultUploadFile = {
+  blob: Blob;
+  outputPath: string;
+  mimeType?: string;
+};
+
+export const archiveResultUploadChunkSize = 32 * 1024 * 1024;
 
 function requireHttpServerUrl(serverUrl: string): void {
   try {
@@ -83,6 +91,7 @@ export async function addToArchiveBox(
   update = false,
   update_all = false,
   snapshotIds: string[] = [],
+  titles: string[] = [],
 ): Promise<ArchiveBoxAddResult | null> {
   const formattedTags = tags.join(',');
   const archiveboxServerUrl = await getConfiguredServerBaseUrl();
@@ -102,6 +111,7 @@ export async function addToArchiveBox(
         formattedTags,
         depth,
         snapshot_ids: snapshotIds,
+        titles,
         update,
         update_all,
       }),
@@ -131,6 +141,34 @@ export async function addToArchiveBox(
   }
 
   return null;
+}
+
+export async function syncArchiveBoxSnapshotMetadata(snapshot: Snapshot): Promise<void> {
+  const archiveboxServerUrl = await getConfiguredServerBaseUrl();
+  const { archivebox_api_key } = await getConfig();
+  if (!archivebox_api_key) {
+    throw new Error(t("API key required"));
+  }
+
+  await ensureServerHostPermission(archiveboxServerUrl);
+
+  const response = await fetch(`${archiveboxServerUrl}/api/v1/core/snapshots`, {
+    headers: apiHeaders(archivebox_api_key),
+    method: 'POST',
+    credentials: 'include',
+    mode: 'cors',
+    body: JSON.stringify({
+      url: snapshot.url,
+      crawl_id: snapshot.archiveboxCrawlId || null,
+      title: snapshot.title || '',
+      tags: snapshot.tags || [],
+      depth: snapshot.depth ?? 0,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
 }
 
 export async function removeFromArchiveBox(url: string): Promise<void> {
@@ -184,17 +222,14 @@ export async function uploadSnapshotArchiveResult(
 export async function uploadSnapshotArchiveResultFiles(
   snapshotId: string,
   plugin: 'screenshot' | 'dom' | string,
-  files: Array<{
-    blob: Blob;
-    outputPath: string;
-    mimeType?: string;
-  }>,
+  files: ArchiveResultUploadFile[],
   options: {
     outputStr?: string;
     outputJson?: Record<string, unknown>;
+    status?: string;
   } = {},
-): Promise<void> {
-  if (files.length === 0) return;
+): Promise<{ id?: string }> {
+  if (files.length === 0) return {};
   const archiveboxServerUrl = await getConfiguredServerBaseUrl();
   const { archivebox_api_key } = await getConfig();
   if (!archivebox_api_key) {
@@ -212,6 +247,9 @@ export async function uploadSnapshotArchiveResultFiles(
   if (options.outputJson) {
     body.append('output_json', JSON.stringify(options.outputJson));
   }
+  if (options.status) {
+    body.append('status', options.status);
+  }
   for (const file of files) {
     body.append('files', file.blob, file.outputPath);
     body.append('output_paths', file.outputPath);
@@ -228,6 +266,119 @@ export async function uploadSnapshotArchiveResultFiles(
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+  return await response.json().catch(() => ({})) as { id?: string };
+}
+
+export async function addFilesToSnapshotArchiveResult(
+  archiveResultId: string,
+  files: ArchiveResultUploadFile[],
+  options: {
+    outputStr?: string;
+    outputJson?: Record<string, unknown>;
+    status?: string;
+  } = {},
+): Promise<void> {
+  if (files.length === 0) return;
+  const archiveboxServerUrl = await getConfiguredServerBaseUrl();
+  const { archivebox_api_key } = await getConfig();
+  if (!archivebox_api_key) {
+    throw new Error(t("API key required"));
+  }
+
+  await ensureServerHostPermission(archiveboxServerUrl);
+
+  const body = new FormData();
+  if (options.outputStr) {
+    body.append('output_str', options.outputStr);
+  }
+  if (options.outputJson) {
+    body.append('output_json', JSON.stringify(options.outputJson));
+  }
+  if (options.status) {
+    body.append('status', options.status);
+  }
+  for (const file of files) {
+    body.append('files', file.blob, file.outputPath);
+    body.append('output_paths', file.outputPath);
+    body.append('mime_types', file.mimeType || file.blob.type || 'application/octet-stream');
+  }
+
+  const response = await fetch(`${archiveboxServerUrl}/api/v1/core/archiveresult/${archiveResultId}`, {
+    headers: apiAuthHeaders(archivebox_api_key),
+    method: 'PATCH',
+    credentials: 'include',
+    mode: 'cors',
+    body,
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+}
+
+export async function addFileToSnapshotArchiveResultChunked(
+  archiveResultId: string,
+  file: ArchiveResultUploadFile,
+  options: {
+    outputStr?: string;
+    outputJson?: Record<string, unknown>;
+    chunkSize?: number;
+    interimStatus?: string;
+    finalStatus?: string;
+  } = {},
+): Promise<void> {
+  const archiveboxServerUrl = await getConfiguredServerBaseUrl();
+  const { archivebox_api_key } = await getConfig();
+  if (!archivebox_api_key) {
+    throw new Error(t("API key required"));
+  }
+
+  await ensureServerHostPermission(archiveboxServerUrl);
+
+  const chunkSize = Math.max(1024 * 1024, Math.floor(options.chunkSize || archiveResultUploadChunkSize));
+  const totalSize = file.blob.size;
+  const chunkCount = Math.max(1, Math.ceil(totalSize / chunkSize));
+  const mimeType = file.mimeType || file.blob.type || 'application/octet-stream';
+
+  for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
+    const chunkOffset = chunkIndex * chunkSize;
+    const chunkEnd = Math.min(totalSize, chunkOffset + chunkSize);
+    const chunk = file.blob.slice(chunkOffset, chunkEnd, mimeType);
+    const body = new FormData();
+    const finalChunk = chunkIndex + 1 === chunkCount;
+
+    body.append('files', chunk, `${file.outputPath}.part-${String(chunkIndex).padStart(6, '0')}`);
+    body.append('chunk_output_path', file.outputPath);
+    body.append('chunk_index', String(chunkIndex));
+    body.append('chunk_count', String(chunkCount));
+    body.append('chunk_offset', String(chunkOffset));
+    body.append('chunk_total_size', String(totalSize));
+    body.append('mime_type', mimeType);
+    body.append('status', finalChunk ? (options.finalStatus || 'succeeded') : (options.interimStatus || 'started'));
+    if (options.outputStr) {
+      body.append('output_str', options.outputStr);
+    }
+    if (options.outputJson) {
+      body.append('output_json', JSON.stringify({
+        ...options.outputJson,
+        upload_strategy: 'chunked',
+        chunk_size: chunkSize,
+        chunk_count: chunkCount,
+      }));
+    }
+
+    const response = await fetch(`${archiveboxServerUrl}/api/v1/core/archiveresult/${archiveResultId}`, {
+      headers: apiAuthHeaders(archivebox_api_key),
+      method: 'PATCH',
+      credentials: 'include',
+      mode: 'cors',
+      body,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
   }
 }
 

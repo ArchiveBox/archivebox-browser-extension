@@ -111,6 +111,7 @@ export type ArchiveboxAddMessage = {
     tags: string[];
     depth?: ArchiveDepth;
     snapshotIds?: string[];
+    titles?: string[];
   };
 };
 

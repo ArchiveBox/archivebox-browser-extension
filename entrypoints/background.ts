@@ -1,4 +1,4 @@
-import { addToArchiveBox, archiveBoxSnapshotUrl, removeFromArchiveBox, testApiKey, testServerUrl } from '@/src/lib/archivebox';
+import { addToArchiveBox, archiveBoxSnapshotUrl, removeFromArchiveBox, syncArchiveBoxSnapshotMetadata, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
@@ -740,9 +740,14 @@ async function markSnapshotSynced(snapshotId: string, archivebox: ArchiveBoxAddR
   if (!archivebox?.crawl_id) return;
 
   const snapshots = await getSnapshots();
-  await setSnapshots(snapshots.map((snapshot) => snapshot.id === snapshotId
+  const nextSnapshots = snapshots.map((snapshot) => snapshot.id === snapshotId
     ? { ...snapshot, archiveboxCrawlId: archivebox.crawl_id }
-    : snapshot));
+    : snapshot);
+  await setSnapshots(nextSnapshots);
+  const snapshot = nextSnapshots.find((item) => item.id === snapshotId);
+  if (snapshot) {
+    await syncArchiveBoxSnapshotMetadata(snapshot);
+  }
 }
 
 async function getSnapshotById(snapshotId: string): Promise<Snapshot | null> {
@@ -781,7 +786,7 @@ async function autoArchive(
   });
 
   try {
-    const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id]);
+    const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id], [snapshot.title]);
     await markSnapshotSynced(snapshot.id, archivebox);
     await capturePromise;
     await uploadSyncedSnapshotArtifacts(snapshot.id);
@@ -809,7 +814,7 @@ async function saveTab(tab?: Browser.tabs.Tab): Promise<void> {
   try {
     const { snapshot, created } = await ensureSnapshotForTab(tab);
     await captureConfiguredSnapshotArtifacts(tab, snapshot, created);
-    const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id]);
+    const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id], [snapshot.title]);
     await markSnapshotSynced(snapshot.id, archivebox);
     await uploadSyncedSnapshotArtifacts(snapshot.id);
   } catch (error) {
@@ -867,7 +872,7 @@ export default defineBackground(() => {
   ): Promise<RuntimeResponse> | RuntimeResponse => {
     switch (message.type) {
       case 'archivebox_add':
-        return addToArchiveBox(message.body.urls, message.body.tags, message.body.depth ?? 0, false, false, message.body.snapshotIds || [])
+        return addToArchiveBox(message.body.urls, message.body.tags, message.body.depth ?? 0, false, false, message.body.snapshotIds || [], message.body.titles || [])
           .then((archivebox) => ({ ok: true, archivebox }))
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));
 
