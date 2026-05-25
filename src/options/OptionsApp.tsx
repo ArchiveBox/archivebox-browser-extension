@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { strToU8, zipSync } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { addToArchiveBox, archiveBoxServerUrlMatches, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
+import { addToArchiveBox, archiveBoxServerUrlMatches, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { defaultSingleFileExtensionId, defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { loadBookmarkSnapshots, loadHistorySnapshots } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
@@ -1165,13 +1165,12 @@ function OptionsMain() {
       return;
     }
     setServerStatus({ kind: 'idle', text: t("Testing ArchiveBox server...") });
-    const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
-      type: 'test_server_url',
-      serverUrl: archiveboxServerBaseUrl,
-    });
-    setServerStatus(response.ok
-      ? { kind: 'success', text: t("Server is reachable") }
-      : { kind: 'error', text: response.error || t("Server test failed") });
+    try {
+      await testServerUrl(archiveboxServerBaseUrl);
+      setServerStatus({ kind: 'success', text: t("Server is reachable") });
+    } catch (error) {
+      setServerStatus({ kind: 'error', text: (error as Error).message || t("Server test failed") });
+    }
   }
 
   async function testApiKeyValue() {
@@ -1187,14 +1186,12 @@ function OptionsMain() {
       return;
     }
     setApiStatus({ kind: 'idle', text: t("Testing ArchiveBox API key...") });
-    const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
-      type: 'test_api_key',
-      serverUrl: archiveboxServerBaseUrl,
-      apiKey: config.archivebox_api_key,
-    });
-    setApiStatus(response.ok
-      ? { kind: 'success', text: t("API key is valid: user_id = $1", response.user_id || '') }
-      : { kind: 'error', text: response.error || t("API key test failed") });
+    try {
+      const userId = await testApiKey(archiveboxServerBaseUrl, config.archivebox_api_key);
+      setApiStatus({ kind: 'success', text: t("API key is valid: user_id = $1", userId || '') });
+    } catch (error) {
+      setApiStatus({ kind: 'error', text: (error as Error).message || t("API key test failed") });
+    }
   }
 
   async function testUrlPatterns() {

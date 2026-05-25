@@ -28,6 +28,7 @@ export type ArchiveResultUploadResponse = {
 export const archiveResultUploadChunkSize = 32 * 1024 * 1024;
 const archiveResultCreateRetryDelayMs = 500;
 const archiveResultCreateMaxAttempts = 24;
+const serverTestTimeoutMs = 10_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
@@ -64,6 +65,21 @@ function apiAuthHeaders(apiKey: string): Record<string, string> {
 function serverBaseUrl(serverUrl: string): string {
   requireHttpServerUrl(serverUrl);
   return new URL(serverUrl).origin;
+}
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = serverTestTimeoutMs): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(t("Server request timed out after $1 seconds", Math.round(timeoutMs / 1000)));
+    }
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
 }
 
 export async function isConfiguredArchiveBoxUrl(targetUrl: string): Promise<boolean> {
@@ -492,7 +508,7 @@ export async function testServerUrl(serverUrl: string): Promise<void> {
   const archiveboxServerUrl = serverBaseUrl(serverUrl);
   await ensureServerHostPermission(archiveboxServerUrl);
 
-  let response = await fetch(`${archiveboxServerUrl}/api/`, {
+  let response = await fetchWithTimeout(`${archiveboxServerUrl}/api/`, {
     method: 'GET',
     mode: 'cors',
   });
@@ -500,7 +516,7 @@ export async function testServerUrl(serverUrl: string): Promise<void> {
   if (response.ok) return;
 
   if (response.status === 404) {
-    response = await fetch(archiveboxServerUrl, {
+    response = await fetchWithTimeout(archiveboxServerUrl, {
       method: 'GET',
       mode: 'cors',
     });
@@ -517,7 +533,7 @@ export async function testApiKey(serverUrl: string, apiKey: string): Promise<str
     throw new Error(t("API key required"));
   }
 
-  const response = await fetch(`${archiveboxServerUrl}/api/v1/auth/check_api_token`, {
+  const response = await fetchWithTimeout(`${archiveboxServerUrl}/api/v1/auth/check_api_token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
