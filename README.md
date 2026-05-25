@@ -9,9 +9,9 @@ This is a browser extension that lets you send individual browser tabs or all UR
 ## Get the Extension
 
 - <a href="https://chrome.google.com/webstore/detail/habonpimjphpdnmcfkaockjnffodikoj"><img src="https://github.com/user-attachments/assets/4ee7d4fb-e676-4a75-973d-ac029f265b86" height="30px" align="top"/> Chrome / Brave / Other Chromium-based browsers</a>
-- <img src="https://github.com/user-attachments/assets/4ee7d4fb-e676-4a75-973d-ac029f265b86" height="30px" align="top"/> Microsoft Edge *(supported; Edge Add-ons packaging is built from the same WXT codebase)*
 - <a href="https://addons.mozilla.org/firefox/addon/archivebox-exporter/"><img src="https://github.com/user-attachments/assets/8e2a969d-68d6-4bd6-8b10-d8b5a36757ec" height="30px" align="top"/> Firefox / Waterfox / Tor Browser / Other Firefox-based browsers</a>
-- <img src="https://github.com/user-attachments/assets/c20f8f8a-01f2-427b-ac75-ffddcb62953f" height="30px" align="top"/> Safari / iOS Safari *(supported; requires Safari Web Extension packaging for distribution)*
+- <a href="https://microsoftedge.microsoft.com/addons/detail/archivebox/dmlljpjhnfjgchbkcgheebcffocgooeh"><img src="https://github.com/user-attachments/assets/4ee7d4fb-e676-4a75-973d-ac029f265b86" height="30px" align="top"/> Microsoft Edge</a>
+- <img src="https://github.com/user-attachments/assets/c20f8f8a-01f2-427b-ac75-ffddcb62953f" height="30px" align="top"/> Safari / iOS Safari *(supported; requires manual install)*
 
 ![configuring-server](https://github.com/user-attachments/assets/308c4462-ca09-434f-89a6-3f6bac404be2)
 ![url-submission](https://github.com/user-attachments/assets/cfc8f670-562a-4c17-a533-4b1b0560c5c8)
