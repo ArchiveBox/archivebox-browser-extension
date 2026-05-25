@@ -758,7 +758,7 @@ async function getSnapshotById(snapshotId: string): Promise<Snapshot | null> {
 
 async function uploadSyncedSnapshotArtifacts(snapshotId: string): Promise<void> {
   const snapshot = await getSnapshotById(snapshotId);
-  if (!snapshot?.archiveboxCrawlId) return;
+  if (!snapshot) return;
   await uploadSnapshotCaptureArtifactsToArchiveBox(snapshot);
 }
 

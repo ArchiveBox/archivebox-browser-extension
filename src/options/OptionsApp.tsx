@@ -19,6 +19,7 @@ import {
 import { strToU8, zipSync } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { addToArchiveBox, archiveBoxServerUrlMatches, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags, testApiKey, testServerUrl } from '@/src/lib/archivebox';
+import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { defaultSingleFileExtensionId, defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { loadBookmarkSnapshots, loadHistorySnapshots } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
@@ -1594,6 +1595,7 @@ function OptionsMain() {
         const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id], [snapshot.title]);
         const archiveboxSnapshotId = archivebox?.snapshot_ids?.[0];
         const archiveboxCrawlId = archivebox?.crawl_id;
+        let snapshotForUpload = snapshot;
         if (archiveboxSnapshotId && archiveboxSnapshotId !== snapshot.id) {
           throw new Error(t("ArchiveBox returned a different snapshot ID than the extension sent."));
         }
@@ -1604,8 +1606,16 @@ function OptionsMain() {
           await persistSnapshots(nextSnapshots);
           const syncedSnapshot = nextSnapshots.find((item) => item.id === snapshot.id);
           if (syncedSnapshot) {
-            await syncArchiveBoxSnapshotMetadata(syncedSnapshot);
+            snapshotForUpload = syncedSnapshot;
+            if (config.archivebox_api_key) {
+              await syncArchiveBoxSnapshotMetadata(syncedSnapshot);
+            }
           }
+        } else if (config.archivebox_api_key) {
+          await syncArchiveBoxSnapshotMetadata(snapshot);
+        }
+        if (config.archivebox_api_key) {
+          await uploadSnapshotCaptureArtifactsToArchiveBox(snapshotForUpload);
         }
         setSyncStatuses((current) => ({
           ...current,

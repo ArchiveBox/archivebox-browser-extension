@@ -1,12 +1,13 @@
 import {
+  addFilesToSnapshotArchiveResult,
   addFileToSnapshotArchiveResultChunked,
+  archiveResultUploadChunkSize,
   uploadSnapshotArchiveResultFiles,
   type ArchiveResultOutputFile,
   type ArchiveResultUploadFile,
 } from './archivebox';
 import {
   readSnapshotOpfsFiles,
-  snapshotDirectoryPath,
 } from './screenshotStorage';
 import type { Snapshot } from './types';
 
@@ -29,11 +30,12 @@ type OpfsFile = {
 };
 
 function getOpfsFilesForSnapshot(snapshot: Snapshot, files: Array<{ path: string; blob: Blob }>): OpfsFile[] {
-  const snapshotDirectory = `${snapshotDirectoryPath(snapshot)}/`;
+  const snapshotIdSegment = snapshot.id.toLowerCase();
   return files.flatMap((file) => {
-    if (!file.path.startsWith(snapshotDirectory)) return [];
-    const relativePath = file.path.slice(snapshotDirectory.length);
-    const [directory, ...outputSegments] = relativePath.split('/');
+    const segments = file.path.split('/');
+    const snapshotIdIndex = segments.findIndex((segment) => segment.toLowerCase() === snapshotIdSegment);
+    if (snapshotIdIndex < 0) return [];
+    const [directory, ...outputSegments] = segments.slice(snapshotIdIndex + 1);
     if (!directory || outputSegments.length === 0) return [];
     return [{
       path: file.path,
@@ -99,11 +101,22 @@ async function uploadSnapshotArtifactGroup(snapshot: Snapshot, group: SnapshotAr
   ));
   if (!filesToUpload.length) return false;
 
-  for (const [index, file] of filesToUpload.entries()) {
+  const directFiles = filesToUpload.filter((file) => file.blob.size <= archiveResultUploadChunkSize);
+  const chunkedFiles = filesToUpload.filter((file) => file.blob.size > archiveResultUploadChunkSize);
+
+  if (directFiles.length) {
+    await addFilesToSnapshotArchiveResult(archiveResult.id, directFiles, {
+      outputStr: group.outputStr,
+      outputJson: group.outputJson,
+      status: chunkedFiles.length ? 'started' : 'succeeded',
+    });
+  }
+
+  for (const [index, file] of chunkedFiles.entries()) {
     await addFileToSnapshotArchiveResultChunked(archiveResult.id, file, {
       outputStr: group.outputStr,
       outputJson: group.outputJson,
-      finalStatus: index + 1 === filesToUpload.length ? 'succeeded' : 'started',
+      finalStatus: index + 1 === chunkedFiles.length ? 'succeeded' : 'started',
     });
   }
 
@@ -133,7 +146,8 @@ async function uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked(snapshot: Snap
   const opfsFiles = getOpfsFilesForSnapshot(snapshot, await readSnapshotOpfsFiles(snapshot));
 
   for (const group of buildSnapshotArtifactGroups(snapshot, opfsFiles)) {
-    uploadedAny ||= await uploadSnapshotArtifactGroup(snapshot, group);
+    const groupUploaded = await uploadSnapshotArtifactGroup(snapshot, group);
+    uploadedAny = uploadedAny || groupUploaded;
   }
 
   return {

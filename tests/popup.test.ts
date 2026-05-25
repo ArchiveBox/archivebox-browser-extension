@@ -772,6 +772,49 @@ async function savedEntries(harness: BrowserHarness): Promise<Array<Record<strin
   return (await getExtensionStorage<Array<Record<string, unknown>>>(harness, 'entries')) || [];
 }
 
+async function writeOpfsFile(harness: BrowserHarness, filePath: string, content: string, type: string): Promise<void> {
+  await harness.storagePage.evaluate(async ({ path: opfsPath, text, mimeType }) => {
+    const root = await navigator.storage.getDirectory();
+    const segments = opfsPath.split('/');
+    const fileName = segments.pop();
+    if (!fileName) throw new Error('Invalid OPFS test path');
+    let directory = root;
+    for (const segment of segments) {
+      directory = await directory.getDirectoryHandle(segment, { create: true });
+    }
+    const file = await directory.getFileHandle(fileName, { create: true });
+    const writable = await file.createWritable();
+    await writable.write(new Blob([text], { type: mimeType }));
+    await writable.close();
+  }, {
+    path: filePath,
+    text: content,
+    mimeType: type,
+  });
+}
+
+async function listOpfsFiles(harness: BrowserHarness, directoryPath: string): Promise<string[]> {
+  return await harness.storagePage.evaluate(async (pathPrefix) => {
+    const root = await navigator.storage.getDirectory();
+    let directory = root;
+    for (const segment of pathPrefix.split('/')) {
+      directory = await directory.getDirectoryHandle(segment);
+    }
+    const files: string[] = [];
+    async function walk(dir: FileSystemDirectoryHandle, prefix: string): Promise<void> {
+      for await (const [name, handle] of (dir as FileSystemDirectoryHandle & {
+        entries(): AsyncIterableIterator<[string, FileSystemDirectoryHandle | FileSystemFileHandle]>;
+      }).entries()) {
+        const nextPath = `${prefix}/${name}`;
+        if (handle.kind === 'directory') await walk(handle as FileSystemDirectoryHandle, nextPath);
+        else files.push(nextPath);
+      }
+    }
+    await walk(directory, pathPrefix);
+    return files;
+  }, directoryPath);
+}
+
 async function waitForSavedEntry(
   harness: BrowserHarness,
   url: string,
@@ -882,6 +925,110 @@ test('saved URL bulk delete is local-first when server remove fails', async () =
     await expect(harness.storagePage.locator('text=0 selected')).toBeVisible();
     await expect(harness.storagePage.locator('.status.warning')).toContainText('Failed to delete 1 from server');
     expect(await savedEntries(harness)).toEqual([]);
+  } finally {
+    await closeHarness(harness);
+  }
+});
+
+test('saved URL sync uploads local OPFS artifacts', async () => {
+  const harness = await launchHarness();
+  const snapshotId = '019e77ba-63c2-7000-9000-000000000002';
+  const snapshotUrl = 'https://upload-artifacts.example/';
+  const screenshotPath = `snapshots/20260103/upload-artifacts.example/${snapshotId}/chrome_extension_screenshot/screenshot.png`;
+  const mhtmlPath = `snapshots/20260103/upload-artifacts.example/${snapshotId}/chrome_mhtml/snapshot.mhtml`;
+  const archiveResultBodies: string[] = [];
+  const patchedBodies: string[] = [];
+
+  try {
+    await setExtensionStorage(harness, {
+      entries: [{
+        id: snapshotId,
+        url: snapshotUrl,
+        timestamp: new Date('2026-01-03T12:00:00.000Z').toISOString(),
+        tags: ['local-artifact'],
+        title: 'Upload artifacts',
+        favIconUrl: null,
+        depth: 1,
+        screenshot: {
+          storage: 'opfs',
+          path: screenshotPath,
+          parts: [{ path: screenshotPath, x: 0, y: 0, width: 1, height: 1 }],
+          mimeType: 'image/png',
+          capturedAt: new Date('2026-01-03T00:00:01.000Z').toISOString(),
+          width: 1,
+          height: 1,
+        },
+        mhtml: {
+          storage: 'opfs',
+          path: mhtmlPath,
+          mimeType: 'multipart/related',
+          capturedAt: new Date('2026-01-03T00:00:02.000Z').toISOString(),
+          size: 12,
+        },
+      }],
+      archivebox_server_url: 'https://api.example.com',
+      archivebox_api_key: 'test-key',
+    });
+    await writeOpfsFile(harness, screenshotPath, 'png-bytes', 'image/png');
+    await writeOpfsFile(harness, mhtmlPath, 'mhtml-bytes', 'multipart/related');
+    expect(await listOpfsFiles(harness, `snapshots/20260103/upload-artifacts.example/${snapshotId}`)).toEqual(expect.arrayContaining([
+      screenshotPath,
+      mhtmlPath,
+    ]));
+
+    await harness.storagePage.route('https://api.example.com/api/v1/cli/add', async (route) => {
+      const body = route.request().postDataJSON() as {
+        depth?: number;
+        snapshot_ids?: string[];
+        titles?: string[];
+      };
+      expect(body.depth).toBe(1);
+      expect(body.snapshot_ids).toEqual([snapshotId]);
+      expect(body.titles).toEqual(['Upload artifacts']);
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          result: {
+            snapshot_ids: [snapshotId],
+            crawl_id: 'crawl-id',
+          },
+        }),
+      });
+    });
+    await harness.storagePage.route('https://api.example.com/api/v1/core/snapshots', (route) => {
+      route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+    await harness.storagePage.route('https://api.example.com/api/v1/core/archiveresults', async (route) => {
+      const body = route.request().postDataBuffer()?.toString('latin1') || '';
+      archiveResultBodies.push(body);
+      const plugin = body.includes('chrome_mhtml') ? 'chrome_mhtml' : 'chrome_extension_screenshot';
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: `${plugin}-result`, output_files: {} }),
+      });
+    });
+    await harness.storagePage.route(/https:\/\/api\.example\.com\/api\/v1\/core\/archiveresult\/.+/, async (route) => {
+      patchedBodies.push(route.request().postDataBuffer()?.toString('latin1') || '');
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await harness.storagePage.reload({ waitUntil: 'domcontentloaded' });
+    expect(await listOpfsFiles(harness, `snapshots/20260103/upload-artifacts.example/${snapshotId}`)).toEqual(expect.arrayContaining([
+      screenshotPath,
+      mhtmlPath,
+    ]));
+    await expect(harness.storagePage.locator('tbody tr')).toHaveCount(1);
+    await harness.storagePage.locator('tbody input[type="checkbox"]').check();
+    await harness.storagePage.getByRole('button', { name: 'Sync' }).click();
+    await expect(harness.storagePage.locator('.status.success')).toContainText('Finished syncing 1 snapshots');
+
+    expect(archiveResultBodies.length).toBeGreaterThan(0);
+    expect(patchedBodies.length).toBeGreaterThan(0);
+    expect(patchedBodies.some((body) => body.includes('screenshot.png'))).toBe(true);
+    expect(patchedBodies.some((body) => body.includes('snapshot.mhtml'))).toBe(true);
+    expect(patchedBodies.every((body) => !body.includes('.part-000000'))).toBe(true);
   } finally {
     await closeHarness(harness);
   }

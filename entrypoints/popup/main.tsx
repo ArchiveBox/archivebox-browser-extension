@@ -174,7 +174,7 @@ function ArchiveBoxOverlay() {
   ): Promise<void> {
     const snapshots = await getSnapshots();
     const latestSnapshot = snapshots.find((item) => item.id === snapshotId);
-    if (!latestSnapshot?.archiveboxCrawlId) return;
+    if (!latestSnapshot || (remoteStatus !== 'archived' && !latestSnapshot.archiveboxCrawlId)) return;
 
     try {
       setOk(null);
@@ -196,7 +196,7 @@ function ArchiveBoxOverlay() {
   async function uploadCurrentArtifactsIfArchived(snapshotId: string): Promise<void> {
     const snapshots = await getSnapshots();
     const latestSnapshot = snapshots.find((item) => item.id === snapshotId);
-    if (!latestSnapshot?.archiveboxCrawlId) return;
+    if (!latestSnapshot) return;
 
     try {
       await uploadSnapshotCaptureArtifactsToArchiveBox(latestSnapshot);

@@ -454,14 +454,50 @@ async function listDirectoryFiles(
   return files;
 }
 
-export async function readSnapshotOpfsFiles(snapshot: Snapshot): Promise<Array<{ path: string; blob: Blob }>> {
-  const path = snapshotDirectoryPath(snapshot);
-  try {
-    const directory = await getDirectory(path.split('/'), false);
-    return listDirectoryFiles(directory, path);
-  } catch {
-    return [];
+async function listSnapshotIdDirectoryFiles(
+  directory: FileSystemDirectoryHandle,
+  pathPrefix: string,
+  snapshotIdSegment: string,
+): Promise<Array<{ path: string; blob: Blob }>> {
+  const entries = (directory as FileSystemDirectoryHandleWithEntries).entries;
+  if (typeof entries !== 'function') return [];
+
+  const files: Array<{ path: string; blob: Blob }> = [];
+  for await (const [name, handle] of entries.call(directory as FileSystemDirectoryHandleWithEntries)) {
+    if (handle.kind !== 'directory') continue;
+    const path = `${pathPrefix}/${name}`;
+    if (name.toLowerCase() === snapshotIdSegment) {
+      files.push(...await listDirectoryFiles(handle, path));
+      continue;
+    }
+    files.push(...await listSnapshotIdDirectoryFiles(handle, path, snapshotIdSegment));
   }
+  return files;
+}
+
+export async function readSnapshotOpfsFiles(snapshot: Snapshot): Promise<Array<{ path: string; blob: Blob }>> {
+  const filesByPath = new Map<string, { path: string; blob: Blob }>();
+  const expectedPath = snapshotDirectoryPath(snapshot);
+  try {
+    const directory = await getDirectory(expectedPath.split('/'), false);
+    for (const file of await listDirectoryFiles(directory, expectedPath)) {
+      filesByPath.set(file.path, file);
+    }
+  } catch {
+    // Fall through to the UUID scan below.
+  }
+
+  try {
+    const snapshotsDirectory = await getDirectory(['snapshots'], false);
+    const snapshotIdSegment = pathSafeSegment(snapshot.id);
+    for (const file of await listSnapshotIdDirectoryFiles(snapshotsDirectory, 'snapshots', snapshotIdSegment)) {
+      filesByPath.set(file.path, file);
+    }
+  } catch {
+    // No OPFS snapshots directory exists yet.
+  }
+
+  return [...filesByPath.values()];
 }
 
 export async function readSnapshotMhtmlBlob(mhtml?: SnapshotMhtml): Promise<Blob | null> {
