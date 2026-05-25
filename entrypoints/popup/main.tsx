@@ -107,6 +107,7 @@ function ArchiveBoxOverlay() {
   const [statusLink, setStatusLink] = useState<{ href: string; label: string; status: string } | null>(null);
   const [ok, setOk] = useState<boolean | null>(null);
   const [depth, setDepth] = useState<ArchiveDepth>(0);
+  const [archiveboxServerUrl, setArchiveboxServerUrl] = useState('');
   const [localStatus, setLocalStatus] = useState<LocalArchiveStatus>('unsaved');
   const [remoteStatus, setRemoteStatus] = useState<RemoteArchiveStatus>('not_archived');
   const [remoteDetail, setRemoteDetail] = useState('');
@@ -143,6 +144,8 @@ function ArchiveBoxOverlay() {
   }, []);
 
   async function refresh() {
+    const { archivebox_server_url } = await getConfig();
+    setArchiveboxServerUrl(archivebox_server_url);
     const nextActivePage = activePage || await getActivePage();
     setActivePage(nextActivePage);
     const { currentSnapshot, snapshots } = await getCurrentSnapshot(nextActivePage);
@@ -152,18 +155,16 @@ function ArchiveBoxOverlay() {
     setAllTags([...new Set([...snapshots].reverse().flatMap((item) => item.tags))]);
   }
 
-  function waitForPermissionExplanation(): Promise<void> {
-    return new Promise((resolve) => window.setTimeout(resolve, 30));
-  }
-
   async function ensureConfiguredServerPermission(requestPermission: boolean): Promise<void> {
-    const { archivebox_server_url } = await getConfig();
-    if (!archivebox_server_url) throw new Error(t("Server not configured"));
-    if (await hasServerHostPermission(archivebox_server_url)) return;
+    if (!archiveboxServerUrl) throw new Error(t("Server not configured"));
+    if (requestPermission) {
+      await requestServerHostPermission(archiveboxServerUrl);
+      return;
+    }
+    if (await hasServerHostPermission(archiveboxServerUrl)) return;
     if (!requestPermission) {
       throw new Error(t("Click Sync to grant ArchiveBox server permission."));
     }
-    await requestServerHostPermission(archivebox_server_url);
   }
 
   async function uploadCapturedArtifactIfArchived(
@@ -260,7 +261,6 @@ function ArchiveBoxOverlay() {
     setRemoteStatus('not_archived');
     setRemoteDetail('');
     setStatus(t("ArchiveBox needs permission to connect to your configured server so it can upload this URL."));
-    await waitForPermissionExplanation();
     try {
       await ensureConfiguredServerPermission(requestPermission);
     } catch (error) {
@@ -324,7 +324,10 @@ function ArchiveBoxOverlay() {
 
   useEffect(() => {
     getConfig()
-      .then(({ ui_language }) => setUiLanguage(ui_language))
+      .then(({ ui_language, archivebox_server_url }) => {
+        setUiLanguage(ui_language);
+        setArchiveboxServerUrl(archivebox_server_url);
+      })
       .catch(() => undefined)
       .then(refresh);
     function closeOnEscape(event: KeyboardEvent) {
@@ -398,7 +401,16 @@ function ArchiveBoxOverlay() {
   async function removeRemoteSnapshot() {
     if (!snapshot || !confirm(t("Remove this URL from the ArchiveBox server?"))) return;
     setStatus(t("ArchiveBox needs permission to connect to your configured server so it can remove this URL."));
-    await waitForPermissionExplanation();
+    try {
+      await ensureConfiguredServerPermission(true);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setOk(false);
+      setRemoteStatus('sync_failed');
+      setRemoteDetail(errorMessage);
+      setStatus(t("Failed to remove from server: $1", errorMessage));
+      return;
+    }
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'archivebox_remove',
       url: snapshot.url,
@@ -420,7 +432,16 @@ function ArchiveBoxOverlay() {
   async function viewRemoteSnapshot() {
     if (!snapshot) return;
     setStatus(t("ArchiveBox needs permission to connect to your configured server so it can open the archived copy."));
-    await waitForPermissionExplanation();
+    try {
+      await ensureConfiguredServerPermission(true);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setOk(false);
+      setRemoteStatus('sync_failed');
+      setRemoteDetail(errorMessage);
+      setStatus(t("Failed to open archived copy: $1", errorMessage));
+      return;
+    }
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'open_archivebox_snapshot',
       url: snapshot.url,
@@ -444,13 +465,10 @@ function ArchiveBoxOverlay() {
   }
 
   async function ensureMhtmlPermission(): Promise<boolean> {
-    const alreadyGranted = await browser.permissions.contains({ permissions: ['pageCapture'] }).catch(() => false);
-    if (alreadyGranted) return true;
     setOk(null);
     setStatus(t("MHTML capture needs permission to save the current tab as a browser-generated MHTML file."));
-    await waitForPermissionExplanation();
     const granted = await browser.permissions.request({ permissions: ['pageCapture'] }).catch(() => false);
-    if (!granted) {
+    if (!granted && !(await browser.permissions.contains({ permissions: ['pageCapture'] }).catch(() => false))) {
       setOk(false);
       setStatus(t("MHTML capture permission denied"));
       return false;
@@ -461,9 +479,8 @@ function ArchiveBoxOverlay() {
   async function requestScreenshotScrollPermission(): Promise<boolean> {
     setOk(null);
     setStatus(t("Full-page screenshots need scripting permission only to scroll the current tab and restore it after capture."));
-    await waitForPermissionExplanation();
     const granted = await browser.permissions.request({ permissions: ['scripting'] }).catch(() => false);
-    if (!granted) {
+    if (!granted && !(await browser.permissions.contains({ permissions: ['scripting'] }).catch(() => false))) {
       setOk(null);
       setStatus(t("Saved visible-area screenshot. Full-page scrolling permission denied."));
       return false;

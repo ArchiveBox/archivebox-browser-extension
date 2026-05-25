@@ -90,6 +90,7 @@ export async function requestServerHostPermission(serverUrl: string): Promise<vo
   requireHttpServerUrl(serverUrl);
   const origins = [serverHostPermissionPattern(serverUrl)];
   const granted = await browser.permissions.request({ origins }).catch(() => false);
+  if (!granted && await browser.permissions.contains({ origins }).catch(() => false)) return;
   if (!granted) {
     throw new Error(t("Permission denied for ArchiveBox server URL."));
   }

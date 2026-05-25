@@ -1152,10 +1152,6 @@ function OptionsMain() {
     await setConfig(patch);
   }
 
-  function waitForPermissionExplanation(): Promise<void> {
-    return new Promise((resolve) => window.setTimeout(resolve, 30));
-  }
-
   async function testServer() {
     if (!archiveboxServerUrlIsValid) {
       setServerStatus({ kind: 'warning', text: t("Enter a valid http:// or https:// server URL") });
@@ -1168,6 +1164,7 @@ function OptionsMain() {
       setServerStatus({ kind: 'error', text: (error as Error).message });
       return;
     }
+    setServerStatus({ kind: 'idle', text: t("Testing ArchiveBox server...") });
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'test_server_url',
       serverUrl: archiveboxServerBaseUrl,
@@ -1189,6 +1186,7 @@ function OptionsMain() {
       setApiStatus({ kind: 'error', text: (error as Error).message });
       return;
     }
+    setApiStatus({ kind: 'idle', text: t("Testing ArchiveBox API key...") });
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'test_api_key',
       serverUrl: archiveboxServerBaseUrl,
@@ -1240,6 +1238,7 @@ function OptionsMain() {
         return;
       }
       await requestServerHostPermission(archiveboxServerBaseUrl);
+      setTestStatus({ kind: 'idle', text: t("Submitting test URL...") });
       await addToArchiveBox([url], ['test']);
       setTestStatus({ kind: 'success', text: t("URL was submitted to ArchiveBox") });
       setTestUrl('');
@@ -1251,12 +1250,11 @@ function OptionsMain() {
   async function updateAutoArchive(enabled: boolean) {
     if (enabled) {
       setTestStatus({ kind: 'idle', text: t("Automatic archiving needs tabs and site access so it can detect matching pages as you browse.") });
-      await waitForPermissionExplanation();
       const granted = await browser.permissions.request({
         permissions: ['tabs'],
         origins: ['<all_urls>'],
       });
-      if (!granted) return;
+      if (!granted && !(await browser.permissions.contains({ permissions: ['tabs'], origins: ['<all_urls>'] }).catch(() => false))) return;
     }
     await saveConfig({ enable_auto_archive: enabled });
   }
@@ -1289,9 +1287,8 @@ function OptionsMain() {
     }
 
     setLocalCaptureStatus({ kind: 'idle', text: t("MHTML capture needs permission to save the current tab as a browser-generated MHTML file.") });
-    await waitForPermissionExplanation();
     const granted = await browser.permissions.request({ permissions: ['pageCapture'] }).catch(() => false);
-    if (!granted) {
+    if (!granted && !(await browser.permissions.contains({ permissions: ['pageCapture'] }).catch(() => false))) {
       setLocalCaptureStatus({ kind: 'error', text: t("MHTML capture permission denied") });
       return false;
     }
@@ -1300,9 +1297,8 @@ function OptionsMain() {
 
   async function requestScreenshotCapturePermission(): Promise<boolean> {
     setLocalCaptureStatus({ kind: 'idle', text: t("Full-page screenshots need scripting permission only to scroll the current tab and restore it after capture.") });
-    await waitForPermissionExplanation();
     const granted = await browser.permissions.request({ permissions: ['scripting'] }).catch(() => false);
-    if (!granted) {
+    if (!granted && !(await browser.permissions.contains({ permissions: ['scripting'] }).catch(() => false))) {
       setLocalCaptureStatus({ kind: 'error', text: t("Screenshot capture permission denied") });
       return false;
     }
@@ -1333,12 +1329,11 @@ function OptionsMain() {
 
   async function loadCookies() {
     setCookieStatus({ kind: 'idle', text: t("Cookie import needs cookie and site access so selected login cookies can be copied into an archiving profile.") });
-    await waitForPermissionExplanation();
     const granted = await browser.permissions.request({
       permissions: ['cookies'],
       origins: ['*://*/*'],
     });
-    if (!granted) {
+    if (!granted && !(await browser.permissions.contains({ permissions: ['cookies'], origins: ['*://*/*'] }).catch(() => false))) {
       setCookieStatus({ kind: 'error', text: t("Cookie permission denied") });
       return;
     }
@@ -1476,9 +1471,8 @@ function OptionsMain() {
 
   async function loadHistory() {
     setImportStatus({ kind: 'idle', text: t("History import needs history permission so browser history URLs can be added to the saved URL list.") });
-    await waitForPermissionExplanation();
     const granted = await browser.permissions.request({ permissions: ['history'] });
-    if (!granted) {
+    if (!granted && !(await browser.permissions.contains({ permissions: ['history'] }).catch(() => false))) {
       setImportStatus({ kind: 'error', text: t("History permission denied") });
       return;
     }
@@ -1494,9 +1488,8 @@ function OptionsMain() {
 
   async function loadBookmarks() {
     setImportStatus({ kind: 'idle', text: t("Bookmark import needs bookmarks permission so bookmark URLs can be added to the saved URL list.") });
-    await waitForPermissionExplanation();
     const granted = await browser.permissions.request({ permissions: ['bookmarks'] });
-    if (!granted) {
+    if (!granted && !(await browser.permissions.contains({ permissions: ['bookmarks'] }).catch(() => false))) {
       setImportStatus({ kind: 'error', text: t("Bookmark permission denied") });
       return;
     }
