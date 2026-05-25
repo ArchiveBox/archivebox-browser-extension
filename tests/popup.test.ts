@@ -840,6 +840,53 @@ test('ArchiveBox server URLs are ignored before archive requests', async () => {
   }
 });
 
+test('saved URL bulk delete is local-first when server remove fails', async () => {
+  const harness = await launchHarness();
+
+  try {
+    await setExtensionStorage(harness, {
+      entries: [
+        {
+          id: 'remote-entry',
+          url: 'https://remote-delete-failure.example/',
+          timestamp: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+          tags: [],
+          title: 'Remote delete failure',
+          favIconUrl: null,
+          depth: 0,
+          archiveboxCrawlId: 'crawl-id',
+        },
+        {
+          id: 'local-entry',
+          url: 'https://local-delete.example/',
+          timestamp: new Date('2026-01-02T00:00:00.000Z').toISOString(),
+          tags: [],
+          title: 'Local delete',
+          favIconUrl: null,
+          depth: 0,
+        },
+      ],
+      archivebox_server_url: 'https://api.example.com',
+      archivebox_api_key: 'test-key',
+    });
+    await harness.storagePage.route('https://api.example.com/api/v1/cli/remove', (route) => {
+      route.fulfill({ status: 502, body: 'Bad Gateway' });
+    });
+    await harness.storagePage.reload({ waitUntil: 'domcontentloaded' });
+    await expect(harness.storagePage.locator('tbody tr')).toHaveCount(2);
+    await harness.storagePage.locator('thead input[type="checkbox"]').check();
+    await expect(harness.storagePage.locator('text=2 selected')).toBeVisible();
+    harness.storagePage.once('dialog', (dialog) => dialog.accept());
+    await harness.storagePage.getByRole('button', { name: 'Delete' }).click();
+    await expect(harness.storagePage.locator('tbody tr')).toHaveCount(0);
+    await expect(harness.storagePage.locator('text=0 selected')).toBeVisible();
+    await expect(harness.storagePage.locator('.status.warning')).toContainText('Failed to delete 1 from server');
+    expect(await savedEntries(harness)).toEqual([]);
+  } finally {
+    await closeHarness(harness);
+  }
+});
+
 test('native action popup supports local save, tags, depth, captures, navigation, and dismissal', async () => {
   test.setTimeout(45_000);
   const server = await startFixtureServer();

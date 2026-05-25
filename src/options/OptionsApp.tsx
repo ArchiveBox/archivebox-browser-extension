@@ -1676,6 +1676,35 @@ function OptionsMain() {
     setSavedUrlStatus({ kind: 'success', text: t("Updated tags on $1 snapshots", selectedSnapshots.size) });
   }
 
+  async function deleteSelectedSnapshots() {
+    const selectedIds = new Set(selectedSnapshots);
+    if (!selectedIds.size) return;
+    if (!confirm(t("Delete $1 snapshots?", selectedIds.size))) return;
+
+    const snapshotsToDelete = snapshots.filter((snapshot) => selectedIds.has(snapshot.id));
+    await persistSnapshots(snapshots.filter((snapshot) => !selectedIds.has(snapshot.id)));
+    setSelectedSnapshots(new Set());
+
+    const serverErrors: string[] = [];
+    for (const snapshot of snapshotsToDelete) {
+      if (!snapshot.archiveboxCrawlId) continue;
+      try {
+        await removeFromArchiveBox(snapshot.url);
+      } catch (error) {
+        serverErrors.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+
+    if (serverErrors.length) {
+      setSavedUrlStatus({
+        kind: 'warning',
+        text: t("Deleted $1 local snapshots. Failed to delete $2 from server: $3", snapshotsToDelete.length, serverErrors.length, [...new Set(serverErrors)].join('; ')),
+      });
+      return;
+    }
+    setSavedUrlStatus({ kind: 'success', text: t("Deleted selected snapshots") });
+  }
+
   async function writeClipboardText(text: string) {
     if (typeof navigator.clipboard?.writeText !== 'function') {
       throw new Error(t("Clipboard writing is not available in this browser."));
@@ -1772,22 +1801,7 @@ function OptionsMain() {
                   </div>
                 )}
               </div>
-              <button disabled={!selectedSnapshots.size} onClick={async () => {
-                if (!confirm(t("Delete $1 snapshots?", selectedSnapshots.size))) return;
-                const snapshotsToDelete = snapshots.filter((snapshot) => selectedSnapshots.has(snapshot.id));
-                for (const snapshot of snapshotsToDelete) {
-                  if (!snapshot.archiveboxCrawlId) continue;
-                  try {
-                    await removeFromArchiveBox(snapshot.url);
-                  } catch (error) {
-                    setSavedUrlStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
-                    return;
-                  }
-                }
-                await persistSnapshots(snapshots.filter((snapshot) => !selectedSnapshots.has(snapshot.id)));
-                setSelectedSnapshots(new Set());
-                setSavedUrlStatus({ kind: 'success', text: t("Deleted selected snapshots") });
-              }} className="icon-button">
+              <button disabled={!selectedSnapshots.size} onClick={deleteSelectedSnapshots} className="icon-button">
                 <Trash2 size={14} aria-hidden="true" />
                 <span>{t("Delete")}</span>
               </button>
