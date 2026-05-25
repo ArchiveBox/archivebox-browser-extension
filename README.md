@@ -45,7 +45,7 @@ This is a browser extension that lets you send individual browser tabs or all UR
 When local capture saving is enabled in the options page, the extension stores capture artifacts in the browser's extension-local OPFS storage before the popup is shown:
 
 - Full-page screenshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_screenshot/screenshot.png`
-- MHTML snapshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_mhtml/snapshot.mhtml`
+- MHTML snapshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_mhtml/snapshot.mhtml`
 - SingleFile HTML snapshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_singlefile/snapshot.html`
 
 Screenshots are shown as thumbnails in the Saved URLs table when at least one saved URL has a screenshot, and can be exported as PNG from the Export menu. MHTML and SingleFile HTML snapshots can also be exported from the same menu. The ZIP export includes the selected CSV/JSON metadata plus local artifacts under the same `snapshots/YYYYMMDD/example.com/{uuid}/...` paths used in OPFS. When a SingleFile HTML or MHTML snapshot is available, the Saved URLs table title opens an extension-local framed viewer for that snapshot.
