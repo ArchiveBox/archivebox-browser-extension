@@ -1,0 +1,26 @@
+src/options/OptionsApp.tsx
+  s_463e8607ca6021::t_d59f47aa5f443f 1167,1189,1241
+  s_463e8607ca6021::t_7a3c57ed05741a 1257,1291,1301,1336,1475,1492
+src/lib/archivebox.ts
+  s_463e8607ca6021::t_2c4bef1b058342 93
+entrypoints/popup/main.tsx
+  s_463e8607ca6021::t_b658d973397cfc 471,483
+  s_463e8607ca6021::t_2a5c6e3322db1f 327-330
+  s_463e8607ca6021::t_9953159c8eab50 110,147-148,159-164,404-413,435-444
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "962ae4da3e01ef8958980d74947a0feb3035b3b6",
+  "prompts": {},
+  "sessions": {
+    "s_463e8607ca6021": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e39eb-05c2-7253-a218-467aed1abfef",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
