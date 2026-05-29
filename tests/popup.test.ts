@@ -48,6 +48,7 @@ type CdpClient = {
     predicate: (event: CdpEvent<T>) => boolean,
     timeoutMs?: number,
   ): Promise<CdpEvent<T>>;
+  on<T = Record<string, unknown>>(method: string, handler: (event: CdpEvent<T>) => void): () => void;
   close(): void;
 };
 
@@ -89,6 +90,8 @@ const chromeProfileBasePath = path.resolve('tmp/chrome_profile');
 const shortDelay = 50;
 
 function selectedBrowserExecutable(): string {
+  const override = process.env.CHROME_FOR_TESTING_BIN || process.env.CHROME_BIN;
+  if (override && existsSync(override)) return override;
   if (existsSync('/usr/bin/chromium')) return '/usr/bin/chromium';
   if (existsSync(canaryPath)) return canaryPath;
   return chromium.executablePath();
@@ -147,6 +150,7 @@ async function connectCdpWebSocket(webSocketDebuggerUrl: string): Promise<CdpCli
     timeout: ReturnType<typeof setTimeout>;
   }>();
   const recentEvents: string[] = [];
+  const eventListeners = new Map<string, Set<(event: CdpEvent) => void>>();
 
   socket.addEventListener('message', (event) => {
     const message = JSON.parse(String(event.data));
@@ -164,6 +168,9 @@ async function connectCdpWebSocket(webSocketDebuggerUrl: string): Promise<CdpCli
         clearTimeout(waiter.timeout);
         eventWaiters.delete(waiter);
         waiter.resolve(cdpEvent);
+      }
+      for (const handler of eventListeners.get(message.method) || []) {
+        handler(cdpEvent);
       }
       return;
     }
@@ -224,6 +231,14 @@ async function connectCdpWebSocket(webSocketDebuggerUrl: string): Promise<CdpCli
         };
         eventWaiters.add(waiter);
       });
+    },
+    on<T = Record<string, unknown>>(method: string, handler: (event: CdpEvent<T>) => void) {
+      const listeners = eventListeners.get(method) || new Set<(event: CdpEvent) => void>();
+      listeners.add(handler as (event: CdpEvent) => void);
+      eventListeners.set(method, listeners);
+      return () => {
+        eventListeners.get(method)?.delete(handler as (event: CdpEvent) => void);
+      };
     },
     close() {
       socket.close();
@@ -322,6 +337,46 @@ async function startFixtureServer(): Promise<FixtureServer> {
   return { server, url: `http://127.0.0.1:${address.port}/` };
 }
 
+function spawnBrowser(
+  executablePath: string,
+  userDataDir: string,
+  remoteDebuggingPort: number,
+  extraArgs: string[],
+): ChildProcess {
+  const headlessLinux = process.platform === 'linux' && !process.env.DISPLAY;
+  const args = [
+    `--user-data-dir=${userDataDir}`,
+    `--remote-debugging-port=${remoteDebuggingPort}`,
+    // Chrome 149+ exposes the CDP Extensions domain (Extensions.loadUnpacked)
+    // only when extension debugging is explicitly enabled over the connection.
+    '--enable-unsafe-extension-debugging',
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--disable-background-networking',
+    ...extraArgs,
+    'about:blank',
+  ];
+  if (headlessLinux) {
+    args.splice(args.length - 1, 0, '--headless=new', '--no-sandbox');
+  }
+  return spawn(executablePath, args, { stdio: 'ignore' });
+}
+
+async function waitForLoadedExtensionId(remoteDebuggingPort: number, timeoutMs = 15_000): Promise<string> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const targets = await waitForJson<DevToolsTarget[]>(`http://127.0.0.1:${remoteDebuggingPort}/json/list`);
+    const worker = targets.find((target) => (
+      (target.type === 'service_worker' || target.type === 'background_page')
+      && /^chrome-extension:\/\/[a-p]{32}\/background\.js/.test(target.url)
+    ));
+    const match = worker?.url.match(/^chrome-extension:\/\/([a-p]{32})\//);
+    if (match?.[1]) return match[1];
+    await sleep();
+  }
+  throw new Error('Timed out waiting for the extension service worker to register');
+}
+
 async function launchHarness(): Promise<BrowserHarness> {
   const runId = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const extensionPath = await prepareTestExtensionPath(path.join(testExtensionBasePath, runId));
@@ -330,39 +385,57 @@ async function launchHarness(): Promise<BrowserHarness> {
   const userDataDir = path.join(chromeProfileBasePath, runId);
   await rm(userDataDir, { recursive: true, force: true });
   await mkdir(userDataDir, { recursive: true });
-  const headlessLinux = process.platform === 'linux' && !process.env.DISPLAY;
-  const args = [
-    `--user-data-dir=${userDataDir}`,
-    `--remote-debugging-port=${remoteDebuggingPort}`,
-    '--no-first-run',
-    '--no-default-browser-check',
-    '--disable-background-networking',
-    'about:blank',
-  ];
-  if (headlessLinux) {
-    args.splice(args.length - 1, 0, '--headless=new', '--no-sandbox');
+
+  let activeUserDataDir = userDataDir;
+  let browserProcess = spawnBrowser(executablePath, activeUserDataDir, remoteDebuggingPort, []);
+  await waitForJson(`http://127.0.0.1:${remoteDebuggingPort}/json/version`);
+  let cdp = await connectBrowserCdp(remoteDebuggingPort);
+
+  let extensionId: string;
+  try {
+    const loaded = await cdp.send<{ id: string }>('Extensions.loadUnpacked', { path: extensionPath });
+    extensionId = loaded.id;
+  } catch (error) {
+    if (!/method not available|not found|extensions/i.test(error instanceof Error ? error.message : String(error))) {
+      throw error;
+    }
+    // Chrome <149 does not expose the CDP Extensions domain over the websocket
+    // endpoint, so fall back to the --load-extension launch flag it still
+    // supports and discover the generated extension ID from its service worker.
+    // Relaunch into a fresh profile dir (rather than wiping and reusing the
+    // first one, which races with the just-killed browser releasing the dir).
+    cdp.close();
+    browserProcess.kill('SIGTERM');
+    await waitForProcessExit(browserProcess);
+    const firstUserDataDir = activeUserDataDir;
+    activeUserDataDir = `${userDataDir}-loadext`;
+    await mkdir(activeUserDataDir, { recursive: true });
+    browserProcess = spawnBrowser(executablePath, activeUserDataDir, remoteDebuggingPort, [
+      `--disable-extensions-except=${extensionPath}`,
+      `--load-extension=${extensionPath}`,
+    ]);
+    await waitForJson(`http://127.0.0.1:${remoteDebuggingPort}/json/version`);
+    extensionId = await waitForLoadedExtensionId(remoteDebuggingPort);
+    cdp = await connectBrowserCdp(remoteDebuggingPort);
+    await rm(firstUserDataDir, { recursive: true, force: true }).catch(() => undefined);
   }
 
-  const browserProcess = spawn(executablePath, args, { stdio: 'ignore' });
-  await waitForJson(`http://127.0.0.1:${remoteDebuggingPort}/json/version`);
-  const cdp = await connectBrowserCdp(remoteDebuggingPort);
-  const loaded = await cdp.send<{ id: string }>('Extensions.loadUnpacked', { path: extensionPath });
   const browser = await chromium.connectOverCDP(`http://127.0.0.1:${remoteDebuggingPort}`);
   const context = browser.contexts()[0];
   if (!context) throw new Error('Playwright did not expose the CDP browser context');
   const storagePage = await context.newPage();
-  await storagePage.goto(`chrome-extension://${loaded.id}/options.html`, { waitUntil: 'domcontentloaded' });
+  await storagePage.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'domcontentloaded' });
 
   return {
     browser,
     context,
     cdp,
     extensionPath,
-    extensionId: loaded.id,
+    extensionId,
     process: browserProcess,
     remoteDebuggingPort,
     storagePage,
-    userDataDir,
+    userDataDir: activeUserDataDir,
   };
 }
 
@@ -437,6 +510,103 @@ async function extensionHasPermission(harness: BrowserHarness, permission: strin
       extensionApi.permissions.contains({ permissions: [permissionName as Browser.runtime.ManifestPermission] }, resolve);
     });
   }, permission);
+}
+
+type ConsoleMessage = {
+  source: string;
+  type: string;
+  text: string;
+};
+
+type ConsoleCollector = {
+  messages: ConsoleMessage[];
+  errors: () => ConsoleMessage[];
+  close: () => void;
+};
+
+function remoteObjectText(arg: { value?: unknown; description?: string; unserializableValue?: string }): string {
+  if (arg.value !== undefined) return typeof arg.value === 'string' ? arg.value : JSON.stringify(arg.value);
+  if (arg.description) return arg.description;
+  if (arg.unserializableValue) return arg.unserializableValue;
+  return '';
+}
+
+async function attachConsoleCollector(cdp: CdpClient, source: string, messages: ConsoleMessage[]): Promise<void> {
+  cdp.on<{ type: string; args?: Array<{ value?: unknown; description?: string }> }>('Runtime.consoleAPICalled', (event) => {
+    const text = (event.params.args || []).map(remoteObjectText).join(' ');
+    messages.push({ source, type: event.params.type, text });
+  });
+  cdp.on<{ exceptionDetails?: { text?: string; exception?: { description?: string } } }>('Runtime.exceptionThrown', (event) => {
+    const details = event.params.exceptionDetails;
+    messages.push({
+      source,
+      type: 'error',
+      text: details?.exception?.description || details?.text || 'Uncaught exception',
+    });
+  });
+  cdp.on<{ entry: { level: string; text: string } }>('Log.entryAdded', (event) => {
+    messages.push({ source, type: event.params.entry.level, text: event.params.entry.text });
+  });
+  await cdp.send('Runtime.enable');
+  await cdp.send('Log.enable');
+}
+
+async function findDevToolsTarget(
+  harness: BrowserHarness,
+  predicate: (target: DevToolsTarget) => boolean,
+  timeoutMs = 15_000,
+): Promise<DevToolsTarget> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const targets = await waitForJson<DevToolsTarget[]>(`http://127.0.0.1:${harness.remoteDebuggingPort}/json/list`);
+    const target = targets.find((item) => predicate(item) && item.webSocketDebuggerUrl);
+    if (target) return target;
+    await sleep();
+  }
+  throw new Error('Timed out waiting for DevTools target');
+}
+
+async function collectBackgroundConsole(harness: BrowserHarness, messages: ConsoleMessage[]): Promise<ConsoleCollector> {
+  const target = await findDevToolsTarget(harness, (item) => (
+    item.type === 'service_worker' && /\/background\.js/.test(item.url)
+  ));
+  const cdp = await connectCdpWebSocket(target.webSocketDebuggerUrl as string);
+  await attachConsoleCollector(cdp, 'background', messages);
+  return {
+    messages,
+    errors: () => messages.filter((message) => message.type === 'error'),
+    close: () => cdp.close(),
+  };
+}
+
+async function pageTargetExists(harness: BrowserHarness, url: string): Promise<boolean> {
+  const { targetInfos } = await harness.cdp.send<{ targetInfos: CdpTarget[] }>('Target.getTargets', { filter: [{}] });
+  return targetInfos.some((target) => (
+    (target.type === 'page' || target.type === 'tab') && target.url.startsWith(url)
+  ));
+}
+
+// Console errors/warnings that ArchiveBox itself produced, ignoring noise the
+// fixture page generates on its own (e.g. its missing /favicon.ico).
+function archiveboxConsoleProblems(messages: ConsoleMessage[]): ConsoleMessage[] {
+  return messages.filter((message) => {
+    if (message.type !== 'error' && message.type !== 'warning') return false;
+    if (message.source === 'page' && /Failed to load resource/i.test(message.text)) return false;
+    return true;
+  });
+}
+
+function consoleMessagesMatching(messages: ConsoleMessage[], pattern: RegExp): ConsoleMessage[] {
+  return messages.filter((message) => pattern.test(message.text));
+}
+
+async function waitForConsoleMessage(messages: ConsoleMessage[], pattern: RegExp, timeoutMs = 15_000): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (consoleMessagesMatching(messages, pattern).length > 0) return;
+    await sleep();
+  }
+  throw new Error(`Timed out waiting for console message matching ${pattern}`);
 }
 
 async function waitForTabTarget(cdp: CdpClient, url: string): Promise<CdpTarget> {
@@ -840,6 +1010,34 @@ async function waitForNoSavedEntry(harness: BrowserHarness, url: string, timeout
   throw new Error(`Timed out waiting for saved entry removal: ${url}`);
 }
 
+test('the injected page content script contains no popup or window-closing code', async () => {
+  // The overlay/popup UI (which legitimately calls window.close() on its own
+  // popup window) must never be bundled into the content script that gets
+  // injected into the pages the user is viewing -- otherwise window.close()
+  // would run in the page context and close the user's tab. This guards against
+  // a regression where popup code leaks into the in-page content script.
+  const contentScript = await readFile(
+    path.join(builtExtensionPath, 'content-scripts/archivebox.js'),
+    'utf8',
+  );
+  // Regression guard for the 3.0.1 tab-closing bug: that content script's
+  // runtime.onMessage listener called a bare `close()` for 'hide_archivebox_overlay',
+  // which resolves to the global window.close() in the page context and closed
+  // the user's tab. The in-page content script must never call close() in any
+  // form -- not window.close, not self.close, and not a bare close().
+  expect(contentScript).not.toMatch(/window\.close/);
+  expect(contentScript).not.toMatch(/self\.close/);
+  expect(contentScript).not.toMatch(/(^|[^.\w])close\s*\(/);
+  expect(contentScript).not.toContain('archivebox-overlay');
+
+  const manifest = JSON.parse(
+    await readFile(path.join(builtExtensionPath, 'manifest.json'), 'utf8'),
+  ) as { content_scripts?: unknown[] };
+  // The extension injects its content script on demand via scripting.executeScript,
+  // so it should declare no statically-registered content scripts.
+  expect(manifest.content_scripts ?? []).toEqual([]);
+});
+
 test('ArchiveBox server URLs are ignored before archive requests', async () => {
   const harness = await launchHarness();
 
@@ -1173,6 +1371,130 @@ test('native action popup supports local save, tags, depth, captures, navigation
     await waitForNoNativePopup(harness);
     entries = await savedEntries(harness);
     expect(entries.some((entry) => entry.url === testPageUrl)).toBe(false);
+  } finally {
+    await closeHarness(harness);
+    await new Promise<void>((resolve) => server.server.close(() => resolve()));
+  }
+});
+
+test('auto-archive captures MHTML + screenshots on page load without console errors or closing the tab', async () => {
+  test.setTimeout(60_000);
+  const server = await startFixtureServer();
+  const harness = await launchHarness();
+  const messages: ConsoleMessage[] = [];
+
+  try {
+    // Real local capture (no archivebox_test_fast_capture) so this exercises the
+    // genuine pageCapture.saveAsMHTML + captureVisibleTab paths the user hits.
+    await setExtensionStorage(harness, {
+      entries: [],
+      archivebox_server_url: '',
+      archivebox_api_key: '',
+      save_mhtml_locally: true,
+      save_screenshots_locally: true,
+      enable_auto_archive: true,
+      match_urls: '.*',
+    });
+    const background = await collectBackgroundConsole(harness, messages);
+    // give storage.onChanged time to register the auto-archive tab listener
+    await sleep(500);
+
+    const page = await harness.context.newPage();
+    page.on('console', (message) => messages.push({ source: 'page', type: message.type(), text: message.text() }));
+    page.on('pageerror', (error) => messages.push({ source: 'page', type: 'error', text: error.message }));
+    const testPageUrl = `${server.url}?archivebox_test=1`;
+    await page.goto(testPageUrl, { waitUntil: 'load' });
+
+    // A blank/new tab must never be archived: it is not capturable and only
+    // produces permission errors and junk snapshots.
+    await harness.context.newPage();
+
+    const entry = await waitForSavedEntry(
+      harness,
+      testPageUrl,
+      (saved) => Boolean(saved.mhtml) && Boolean(saved.screenshot),
+      'auto-archived MHTML + screenshot',
+      20_000,
+    );
+    expect(entry.tags).toContain('auto-archived');
+
+    // The user's tab must still be open after capture finishes.
+    expect(await pageTargetExists(harness, testPageUrl)).toBe(true);
+
+    const entries = await savedEntries(harness);
+    expect(entries.some((saved) => saved.url === 'about:blank')).toBe(false);
+    expect(entries.every((saved) => /^https?:/i.test(String(saved.url)))).toBe(true);
+
+    // Expected milestone log lines (action + saved artifacts + remote result).
+    await waitForConsoleMessage(messages, /ArchiveBox: auto-archiving/);
+    await waitForConsoleMessage(messages, /ArchiveBox: saved MHTML for/);
+    await waitForConsoleMessage(messages, /ArchiveBox: saved screenshot for/);
+    await waitForConsoleMessage(messages, /no ArchiveBox server configured/);
+
+    // No "Scripts may close..." attempt from any injected script.
+    expect(consoleMessagesMatching(messages, /scripts may close/i)).toEqual([]);
+    // No console errors/warnings produced by ArchiveBox itself.
+    expect(archiveboxConsoleProblems(messages)).toEqual([]);
+    // The popup/overlay UI must never execute inside the page the user views.
+    expect(await page.locator('.archivebox-overlay').count()).toBe(0);
+    expect(messages.filter((message) => (
+      message.source === 'page' && /archivebox-overlay/i.test(message.text)
+    ))).toEqual([]);
+
+    background.close();
+  } finally {
+    await closeHarness(harness);
+    await new Promise<void>((resolve) => server.server.close(() => resolve()));
+  }
+});
+
+test('action popup saves MHTML + screenshots without console errors or closing the active tab', async () => {
+  test.setTimeout(60_000);
+  const server = await startFixtureServer();
+  const harness = await launchHarness();
+  const messages: ConsoleMessage[] = [];
+
+  try {
+    await setExtensionStorage(harness, {
+      entries: [],
+      archivebox_server_url: '',
+      archivebox_api_key: '',
+      save_mhtml_locally: true,
+      save_screenshots_locally: true,
+    });
+    const background = await collectBackgroundConsole(harness, messages);
+
+    const page = await harness.context.newPage();
+    page.on('console', (message) => messages.push({ source: 'page', type: message.type(), text: message.text() }));
+    page.on('pageerror', (error) => messages.push({ source: 'page', type: 'error', text: error.message }));
+    const testPageUrl = `${server.url}?archivebox_test=1`;
+    await page.goto(testPageUrl, { waitUntil: 'load' });
+
+    const popup = await openNativePopup(harness, page);
+    await attachConsoleCollector(popup.cdp, 'popup', messages);
+    await waitForPopupText(harness, popup, testPageUrl);
+
+    await clickPopupButtonText(harness, popup, 'MHTML');
+    await waitForSavedEntry(harness, testPageUrl, (saved) => Boolean(saved.mhtml), 'popup MHTML', 15_000);
+
+    await clickPopupButtonText(harness, popup, 'Screenshot');
+    await waitForSavedEntry(harness, testPageUrl, (saved) => Boolean(saved.screenshot), 'popup screenshot', 20_000);
+
+    // The page the user was viewing must still be open.
+    expect(await pageTargetExists(harness, testPageUrl)).toBe(true);
+
+    await waitForConsoleMessage(messages, /ArchiveBox: saved MHTML for/);
+    await waitForConsoleMessage(messages, /ArchiveBox: saved screenshot for/);
+
+    expect(consoleMessagesMatching(messages, /scripts may close/i)).toEqual([]);
+    expect(archiveboxConsoleProblems(messages)).toEqual([]);
+    // The popup/overlay UI runs only in the popup window, never in the page.
+    expect(await page.locator('.archivebox-overlay').count()).toBe(0);
+    expect(messages.filter((message) => (
+      message.source === 'page' && /archivebox-overlay/i.test(message.text)
+    ))).toEqual([]);
+
+    background.close();
   } finally {
     await closeHarness(harness);
     await new Promise<void>((resolve) => server.server.close(() => resolve()));

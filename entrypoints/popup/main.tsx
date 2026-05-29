@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { archiveBoxServerUrlMatches, hasServerHostPermission, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
+import { archiveBoxServerUrlMatches, hasServerHostPermission, isArchiveablePageUrl, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
@@ -45,7 +45,7 @@ async function getActivePage(): Promise<ActivePage> {
   const { archivebox_server_url } = await getConfig();
   const extensionOrigin = browser.runtime.getURL('');
   const isOwnExtensionPage = (url = '') => url.startsWith(extensionOrigin);
-  const isArchiveablePage = (url = '') => /^(https?|file):/i.test(url) && !archiveBoxServerUrlMatches(archivebox_server_url, url);
+  const isArchiveablePage = (url = '') => isArchiveablePageUrl(url) && !archiveBoxServerUrlMatches(archivebox_server_url, url);
   const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
   const tab = activeTab?.url && !isOwnExtensionPage(activeTab.url) && isArchiveablePage(activeTab.url)
     ? activeTab
@@ -310,6 +310,7 @@ function ArchiveBoxOverlay() {
       setRemoteStatus('archived');
       setRemoteDetail('');
       setStatus(t("Saved to ArchiveBox Server at depth $1", archiveDepth));
+      console.info(`ArchiveBox: saved ${url} to ArchiveBox server`);
       if (localSnapshotId) {
         await uploadCurrentArtifactsIfArchived(localSnapshotId);
       }
@@ -319,6 +320,7 @@ function ArchiveBoxOverlay() {
       setRemoteStatus('sync_failed');
       setRemoteDetail(errorMessage);
       setStatus(t("Saved locally. Failed to archive on server: $1", errorMessage));
+      console.warn(`ArchiveBox: could not save ${url} to ArchiveBox server: ${errorMessage}`);
     }
   }
 

@@ -1,9 +1,9 @@
 import { getConfig, getArchiveBoxServerUrl } from './storage';
 import { t } from './i18n';
-import { archiveBoxServerUrlMatches } from './archiveboxUrlExclusions';
+import { archiveBoxServerUrlMatches, isArchiveablePageUrl } from './archiveboxUrlExclusions';
 import type { ArchiveBoxAddResult, ArchiveDepth, Snapshot } from './types';
 
-export { archiveBoxServerUrlMatches } from './archiveboxUrlExclusions';
+export { archiveBoxServerUrlMatches, isArchiveablePageUrl } from './archiveboxUrlExclusions';
 
 export type ArchiveResultUploadFile = {
   blob: Blob;

@@ -26,6 +26,21 @@ function hostnameMatchesDomain(hostname: string, domain: string): boolean {
   return hostname === domain || hostname.endsWith(`.${domain}`);
 }
 
+// Pages the extension should archive: only real http(s) web pages. Everything
+// else (file://, about:blank, chrome://, chrome-extension://, devtools://,
+// data:, view-source:, the new tab page, etc.) is either local/private or not
+// capturable, so trying to archive it only produces "Cannot find the tab"/"Don't
+// have permissions" errors and saves junk snapshots.
+export function isArchiveablePageUrl(targetUrl: string): boolean {
+  if (!targetUrl) return false;
+  try {
+    const { protocol } = new URL(targetUrl);
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function archiveBoxServerUrlMatches(serverUrl: string, targetUrl: string): boolean {
   if (!serverUrl || !targetUrl) return false;
 

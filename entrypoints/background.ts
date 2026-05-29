@@ -1,4 +1,4 @@
-import { addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, syncArchiveBoxSnapshotMetadata, testApiKey, testServerUrl } from '@/src/lib/archivebox';
+import { addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, syncArchiveBoxSnapshotMetadata, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
@@ -516,27 +516,95 @@ async function captureMhtml(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<
     throw new Error(t("MHTML capture is not available in this browser."));
   }
 
-  let bytes: ArrayBuffer;
-  try {
-    bytes = await new Promise<ArrayBuffer>((resolve, reject) => {
-      pageCapture.saveAsMHTML({ tabId: tab.id as number }, (mhtmlData) => {
-        const error = chromeLastError();
-        if (error) {
-          reject(new Error(`chrome.pageCapture.saveAsMHTML failed: ${error}`));
-          return;
-        }
-        if (!mhtmlData) {
-          reject(new Error(t("MHTML capture returned an empty file.")));
-          return;
-        }
-        blobToArrayBuffer(mhtmlData, t("generated MHTML data")).then(resolve, reject);
-      });
-    });
-  } catch (error) {
-    throw new Error(errorMessage(error));
+  // Re-check the tab right before capturing: the user may have navigated away
+  // (to the same-but-different or a non-capturable page) or closed the tab while
+  // a previous step (permission prompt, screenshot scroll, server upload) was
+  // running. Capturing a stale or navigating tab is what produces "Cannot find
+  // the tab for this request"; capturing a navigated tab would also save the
+  // wrong page's bytes under this snapshot's URL, so require the URL to match.
+  const liveTab = await browser.tabs.get(tab.id).catch(() => null);
+  if (!liveTab || typeof liveTab.id !== 'number') {
+    throw new Error(t("The tab is no longer available for MHTML capture."));
+  }
+  if (!isArchiveablePageUrl(liveTab.url || '')) {
+    throw new Error(t("This page cannot be captured as MHTML."));
+  }
+  if ((liveTab.url || '') !== snapshot.url) {
+    throw new Error(t("The tab navigated to a different page before MHTML capture."));
+  }
+  if (liveTab.status && liveTab.status !== 'complete') {
+    throw new Error(t("The tab is still loading and cannot be captured yet."));
   }
 
+  const tabId = liveTab.id;
+  // Root cause (traced empirically): chrome.pageCapture.saveAsMHTML
+  // intermittently hands an MV3 service worker a Blob whose backing temp file
+  // Chromium has already deleted. The Blob still reports the correct `size`
+  // (cached metadata), but every read method -- arrayBuffer(), Response(blob),
+  // FileReader, Response(blob.stream()) -- fails identically with "A requested
+  // file or directory could not be found" (surfaced through fetch as "Failed to
+  // fetch"), and the same Blob never becomes readable no matter how long we
+  // wait. It is independent of read method, read timing, and how long the page
+  // has been settled. Because the file is gone, the only recovery is to ask the
+  // browser for a brand new capture (fresh file). A re-capture reads cleanly, so
+  // retry the whole capture a few times on that specific transient failure.
+  // Captures are serialized (see saveAsMhtmlBytes) so two captures never run at
+  // once and tear down each other's temp file.
+  const maxAttempts = 3;
+  let bytes: ArrayBuffer | undefined;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (attempt > 0) {
+      const stillThere = await browser.tabs.get(tabId).catch(() => null);
+      if (!stillThere || (stillThere.url || '') !== snapshot.url || !isArchiveablePageUrl(stillThere.url || '')) {
+        throw new Error(t("The tab is no longer available for MHTML capture."));
+      }
+    }
+    try {
+      bytes = await saveAsMhtmlBytes(pageCapture, tabId);
+      break;
+    } catch (error) {
+      lastError = error;
+      if (!isTransientMhtmlReadError(error)) throw new Error(errorMessage(error));
+    }
+  }
+  if (!bytes) throw new Error(errorMessage(lastError));
+
   return writeSnapshotMhtmlBytes(snapshot, bytes);
+}
+
+// A failed read of a saveAsMHTML Blob whose backing temp file vanished. These
+// are recoverable by re-capturing; other errors (permission, missing tab) are
+// not, so we must not retry those.
+function isTransientMhtmlReadError(error: unknown): boolean {
+  const message = errorMessage(error).toLowerCase();
+  return message.includes('failed to fetch')
+    || message.includes('could not be found')
+    || message.includes('failed to read');
+}
+
+let mhtmlCaptureQueue: Promise<unknown> = Promise.resolve();
+
+// Reads one MHTML capture as bytes, serialized so concurrent captures (for
+// example an auto-archive on page load overlapping a manual save) never run at
+// the same time and tear down each other's blob handle.
+function saveAsMhtmlBytes(pageCapture: ChromePageCaptureApi, tabId: number): Promise<ArrayBuffer> {
+  const run = mhtmlCaptureQueue.catch(() => undefined).then(() => new Promise<ArrayBuffer>((resolve, reject) => {
+    pageCapture.saveAsMHTML({ tabId }, (mhtmlData) => {
+      const error = chromeLastError();
+      if (error) {
+        reject(new Error(`chrome.pageCapture.saveAsMHTML failed: ${error}`));
+        return;
+      }
+      if (!mhtmlData) {
+        reject(new Error(t("MHTML capture returned an empty file.")));
+        return;
+      }
+      blobToArrayBuffer(mhtmlData, t("generated MHTML data")).then(resolve, reject);
+    });
+  }));
+  mhtmlCaptureQueue = run.catch(() => undefined);
+  return run;
 }
 
 type SingleFileCaptureResult = {
@@ -601,6 +669,7 @@ async function captureAndAttachSnapshotScreenshot(
     }
   }
   await attachScreenshotToSnapshot(snapshot.id, screenshot);
+  console.info(`ArchiveBox: saved screenshot for ${snapshot.url}`);
   return screenshot;
 }
 
@@ -624,6 +693,7 @@ async function captureAndAttachSnapshotMhtml(
   const mhtml = await captureMhtml(tab, snapshot);
   await attachMhtmlToSnapshot(snapshot.id, mhtml);
   snapshot.mhtml = mhtml;
+  console.info(`ArchiveBox: saved MHTML for ${snapshot.url}`);
   return mhtml;
 }
 
@@ -634,6 +704,7 @@ async function captureAndAttachSnapshotSingleFile(
   const singlefile = await captureSingleFileHtml(tab, snapshot);
   await attachSingleFileToSnapshot(snapshot.id, singlefile);
   snapshot.singlefile = singlefile;
+  console.info(`ArchiveBox: saved SingleFile HTML for ${snapshot.url}`);
   return singlefile;
 }
 
@@ -719,6 +790,7 @@ async function ensureSnapshotForTab(tab: Browser.tabs.Tab): Promise<{
 
 async function shouldAutoArchive(url: string): Promise<boolean> {
   try {
+    if (!isArchiveablePageUrl(url)) return false;
     const { archivebox_server_url, enable_auto_archive, match_urls, exclude_urls } = await getConfig();
     if (!enable_auto_archive || !match_urls.trim()) return false;
     if (archiveBoxServerUrlMatches(archivebox_server_url, url)) return false;
@@ -762,12 +834,35 @@ async function uploadSyncedSnapshotArtifacts(snapshotId: string): Promise<void> 
   await uploadSnapshotCaptureArtifactsToArchiveBox(snapshot);
 }
 
+// Saves a snapshot to the configured ArchiveBox server, logging a single line
+// about whether it worked. When no server is configured the snapshot just stays
+// saved locally; that is a normal state, not an error worth crashing or logging
+// loudly, so we never throw out of here.
+async function syncSnapshotToServer(snapshot: Snapshot): Promise<boolean> {
+  const serverUrl = await getArchiveBoxServerUrl();
+  if (!serverUrl) {
+    console.info(`ArchiveBox: saved ${snapshot.url} locally (no ArchiveBox server configured)`);
+    return false;
+  }
+  try {
+    const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id], [snapshot.title]);
+    await markSnapshotSynced(snapshot.id, archivebox);
+    await uploadSyncedSnapshotArtifacts(snapshot.id);
+    console.info(`ArchiveBox: saved ${snapshot.url} to ArchiveBox server`);
+    return true;
+  } catch (error) {
+    console.warn(`ArchiveBox: could not save ${snapshot.url} to ArchiveBox server: ${errorMessage(error)}`);
+    return false;
+  }
+}
+
 async function autoArchive(
   _tabId: number,
   changeInfo: { status?: string },
   tab: Browser.tabs.Tab,
 ): Promise<void> {
   if (changeInfo.status !== 'complete' || !tab.url) return;
+  if (!isArchiveablePageUrl(tab.url)) return;
 
   const snapshots = await getSnapshots();
   if (snapshots.some((snapshot) => snapshot.url === tab.url)) return;
@@ -781,19 +876,12 @@ async function autoArchive(
   );
   snapshots.push(snapshot);
   await setSnapshots(snapshots);
+  console.info(`ArchiveBox: auto-archiving ${snapshot.url}`);
 
-  const capturePromise = captureConfiguredSnapshotArtifacts(tab, snapshot, true).catch((error) => {
+  await captureConfiguredSnapshotArtifacts(tab, snapshot, true).catch((error) => {
     console.error(`Failed to capture local artifacts for ${snapshot.url}:`, error);
   });
-
-  try {
-    const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id], [snapshot.title]);
-    await markSnapshotSynced(snapshot.id, archivebox);
-    await capturePromise;
-    await uploadSyncedSnapshotArtifacts(snapshot.id);
-  } catch (error) {
-    console.error(`Failed to automatically archive ${snapshot.url}:`, error);
-  }
+  await syncSnapshotToServer(snapshot);
 }
 
 async function configureAutoArchiving(): Promise<void> {
@@ -812,13 +900,13 @@ async function configureAutoArchiving(): Promise<void> {
 
 async function saveTab(tab?: Browser.tabs.Tab): Promise<void> {
   if (!tab?.id || !tab.url) return;
+  if (!isArchiveablePageUrl(tab.url)) return;
   if (await isConfiguredArchiveBoxUrl(tab.url)) return;
+  console.info(`ArchiveBox: saving ${tab.url}`);
   try {
     const { snapshot, created } = await ensureSnapshotForTab(tab);
     await captureConfiguredSnapshotArtifacts(tab, snapshot, created);
-    const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id], [snapshot.title]);
-    await markSnapshotSynced(snapshot.id, archivebox);
-    await uploadSyncedSnapshotArtifacts(snapshot.id);
+    await syncSnapshotToServer(snapshot);
   } catch (error) {
     console.error('Failed to save tab to ArchiveBox:', error);
   }
