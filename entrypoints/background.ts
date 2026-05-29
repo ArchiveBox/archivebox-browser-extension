@@ -516,16 +516,21 @@ async function captureMhtml(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<
     throw new Error(t("MHTML capture is not available in this browser."));
   }
 
-  // Re-check the tab right before capturing: the user may have navigated to a
-  // non-capturable page or closed the tab while a previous step (permission
-  // prompt, screenshot scroll, server upload) was running. Capturing a stale or
-  // navigating tab is what produces "Cannot find the tab for this request".
+  // Re-check the tab right before capturing: the user may have navigated away
+  // (to the same-but-different or a non-capturable page) or closed the tab while
+  // a previous step (permission prompt, screenshot scroll, server upload) was
+  // running. Capturing a stale or navigating tab is what produces "Cannot find
+  // the tab for this request"; capturing a navigated tab would also save the
+  // wrong page's bytes under this snapshot's URL, so require the URL to match.
   const liveTab = await browser.tabs.get(tab.id).catch(() => null);
   if (!liveTab || typeof liveTab.id !== 'number') {
     throw new Error(t("The tab is no longer available for MHTML capture."));
   }
   if (!isArchiveablePageUrl(liveTab.url || '')) {
     throw new Error(t("This page cannot be captured as MHTML."));
+  }
+  if ((liveTab.url || '') !== snapshot.url) {
+    throw new Error(t("The tab navigated to a different page before MHTML capture."));
   }
   if (liveTab.status && liveTab.status !== 'complete') {
     throw new Error(t("The tab is still loading and cannot be captured yet."));
@@ -551,7 +556,7 @@ async function captureMhtml(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     if (attempt > 0) {
       const stillThere = await browser.tabs.get(tabId).catch(() => null);
-      if (!stillThere || !isArchiveablePageUrl(stillThere.url || '')) {
+      if (!stillThere || (stillThere.url || '') !== snapshot.url || !isArchiveablePageUrl(stillThere.url || '')) {
         throw new Error(t("The tab is no longer available for MHTML capture."));
       }
     }
