@@ -1020,7 +1020,14 @@ test('the injected page content script contains no popup or window-closing code'
     path.join(builtExtensionPath, 'content-scripts/archivebox.js'),
     'utf8',
   );
+  // Regression guard for the 3.0.1 tab-closing bug: that content script's
+  // runtime.onMessage listener called a bare `close()` for 'hide_archivebox_overlay',
+  // which resolves to the global window.close() in the page context and closed
+  // the user's tab. The in-page content script must never call close() in any
+  // form -- not window.close, not self.close, and not a bare close().
   expect(contentScript).not.toMatch(/window\.close/);
+  expect(contentScript).not.toMatch(/self\.close/);
+  expect(contentScript).not.toMatch(/(^|[^.\w])close\s*\(/);
   expect(contentScript).not.toContain('archivebox-overlay');
   expect(contentScript).not.toContain('opened save panel');
 
