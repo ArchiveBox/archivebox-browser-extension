@@ -1423,7 +1423,7 @@ test('auto-archive captures MHTML + screenshots on page load without console err
 
     const entries = await savedEntries(harness);
     expect(entries.some((saved) => saved.url === 'about:blank')).toBe(false);
-    expect(entries.every((saved) => /^(https?|file):/i.test(String(saved.url)))).toBe(true);
+    expect(entries.every((saved) => /^https?:/i.test(String(saved.url)))).toBe(true);
 
     // Expected milestone log lines (action + saved artifacts + remote result).
     await waitForConsoleMessage(messages, /ArchiveBox: auto-archiving/);
