@@ -310,6 +310,7 @@ function ArchiveBoxOverlay() {
       setRemoteStatus('archived');
       setRemoteDetail('');
       setStatus(t("Saved to ArchiveBox Server at depth $1", archiveDepth));
+      console.info(`ArchiveBox: saved ${url} to ArchiveBox server`);
       if (localSnapshotId) {
         await uploadCurrentArtifactsIfArchived(localSnapshotId);
       }
@@ -319,10 +320,12 @@ function ArchiveBoxOverlay() {
       setRemoteStatus('sync_failed');
       setRemoteDetail(errorMessage);
       setStatus(t("Saved locally. Failed to archive on server: $1", errorMessage));
+      console.warn(`ArchiveBox: could not save ${url} to ArchiveBox server: ${errorMessage}`);
     }
   }
 
   useEffect(() => {
+    console.info('ArchiveBox: opened save panel');
     getConfig()
       .then(({ ui_language, archivebox_server_url }) => {
         setUiLanguage(ui_language);
