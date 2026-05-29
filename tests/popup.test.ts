@@ -1029,7 +1029,6 @@ test('the injected page content script contains no popup or window-closing code'
   expect(contentScript).not.toMatch(/self\.close/);
   expect(contentScript).not.toMatch(/(^|[^.\w])close\s*\(/);
   expect(contentScript).not.toContain('archivebox-overlay');
-  expect(contentScript).not.toContain('opened save panel');
 
   const manifest = JSON.parse(
     await readFile(path.join(builtExtensionPath, 'manifest.json'), 'utf8'),
@@ -1439,7 +1438,7 @@ test('auto-archive captures MHTML + screenshots on page load without console err
     // The popup/overlay UI must never execute inside the page the user views.
     expect(await page.locator('.archivebox-overlay').count()).toBe(0);
     expect(messages.filter((message) => (
-      message.source === 'page' && /opened save panel|archivebox-overlay/i.test(message.text)
+      message.source === 'page' && /archivebox-overlay/i.test(message.text)
     ))).toEqual([]);
 
     background.close();
@@ -1492,7 +1491,7 @@ test('action popup saves MHTML + screenshots without console errors or closing t
     // The popup/overlay UI runs only in the popup window, never in the page.
     expect(await page.locator('.archivebox-overlay').count()).toBe(0);
     expect(messages.filter((message) => (
-      message.source === 'page' && /opened save panel|archivebox-overlay/i.test(message.text)
+      message.source === 'page' && /archivebox-overlay/i.test(message.text)
     ))).toEqual([]);
 
     background.close();

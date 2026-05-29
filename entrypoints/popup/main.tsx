@@ -325,7 +325,6 @@ function ArchiveBoxOverlay() {
   }
 
   useEffect(() => {
-    console.info('ArchiveBox: opened save panel');
     getConfig()
       .then(({ ui_language, archivebox_server_url }) => {
         setUiLanguage(ui_language);
