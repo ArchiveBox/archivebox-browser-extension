@@ -86,10 +86,10 @@ function buildSnapshotArtifactGroups(snapshot: Snapshot, opfsFiles: OpfsFile[]):
   });
 }
 
-async function uploadSnapshotArtifactGroup(snapshot: Snapshot, group: SnapshotArtifactGroup): Promise<boolean> {
+async function uploadSnapshotArtifactGroup(snapshot: Snapshot, group: SnapshotArtifactGroup, archiveboxSnapshotId: string): Promise<boolean> {
   if (!group.files.length) return false;
 
-  const archiveResult = await uploadSnapshotArchiveResultFiles(snapshot.id, group.plugin, [], {
+  const archiveResult = await uploadSnapshotArchiveResultFiles(archiveboxSnapshotId, group.plugin, [], {
     outputStr: group.outputStr,
     outputJson: group.outputJson,
     status: 'started',
@@ -123,13 +123,13 @@ async function uploadSnapshotArtifactGroup(snapshot: Snapshot, group: SnapshotAr
   return true;
 }
 
-export async function uploadSnapshotCaptureArtifactsToArchiveBox(snapshot: Snapshot): Promise<{
+export async function uploadSnapshotCaptureArtifactsToArchiveBox(snapshot: Snapshot, archiveboxSnapshotId = snapshot.archiveboxSnapshotId || snapshot.id): Promise<{
   opfs: boolean;
 }> {
   const previousSync = snapshotSyncLocks.get(snapshot.id) || Promise.resolve(emptySyncResult);
   const sync = previousSync
     .catch(() => emptySyncResult)
-    .then(() => uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked(snapshot))
+    .then(() => uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked({ ...snapshot, archiveboxSnapshotId }))
     .finally(() => {
       if (snapshotSyncLocks.get(snapshot.id) === sync) {
         snapshotSyncLocks.delete(snapshot.id);
@@ -144,9 +144,10 @@ async function uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked(snapshot: Snap
 }> {
   let uploadedAny = false;
   const opfsFiles = getOpfsFilesForSnapshot(snapshot, await readSnapshotOpfsFiles(snapshot));
+  const archiveboxSnapshotId = snapshot.archiveboxSnapshotId || snapshot.id;
 
   for (const group of buildSnapshotArtifactGroups(snapshot, opfsFiles)) {
-    const groupUploaded = await uploadSnapshotArtifactGroup(snapshot, group);
+    const groupUploaded = await uploadSnapshotArtifactGroup(snapshot, group, archiveboxSnapshotId);
     uploadedAny = uploadedAny || groupUploaded;
   }
 

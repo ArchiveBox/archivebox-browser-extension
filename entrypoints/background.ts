@@ -6,6 +6,7 @@ import { appendSnapshotScreenshotParts, writeSnapshotMhtmlBytes, writeSnapshotSc
 import { createSnapshot } from '@/src/lib/snapshots';
 import { getArchiveBoxServerUrl, getConfig, getSnapshots, setSnapshots } from '@/src/lib/storage';
 import type { ArchiveBoxAddResult, RuntimeMessage, RuntimeResponse, Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotSingleFile } from '@/src/lib/types';
+import { compactUuid } from '@/src/lib/uuid';
 
 type PageMetrics = {
   viewportWidth: number;
@@ -806,20 +807,30 @@ async function shouldAutoArchive(url: string): Promise<boolean> {
 }
 
 async function markSnapshotSynced(snapshotId: string, archivebox: ArchiveBoxAddResult | null): Promise<void> {
-  const returnedSnapshotId = archivebox?.snapshot_ids?.[0];
+  const returnedSnapshotIdRaw = archivebox?.snapshot_ids?.[0] || '';
+  const returnedSnapshotId = returnedSnapshotIdRaw ? compactUuid(returnedSnapshotIdRaw) : '';
   if (returnedSnapshotId && returnedSnapshotId !== snapshotId) {
     throw new Error(t("ArchiveBox returned a different snapshot ID than the extension sent."));
   }
   if (!archivebox?.crawl_id) return;
 
   const snapshots = await getSnapshots();
+  let serverSnapshotId = returnedSnapshotId || snapshotId;
   const nextSnapshots = snapshots.map((snapshot) => snapshot.id === snapshotId
-    ? { ...snapshot, archiveboxCrawlId: archivebox.crawl_id }
+    ? { ...snapshot, archiveboxCrawlId: archivebox.crawl_id, archiveboxSnapshotId: serverSnapshotId }
     : snapshot);
   await setSnapshots(nextSnapshots);
   const snapshot = nextSnapshots.find((item) => item.id === snapshotId);
   if (snapshot) {
-    await syncArchiveBoxSnapshotMetadata(snapshot);
+    const metadata = await syncArchiveBoxSnapshotMetadata(snapshot);
+    const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
+    if (metadataSnapshotId && metadataSnapshotId !== serverSnapshotId) {
+      serverSnapshotId = metadataSnapshotId;
+      const metadataSnapshots = (await getSnapshots()).map((item) => item.id === snapshotId
+        ? { ...item, archiveboxSnapshotId: serverSnapshotId }
+        : item);
+      await setSnapshots(metadataSnapshots);
+    }
   }
 }
 

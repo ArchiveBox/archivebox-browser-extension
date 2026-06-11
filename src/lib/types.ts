@@ -9,6 +9,7 @@ export type Snapshot = {
   favIconUrl?: string | null;
   depth?: ArchiveDepth;
   archiveboxCrawlId?: string;
+  archiveboxSnapshotId?: string;
   screenshot?: SnapshotScreenshot;
   mhtml?: SnapshotMhtml;
   singlefile?: SnapshotSingleFile;

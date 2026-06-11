@@ -1,5 +1,6 @@
 import type { ConfigState, Persona, Snapshot } from './types';
 import { archiveBoxServerUrlMatches } from './archiveboxUrlExclusions';
+import { uuidv7 } from './uuid';
 
 const defaultConfig: ConfigState = {
   archivebox_server_url: '',
@@ -101,7 +102,7 @@ export async function setActivePersona(activePersona: string): Promise<void> {
 
 export function defaultPersona(name: string): Persona {
   return {
-    id: crypto.randomUUID(),
+    id: uuidv7(),
     name,
     created: new Date().toISOString(),
     lastUsed: null,

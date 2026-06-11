@@ -25,6 +25,10 @@ export type ArchiveResultUploadResponse = {
   output_files?: Record<string, ArchiveResultOutputFile>;
 };
 
+export type ArchiveBoxSnapshotMetadataResponse = {
+  id?: string;
+};
+
 export const archiveResultUploadChunkSize = 32 * 1024 * 1024;
 const archiveResultCreateRetryDelayMs = 500;
 const archiveResultCreateMaxAttempts = 24;
@@ -206,7 +210,7 @@ export async function addToArchiveBox(
   return null;
 }
 
-export async function syncArchiveBoxSnapshotMetadata(snapshot: Snapshot): Promise<void> {
+export async function syncArchiveBoxSnapshotMetadata(snapshot: Snapshot): Promise<ArchiveBoxSnapshotMetadataResponse> {
   const archiveboxServerUrl = await getConfiguredServerBaseUrl();
   const { archivebox_api_key } = await getConfig();
   if (!archivebox_api_key) {
@@ -221,6 +225,7 @@ export async function syncArchiveBoxSnapshotMetadata(snapshot: Snapshot): Promis
     credentials: 'include',
     mode: 'cors',
     body: JSON.stringify({
+      id: snapshot.id,
       url: snapshot.url,
       crawl_id: snapshot.archiveboxCrawlId || null,
       title: snapshot.title || '',
@@ -232,6 +237,8 @@ export async function syncArchiveBoxSnapshotMetadata(snapshot: Snapshot): Promis
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
+
+  return await response.json().catch(() => ({})) as ArchiveBoxSnapshotMetadataResponse;
 }
 
 export async function removeFromArchiveBox(url: string): Promise<void> {

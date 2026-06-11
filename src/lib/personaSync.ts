@@ -1,6 +1,6 @@
 import { formatCookiesAsNetscape } from './cookies';
 import { t } from './i18n';
-import { requestServerHostPermission } from './archivebox';
+import { hasServerHostPermission, requestServerHostPermission } from './archivebox';
 import { getConfig } from './storage';
 import type { Persona, StoredCookie } from './types';
 
@@ -302,7 +302,9 @@ export async function syncPersonaToArchiveBox(persona: Persona): Promise<Persona
   if (!serverUrl) throw new Error(t("Server not configured"));
   if (!config.archivebox_api_key) throw new Error(t("API key required"));
 
-  await requestServerHostPermission(serverUrl);
+  if (!(await hasServerHostPermission(serverUrl))) {
+    await requestServerHostPermission(serverUrl);
+  }
   const payload = await buildPersonaSyncPayload(persona);
 
   const response = await fetch(`${serverUrl}/api/v1/personas/sync`, {

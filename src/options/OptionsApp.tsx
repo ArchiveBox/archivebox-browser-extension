@@ -43,7 +43,7 @@ import { createSnapshot, filterSnapshots, uniqueTags } from '@/src/lib/snapshots
 import { matchingTagSuggestions } from '@/src/lib/tags';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { syncPersonaToArchiveBox } from '@/src/lib/personaSync';
-import { uuidv7 } from '@/src/lib/uuid';
+import { compactUuid, uuidv7 } from '@/src/lib/uuid';
 import {
   defaultConfig,
   defaultPersona,
@@ -1114,7 +1114,7 @@ function OptionsMain() {
     const existingSnapshot = snapshots.find((snapshot) => snapshot.id === snapshotId);
     if (existingSnapshot?.archiveboxCrawlId) {
       try {
-        await syncArchiveBoxSnapshotTags(existingSnapshot.id, existingSnapshot.tags, tags);
+        await syncArchiveBoxSnapshotTags(existingSnapshot.archiveboxSnapshotId || existingSnapshot.id, existingSnapshot.tags, tags);
       } catch (error) {
         setSavedUrlStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
         return;
@@ -1429,14 +1429,16 @@ function OptionsMain() {
   }
 
   async function syncPersona(persona: Persona) {
-    setPersonaStatus({ kind: 'idle', text: t("Syncing $1 to ArchiveBox...", persona.name) });
+    const latestPersonas = (await getPersonas()).personas;
+    const personaToSync = latestPersonas.find((item) => item.id === persona.id) || persona;
+    setPersonaStatus({ kind: 'idle', text: t("Syncing $1 to ArchiveBox...", personaToSync.name) });
     try {
-      const response = await syncPersonaToArchiveBox(persona);
+      const response = await syncPersonaToArchiveBox(personaToSync);
       const serverPersonaId = response.persona?.id;
       const serverPersonaUrl = serverPersonaId
         ? `${archiveboxServerBaseUrl}/admin/personas/persona/${serverPersonaId}/change/`
-        : persona.serverPersonaUrl;
-      await savePersona(persona, {
+        : personaToSync.serverPersonaUrl;
+      await savePersona(personaToSync, {
         lastUsed: new Date().toISOString(),
         serverPersonaId,
         serverPersonaUrl,
@@ -1444,8 +1446,8 @@ function OptionsMain() {
       setPersonaStatus({
         kind: 'success',
         text: response.created
-          ? t("Created ArchiveBox persona $1", response.persona?.name || persona.name)
-          : t("Updated ArchiveBox persona $1", response.persona?.name || persona.name),
+          ? t("Created ArchiveBox persona $1", response.persona?.name || personaToSync.name)
+          : t("Updated ArchiveBox persona $1", response.persona?.name || personaToSync.name),
       });
     } catch (error) {
       setPersonaStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
@@ -1593,29 +1595,55 @@ function OptionsMain() {
       }));
       try {
         const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id], [snapshot.title]);
-        const archiveboxSnapshotId = archivebox?.snapshot_ids?.[0];
+        const archiveboxSnapshotIdRaw = archivebox?.snapshot_ids?.[0] || '';
+        const archiveboxSnapshotId = archiveboxSnapshotIdRaw ? compactUuid(archiveboxSnapshotIdRaw) : '';
         const archiveboxCrawlId = archivebox?.crawl_id;
+        let serverSnapshotId = archiveboxSnapshotId || snapshot.archiveboxSnapshotId || snapshot.id;
         let snapshotForUpload = snapshot;
         if (archiveboxSnapshotId && archiveboxSnapshotId !== snapshot.id) {
           throw new Error(t("ArchiveBox returned a different snapshot ID than the extension sent."));
         }
         if (archiveboxCrawlId) {
           const nextSnapshots = (await getSnapshots()).map((item) => item.id === snapshot.id
-            ? { ...item, archiveboxCrawlId }
+            ? { ...item, archiveboxCrawlId, archiveboxSnapshotId: serverSnapshotId }
             : item);
           await persistSnapshots(nextSnapshots);
           const syncedSnapshot = nextSnapshots.find((item) => item.id === snapshot.id);
           if (syncedSnapshot) {
             snapshotForUpload = syncedSnapshot;
             if (config.archivebox_api_key) {
-              await syncArchiveBoxSnapshotMetadata(syncedSnapshot);
+              const metadata = await syncArchiveBoxSnapshotMetadata(syncedSnapshot);
+              const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
+              serverSnapshotId = metadataSnapshotId || serverSnapshotId;
+              if (metadataSnapshotId && metadataSnapshotId !== syncedSnapshot.archiveboxSnapshotId) {
+                const metadataSnapshots = (await getSnapshots()).map((item) => item.id === snapshot.id
+                  ? { ...item, archiveboxSnapshotId: metadataSnapshotId }
+                  : item);
+                await persistSnapshots(metadataSnapshots);
+                snapshotForUpload = metadataSnapshots.find((item) => item.id === snapshot.id) || {
+                  ...syncedSnapshot,
+                  archiveboxSnapshotId: metadataSnapshotId,
+                };
+              }
             }
           }
         } else if (config.archivebox_api_key) {
-          await syncArchiveBoxSnapshotMetadata(snapshot);
+          const metadata = await syncArchiveBoxSnapshotMetadata(snapshot);
+          const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
+          serverSnapshotId = metadataSnapshotId || serverSnapshotId;
+          if (metadataSnapshotId && metadataSnapshotId !== snapshot.archiveboxSnapshotId) {
+            const metadataSnapshots = (await getSnapshots()).map((item) => item.id === snapshot.id
+              ? { ...item, archiveboxSnapshotId: metadataSnapshotId }
+              : item);
+            await persistSnapshots(metadataSnapshots);
+            snapshotForUpload = metadataSnapshots.find((item) => item.id === snapshot.id) || {
+              ...snapshot,
+              archiveboxSnapshotId: metadataSnapshotId,
+            };
+          }
         }
         if (config.archivebox_api_key) {
-          await uploadSnapshotCaptureArtifactsToArchiveBox(snapshotForUpload);
+          await uploadSnapshotCaptureArtifactsToArchiveBox(snapshotForUpload, serverSnapshotId);
         }
         setSyncStatuses((current) => ({
           ...current,
@@ -1662,7 +1690,7 @@ function OptionsMain() {
     for (const snapshot of snapshots.filter((item) => selectedSnapshots.has(item.id))) {
       if (!snapshot.archiveboxCrawlId) continue;
       try {
-        await syncArchiveBoxSnapshotTags(snapshot.id, snapshot.tags, modalTags);
+        await syncArchiveBoxSnapshotTags(snapshot.archiveboxSnapshotId || snapshot.id, snapshot.tags, modalTags);
       } catch (error) {
         setSavedUrlStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
         return;
@@ -2118,8 +2146,9 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
                       <ExternalLink size={13} aria-hidden="true" />
                     </a>
                   ) : (
-                    <button onClick={() => syncPersona(persona)}>{t("Sync to Server")}</button>
+                    <span className="persona-sync-link">{t("Not synced")}</span>
                   )}
+                  <button onClick={() => syncPersona(persona)}>{t("Sync to Server")}</button>
                   <button onClick={() => detectPersonaSettings(persona)}>{t("Detect Settings")}</button>
                   <button onClick={() => copyPersonaCookies(persona)}>{t("Export cookies.txt")}</button>
                   <button onClick={() => deletePersona(persona.id)}>{t("Delete")}</button>

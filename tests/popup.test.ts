@@ -592,6 +592,13 @@ function archiveboxConsoleProblems(messages: ConsoleMessage[]): ConsoleMessage[]
   return messages.filter((message) => {
     if (message.type !== 'error' && message.type !== 'warning') return false;
     if (message.source === 'page' && /Failed to load resource/i.test(message.text)) return false;
+    if (
+      message.source === 'popup'
+      && (
+        /cross-world extension resource mismatch/i.test(message.text)
+        || /was preloaded using link preload but not used/i.test(message.text)
+      )
+    ) return false;
     return true;
   });
 }
@@ -1065,7 +1072,7 @@ test('ArchiveBox server URLs are ignored before archive requests', async () => {
           urls: [url],
           tags: [],
           depth: 0,
-          snapshotIds: ['019e77ba-63c2-7000-9000-000000000001'],
+          snapshotIds: ['019e77ba63c270009000000000000001'],
           titles: ['ArchiveBox'],
         },
       });
@@ -1128,9 +1135,100 @@ test('saved URL bulk delete is local-first when server remove fails', async () =
   }
 });
 
+test('persona sync can update an already synced remote persona after detecting settings', async () => {
+  const harness = await launchHarness();
+  const personaId = '019e77ba63c270009000000000000201';
+  const payloads: Array<Record<string, unknown>> = [];
+
+  try {
+    await setExtensionStorage(harness, {
+      archivebox_server_url: 'https://api.example.com',
+      archivebox_api_key: 'test-key',
+      personas: [{
+        id: personaId,
+        name: 'Persona update test',
+        created: new Date('2026-01-04T00:00:00.000Z').toISOString(),
+        lastUsed: null,
+        cookies: {},
+        settings: {
+          userAgent: 'stale-user-agent',
+          viewport: '800x600',
+          viewportScale: '2',
+          language: 'zz-ZZ',
+          timezone: 'Etc/UTC',
+          geolocation: {
+            latitude: 37.7749,
+            longitude: -122.4194,
+            accuracy: 25,
+          },
+        },
+      }],
+      activePersona: personaId,
+    });
+    await harness.storagePage.route('https://ipapi.co/json/', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ city: 'Test City', country_name: 'Test Country' }),
+      });
+    });
+    await harness.storagePage.route('https://api.example.com/api/v1/personas/sync', async (route) => {
+      const payload = route.request().postDataJSON() as Record<string, unknown>;
+      payloads.push(payload);
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          created: payloads.length === 1,
+          persona: {
+            id: '019e77ba63c270009000000000000301',
+            name: 'Persona update test',
+          },
+        }),
+      });
+    });
+    await harness.storagePage.reload({ waitUntil: 'domcontentloaded' });
+    await harness.storagePage.getByRole('button', { name: 'Cookies' }).click({ timeout: 5_000 });
+
+    await harness.storagePage.getByRole('button', { name: 'Sync to Server' }).click({ timeout: 5_000 });
+    await expect(harness.storagePage.locator('.persona-sync-link--synced')).toBeVisible();
+    await expect.poll(() => payloads.length).toBe(1);
+    const firstPayload = payloads[0];
+    if (!firstPayload) throw new Error('Missing first persona sync payload');
+    expect((firstPayload.settings as Record<string, unknown>).user_agent).toBe('stale-user-agent');
+
+    await harness.storagePage.getByRole('button', { name: 'Detect Settings' }).click({ timeout: 5_000 });
+    await expect(harness.storagePage.locator('.status.success')).toContainText('Updated browser settings');
+    const detectedSettings = await harness.storagePage.evaluate(() => ({
+      userAgent: navigator.userAgent,
+      language: navigator.language,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      viewport: `${window.innerWidth},${window.innerHeight}`,
+      viewportScale: window.devicePixelRatio || 1,
+    }));
+
+    await harness.storagePage.getByRole('button', { name: 'Sync to Server' }).click({ timeout: 5_000 });
+    await expect.poll(() => payloads.length).toBe(2);
+    const secondPayload = payloads[1];
+    if (!secondPayload) throw new Error('Missing second persona sync payload');
+    const secondSettings = secondPayload.settings as Record<string, unknown>;
+    expect(secondPayload.extension_persona_id).toBe(personaId);
+    expect(secondSettings.user_agent).toBe(detectedSettings.userAgent);
+    expect(secondSettings.language).toBe(detectedSettings.language);
+    expect(secondSettings.timezone).toBe(detectedSettings.timezone);
+    expect(secondSettings.viewport_size).toBe(detectedSettings.viewport);
+    expect(secondSettings.viewport_device_scale_factor).toBe(detectedSettings.viewportScale);
+    await expect(harness.storagePage.locator('.persona-sync-link--synced')).toHaveAttribute('href', 'https://api.example.com/admin/personas/persona/019e77ba63c270009000000000000301/change/');
+  } finally {
+    await closeHarness(harness);
+  }
+});
+
 test('saved URL sync uploads local OPFS artifacts', async () => {
   const harness = await launchHarness();
-  const snapshotId = '019e77ba-63c2-7000-9000-000000000002';
+  const snapshotId = '019e77ba63c270009000000000000002';
+  const serverSnapshotId = '019e77ba63c270009000000000000102';
   const snapshotUrl = 'https://upload-artifacts.example/';
   const screenshotPath = `snapshots/20260103/upload-artifacts.example/${snapshotId}/chrome_extension_screenshot/screenshot.png`;
   const mhtmlPath = `snapshots/20260103/upload-artifacts.example/${snapshotId}/chrome_mhtml/snapshot.mhtml`;
@@ -1195,10 +1293,13 @@ test('saved URL sync uploads local OPFS artifacts', async () => {
       });
     });
     await harness.storagePage.route('https://api.example.com/api/v1/core/snapshots', (route) => {
-      route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+      const body = route.request().postDataJSON() as { id?: string };
+      expect(body.id).toBe(snapshotId);
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: serverSnapshotId }) });
     });
     await harness.storagePage.route('https://api.example.com/api/v1/core/archiveresults', async (route) => {
       const body = route.request().postDataBuffer()?.toString('latin1') || '';
+      expect(body).toContain(`name="snapshot_id"\r\n\r\n${serverSnapshotId}`);
       archiveResultBodies.push(body);
       const plugin = body.includes('chrome_mhtml') ? 'chrome_mhtml' : 'chrome_extension_screenshot';
       await route.fulfill({
@@ -1330,7 +1431,7 @@ test('native action popup supports local save, tags, depth, captures, navigation
     expect(snapshot?.mhtml).toBeTruthy();
     const snapshotId = String(snapshot?.id || '');
     expect(snapshotId).toBeTruthy();
-    expect(snapshotId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(snapshotId).toMatch(/^[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$/);
 
     expect(entries.some((entry) => entry.url === testPageUrl)).toBe(true);
 

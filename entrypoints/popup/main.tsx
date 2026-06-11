@@ -10,6 +10,7 @@ import { createSnapshot } from '@/src/lib/snapshots';
 import { getConfig, getSnapshots, setSnapshots } from '@/src/lib/storage';
 import { matchingTagSuggestions } from '@/src/lib/tags';
 import type { ArchiveDepth, RuntimeMessage, RuntimeResponse, Snapshot } from '@/src/lib/types';
+import { compactUuid } from '@/src/lib/uuid';
 import './style.css';
 
 type RemoteArchiveStatus = 'not_archived' | 'archived' | 'sync_failed';
@@ -156,15 +157,36 @@ function ArchiveBoxOverlay() {
   }
 
   async function ensureConfiguredServerPermission(requestPermission: boolean): Promise<void> {
-    if (!archiveboxServerUrl) throw new Error(t("Server not configured"));
+    const configuredServerUrl = archiveboxServerUrl || (await getConfig()).archivebox_server_url;
+    if (configuredServerUrl && configuredServerUrl !== archiveboxServerUrl) {
+      setArchiveboxServerUrl(configuredServerUrl);
+    }
+    if (!configuredServerUrl) throw new Error(t("Server not configured"));
     if (requestPermission) {
-      await requestServerHostPermission(archiveboxServerUrl);
+      await requestServerHostPermission(configuredServerUrl);
       return;
     }
-    if (await hasServerHostPermission(archiveboxServerUrl)) return;
+    if (await hasServerHostPermission(configuredServerUrl)) return;
     if (!requestPermission) {
       throw new Error(t("Click Sync to grant ArchiveBox server permission."));
     }
+  }
+
+  async function ensureServerSnapshotId(snapshotId: string, latestSnapshot: Snapshot): Promise<Snapshot> {
+    if (latestSnapshot.archiveboxSnapshotId) return latestSnapshot;
+
+    const metadata = await syncArchiveBoxSnapshotMetadata(latestSnapshot);
+    const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
+    if (!metadataSnapshotId) return latestSnapshot;
+
+    const nextSnapshots = (await getSnapshots()).map((item) => item.id === snapshotId
+      ? { ...item, archiveboxSnapshotId: metadataSnapshotId }
+      : item);
+    await setSnapshots(nextSnapshots);
+    setSnapshot((current) => current?.id === snapshotId
+      ? { ...current, archiveboxSnapshotId: metadataSnapshotId }
+      : current);
+    return nextSnapshots.find((item) => item.id === snapshotId) || latestSnapshot;
   }
 
   async function uploadCapturedArtifactIfArchived(
@@ -173,12 +195,13 @@ function ArchiveBoxOverlay() {
     artifactLabel: string,
   ): Promise<void> {
     const snapshots = await getSnapshots();
-    const latestSnapshot = snapshots.find((item) => item.id === snapshotId);
+    let latestSnapshot = snapshots.find((item) => item.id === snapshotId);
     if (!latestSnapshot || (remoteStatus !== 'archived' && !latestSnapshot.archiveboxCrawlId)) return;
 
     try {
       setOk(null);
       setStatus(t("Uploading $1 to ArchiveBox Server...", artifactLabel));
+      latestSnapshot = await ensureServerSnapshotId(snapshotId, latestSnapshot);
       await uploadSnapshotCaptureArtifactsToArchiveBox(latestSnapshot);
       setOk(true);
       setRemoteStatus('archived');
@@ -195,10 +218,11 @@ function ArchiveBoxOverlay() {
 
   async function uploadCurrentArtifactsIfArchived(snapshotId: string): Promise<void> {
     const snapshots = await getSnapshots();
-    const latestSnapshot = snapshots.find((item) => item.id === snapshotId);
+    let latestSnapshot = snapshots.find((item) => item.id === snapshotId);
     if (!latestSnapshot) return;
 
     try {
+      latestSnapshot = await ensureServerSnapshotId(snapshotId, latestSnapshot);
       await uploadSnapshotCaptureArtifactsToArchiveBox(latestSnapshot);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -221,7 +245,7 @@ function ArchiveBoxOverlay() {
     setLocalStatus('saved');
     if (currentSnapshot.archiveboxCrawlId) {
       try {
-        await syncArchiveBoxSnapshotTags(currentSnapshot.id, previousTags, tags);
+        await syncArchiveBoxSnapshotTags(currentSnapshot.archiveboxSnapshotId || currentSnapshot.id, previousTags, tags);
         setOk(true);
         setRemoteStatus('archived');
         setRemoteDetail('');
@@ -282,7 +306,8 @@ function ArchiveBoxOverlay() {
       },
     });
     if (response.ok) {
-      const archiveboxSnapshotId = response.archivebox?.snapshot_ids?.[0];
+      const archiveboxSnapshotIdRaw = response.archivebox?.snapshot_ids?.[0] || '';
+      const archiveboxSnapshotId = archiveboxSnapshotIdRaw ? compactUuid(archiveboxSnapshotIdRaw) : '';
       const archiveboxCrawlId = response.archivebox?.crawl_id;
       if (localSnapshotId && archiveboxSnapshotId && archiveboxSnapshotId !== localSnapshotId) {
         const errorMessage = t("ArchiveBox returned a different snapshot ID than the extension sent.");
@@ -295,15 +320,33 @@ function ArchiveBoxOverlay() {
       if (localSnapshotId && archiveboxCrawlId) {
         const snapshots = await getSnapshots();
         const nextSnapshots = snapshots.map((item) => item.id === localSnapshotId
-          ? { ...item, archiveboxCrawlId }
+          ? {
+              ...item,
+              archiveboxCrawlId,
+              ...(archiveboxSnapshotId ? { archiveboxSnapshotId } : {}),
+            }
           : item);
         await setSnapshots(nextSnapshots);
         setSnapshot((current) => current?.id === localSnapshotId
-          ? { ...current, archiveboxCrawlId }
+          ? {
+              ...current,
+              archiveboxCrawlId,
+              ...(archiveboxSnapshotId ? { archiveboxSnapshotId } : {}),
+            }
           : current);
         const syncedSnapshot = nextSnapshots.find((item) => item.id === localSnapshotId);
         if (syncedSnapshot) {
-          await syncArchiveBoxSnapshotMetadata(syncedSnapshot);
+          const metadata = await syncArchiveBoxSnapshotMetadata(syncedSnapshot);
+          const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
+          if (metadataSnapshotId) {
+            const metadataSnapshots = (await getSnapshots()).map((item) => item.id === localSnapshotId
+              ? { ...item, archiveboxSnapshotId: metadataSnapshotId }
+              : item);
+            await setSnapshots(metadataSnapshots);
+            setSnapshot((current) => current?.id === localSnapshotId
+              ? { ...current, archiveboxSnapshotId: metadataSnapshotId }
+              : current);
+          }
         }
       }
       setOk(true);
