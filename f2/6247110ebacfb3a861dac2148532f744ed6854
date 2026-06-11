@@ -1,0 +1,65 @@
+entrypoints/background.ts
+  s_463e8607ca6021::t_b6b5d4c2fe0fab 9,810-811,818,820,825-833
+src/lib/personaSync.ts
+  s_b701741733cdd5::t_87be0a12c5aa81 3,305-307
+wxt.config.ts
+  s_b701741733cdd5::t_252c4b29e7dbe2 23
+src/lib/types.ts
+  s_463e8607ca6021::t_14eedd786760b1 12
+tests/popup.test.ts
+  s_463e8607ca6021::t_c781f34242cb60 1075,1230-1231,1434
+  s_463e8607ca6021::t_370166ec336bb6 595-601
+  s_b701741733cdd5::t_6701657b012391 1197-1199,1213-1216
+  s_b701741733cdd5::t_447f1427e4a3f7 1138-1158,1164-1191,1193,1195-1196,1200,1202-1210,1212,1217-1227
+  s_463e8607ca6021::t_44638dc9da7ab4 1298,1302
+  s_b701741733cdd5::t_955daffa519bbc 1192,1194,1201,1211
+  s_463e8607ca6021::t_b1d8881f5a690a 1296-1297
+  s_b701741733cdd5::t_6c4d6575f916cf 1159-1163
+src/lib/storage.ts
+  s_463e8607ca6021::t_63fed46b1b57c7 3,105
+src/options/OptionsApp.tsx
+  s_463e8607ca6021::t_7edc5b2ed39a6c 46,1616-1618,1620,1625,1632-1634,1636,1641
+  s_463e8607ca6021::t_34e99412ceb1d7 1598-1599
+  s_463e8607ca6021::t_4a7381c825565f 1601,1608,1615,1619,1621-1624,1626-1627,1631,1635,1637-1640,1642-1643,1646
+  s_b701741733cdd5::t_504309bd276475 1432-1434,1436,1440-1441,1449-1450,2149,2151
+  s_463e8607ca6021::t_665a23dac1d2f5 1117,1693
+src/lib/archivebox.ts
+  s_463e8607ca6021::t_e7b983f319c81a 28-31,213,240-241
+  s_463e8607ca6021::t_c7c9b49c04492b 228
+src/lib/archiveboxArtifacts.ts
+  s_463e8607ca6021::t_0e7e268b0c17f6 89,92,126,147,150
+  s_463e8607ca6021::t_e3e4481db6c5ad 132
+src/lib/uuid.ts
+  s_463e8607ca6021::t_4eba3983629a93 16-20
+entrypoints/popup/main.tsx
+  s_b701741733cdd5::t_47354bf4882e0c 198,221
+  s_b701741733cdd5::t_23562a3741c583 323-327,331-335,341
+  s_463e8607ca6021::t_652e773b2a8192 13,248,339-340,342-349
+  s_b701741733cdd5::t_186a8e1d49b7b4 160-164,166,169
+  s_b701741733cdd5::t_fbbc3ec4e2ec88 175-191,204,225
+  s_463e8607ca6021::t_fdfadb8ffd71b5 309-310
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "f26247110ebacfb3a861dac2148532f744ed6854",
+  "prompts": {},
+  "sessions": {
+    "s_463e8607ca6021": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e39eb-05c2-7253-a218-467aed1abfef",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    },
+    "s_b701741733cdd5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1a0-46f8-7cb3-bc16-99b640afe1e8",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
