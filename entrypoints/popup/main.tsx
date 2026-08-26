@@ -284,7 +284,7 @@ function ArchiveBoxOverlay() {
   ) {
     setRemoteStatus('not_archived');
     setRemoteDetail('');
-    setStatus(t("ArchiveBox needs permission to connect to your configured server so it can upload this URL."));
+    setStatus(t("Sending URL to ArchiveBox Server..."));
     try {
       await ensureConfiguredServerPermission(requestPermission);
     } catch (error) {
