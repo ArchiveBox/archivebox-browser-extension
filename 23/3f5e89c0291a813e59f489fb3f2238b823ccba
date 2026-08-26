@@ -1,0 +1,21 @@
+src/lib/i18nMessages.ts
+  s_5e83b7ac3f0fa4::t_add722b61a0905 255,590
+entrypoints/popup/main.tsx
+  s_5e83b7ac3f0fa4::t_ab519ffcff23a4 287
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "233f5e89c0291a813e59f489fb3f2238b823ccba",
+  "prompts": {},
+  "sessions": {
+    "s_5e83b7ac3f0fa4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03e91-07ec-7cd0-b057-6702ac3133b9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
