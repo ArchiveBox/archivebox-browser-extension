@@ -1,0 +1,25 @@
+tests/popup.test.ts
+  s_5e83b7ac3f0fa4::t_7a0a4be3010c71 1336-1360,1365-1366,1368-1370
+  s_5e83b7ac3f0fa4::t_2daafc3524db31 1497
+  s_5e83b7ac3f0fa4::t_4efd1ed6811bec 1363
+  s_5e83b7ac3f0fa4::t_e3ece19ae610de 1367
+  s_5e83b7ac3f0fa4::t_fadbfcefa8f9ce 1361-1362,1364
+entrypoints/popup/main.tsx
+  s_5e83b7ac3f0fa4::t_f5e18996c7ffec 156-159,390-392
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "a70b7f28df2f1f677a19b81f023d7d30fdbe0705",
+  "prompts": {},
+  "sessions": {
+    "s_5e83b7ac3f0fa4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03e91-07ec-7cd0-b057-6702ac3133b9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
