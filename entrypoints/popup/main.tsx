@@ -153,6 +153,10 @@ function ArchiveBoxOverlay() {
     setSnapshot({ ...currentSnapshot });
     setDepth(currentSnapshot.depth ?? 0);
     setLocalStatus('saved');
+    setRemoteStatus(currentSnapshot.archiveboxCrawlId ? 'archived' : 'not_archived');
+    if (currentSnapshot.archiveboxCrawlId) {
+      setStatus(t("Saved to ArchiveBox Server at depth $1", currentSnapshot.depth ?? 0));
+    }
     setAllTags([...new Set([...snapshots].reverse().flatMap((item) => item.tags))]);
   }
 
@@ -383,7 +387,9 @@ function ArchiveBoxOverlay() {
   }, []);
 
   useEffect(() => {
-    if (snapshot) sendToArchiveBox(snapshot.url, snapshot.tags, snapshot.depth ?? 0, snapshot.id);
+    if (snapshot && !snapshot.archiveboxCrawlId) {
+      sendToArchiveBox(snapshot.url, snapshot.tags, snapshot.depth ?? 0, snapshot.id);
+    }
   }, [snapshot?.id]);
 
   useEffect(() => {

@@ -1333,6 +1333,41 @@ test('saved URL sync uploads local OPFS artifacts', async () => {
   }
 });
 
+test('opening the popup for an already-synced URL does not enqueue another crawl', async () => {
+  const server = await startFixtureServer();
+  const harness = await launchHarness();
+
+  try {
+    const page = await harness.context.newPage();
+    const testPageUrl = `${server.url}?already_synced=1`;
+    await page.goto(testPageUrl, { waitUntil: 'domcontentloaded' });
+    await setExtensionStorage(harness, {
+      entries: [{
+        id: '019e77ba63c270009000000000000301',
+        url: testPageUrl,
+        timestamp: new Date('2026-01-04T00:00:00.000Z').toISOString(),
+        tags: [],
+        title: 'Already synced fixture',
+        favIconUrl: null,
+        depth: 0,
+        archiveboxCrawlId: '019e77ba63c270009000000000000401',
+        archiveboxSnapshotId: '019e77ba63c270009000000000000301',
+      }],
+      archivebox_server_url: '',
+      archivebox_api_key: '',
+    });
+
+    const popup = await openNativePopup(harness, page);
+    await waitForPopupText(harness, popup, testPageUrl);
+    const popupText = htmlText(await popupHtml(harness, popup));
+    expect(popupText).toContain('ServerArchived');
+    expect(popupText).not.toContain('Sync failed');
+  } finally {
+    await closeHarness(harness);
+    await new Promise<void>((resolve) => server.server.close(() => resolve()));
+  }
+});
+
 test('native action popup supports local save, tags, depth, captures, navigation, and dismissal', async () => {
   test.setTimeout(45_000);
   const server = await startFixtureServer();
@@ -1459,8 +1494,7 @@ test('native action popup supports local save, tags, depth, captures, navigation
     const optionsFromLocalView = harness.context.waitForEvent('page');
     await clickPopupTitle(harness, popup, 'Show in Saved URLs');
     const localViewPage = await optionsFromLocalView;
-    await localViewPage.waitForLoadState('domcontentloaded');
-    expect(localViewPage.url()).toContain(`highlight=${encodeURIComponent(snapshotId)}`);
+    await localViewPage.waitForURL((url) => url.searchParams.get('highlight') === snapshotId);
     await localViewPage.close();
     await waitForNoNativePopup(harness);
 
