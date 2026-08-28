@@ -71,16 +71,23 @@ function serverBaseUrl(serverUrl: string): string {
   return new URL(serverUrl).origin;
 }
 
+function serverUrlError(message: string, serverUrl: string): Error {
+  const alternate = new URL(serverUrl);
+  alternate.hostname = alternate.hostname.startsWith('api.') ? alternate.hostname.slice(4) : `api.${alternate.hostname}`;
+  return new Error(`${message}. ${t("If your ArchiveBox uses the other security mode, try $1", alternate.origin)}`);
+}
+
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = serverTestTimeoutMs): Promise<Response> {
+  const serverUrl = new URL(String(input)).origin;
   const controller = new AbortController();
   const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(input, { ...init, signal: controller.signal });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error(t("Server request timed out after $1 seconds", Math.round(timeoutMs / 1000)));
+      throw serverUrlError(t("Server request timed out after $1 seconds", Math.round(timeoutMs / 1000)), serverUrl);
     }
-    throw error;
+    throw serverUrlError(error instanceof Error ? error.message : String(error), serverUrl);
   } finally {
     globalThis.clearTimeout(timeout);
   }
@@ -530,7 +537,7 @@ export async function testServerUrl(serverUrl: string): Promise<void> {
     if (response.ok) return;
   }
 
-  throw new Error(`${response.status} ${response.statusText}`);
+  throw serverUrlError(`${response.status} ${response.statusText}`, archiveboxServerUrl);
 }
 
 export async function testApiKey(serverUrl: string, apiKey: string): Promise<string | number> {
@@ -550,7 +557,7 @@ export async function testApiKey(serverUrl: string, apiKey: string): Promise<str
   });
 
   if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
+    throw serverUrlError(`${response.status} ${response.statusText}`, archiveboxServerUrl);
   }
 
   const data = (await response.json()) as { user_id?: string | number };
