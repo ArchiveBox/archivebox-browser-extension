@@ -1,0 +1,20 @@
+src/lib/archivebox.ts
+  s_5e83b7ac3f0fa4::t_1c389f176bbd9d 74-78
+  s_5e83b7ac3f0fa4::t_f71d8bd5a6ff77 79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "0fae137ff76237a1db251887ad28845df7961f7a",
+  "prompts": {},
+  "sessions": {
+    "s_5e83b7ac3f0fa4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03e91-07ec-7cd0-b057-6702ac3133b9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
