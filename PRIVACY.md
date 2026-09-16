@@ -10,9 +10,13 @@ The extension may store saved URLs, page titles, favicons, tags, crawl depth, sy
 
 The extension can optionally import URLs from browser history or bookmarks when you choose to use those import features. It can also optionally read cookies for domains you select so ArchiveBox authorization profiles can archive pages that require an authenticated session.
 
+Persona settings can include your browser's user agent, language, timezone, display size, and light or dark mode preference. Detect Settings can also request your location, with your browser's permission.
+
 ## Data Sent To ArchiveBox
 
 When you save or sync a page, the extension sends the selected URL and related metadata to the ArchiveBox server URL you configure. If you choose to export cookies or use an authorization profile, selected cookies may also be sent to your configured ArchiveBox server.
+
+After you sync cookies for a domain, the extension automatically syncs subsequent cookie changes for that domain to the same server. Remove the domain from the persona or clear its cookies and sync to stop syncing those cookies. Persona settings, including location if you grant access and include it, are sent when you sync the persona. Optional page captures are sent when you enable their upload.
 
 ## Third Parties
 
