@@ -1,0 +1,20 @@
+PRIVACY.md
+  s_52f2bda5505456::t_cd0278e1e2d963 13-14,19
+  s_52f2bda5505456::t_a9398049f62f87 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "133dcf983550da368667372c20a76a56f9d91c66",
+  "prompts": {},
+  "sessions": {
+    "s_52f2bda5505456": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a091f5-a5f0-70d3-a06d-259a10de24c2",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
