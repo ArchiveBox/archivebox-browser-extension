@@ -56,6 +56,7 @@ export type PersonaSettings = {
   timezone?: string;
   viewport?: string;
   viewportScale?: string;
+  colorScheme?: string;
   operatingSystem?: string;
   geography?: string;
   geolocation?: {
@@ -100,6 +101,8 @@ export type ConfigState = {
   enable_auto_archive: boolean;
   save_screenshots_locally: boolean;
   save_mhtml_locally: boolean;
+  upload_screenshots_to_server: boolean;
+  upload_mhtml_to_server: boolean;
   save_singlefile_locally: boolean;
   singlefile_extension_id: string;
   tab_manager_plus_extension_id: string;

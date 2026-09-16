@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { archiveBoxServerUrlMatches, hasServerHostPermission, isArchiveablePageUrl, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
+import { archiveBoxServerUrlMatches, hasServerHostPermission, supportsArchiveBoxApi, isArchiveablePageUrl, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
@@ -53,7 +53,7 @@ async function getActivePage(): Promise<ActivePage> {
     : (await browser.tabs.query({ currentWindow: true }))
       .filter((candidate) => candidate.id && candidate.url && !isOwnExtensionPage(candidate.url) && isArchiveablePage(candidate.url))
       .sort((left, right) => (right.lastAccessed || 0) - (left.lastAccessed || 0))[0];
-  if (!tab?.id || !tab.url) throw new Error(t("No URL found for the current tab."));
+  if (!tab?.id || !tab.url) throw new Error(t("Open a website tab, then click the ArchiveBox extension to save it."));
   return {
     favIconUrl: tab.favIconUrl || null,
     tabId: tab.id,
@@ -198,6 +198,10 @@ function ArchiveBoxOverlay() {
     kind: 'screenshot' | 'mhtml' | 'singlefile',
     artifactLabel: string,
   ): Promise<void> {
+    const config = await getConfig();
+    if (!config.archivebox_server_url || !(await supportsArchiveBoxApi(config.archivebox_server_url))) return;
+    if (kind === 'screenshot' && !config.upload_screenshots_to_server) return;
+    if (kind === 'mhtml' && !config.upload_mhtml_to_server) return;
     const snapshots = await getSnapshots();
     let latestSnapshot = snapshots.find((item) => item.id === snapshotId);
     if (!latestSnapshot || (remoteStatus !== 'archived' && !latestSnapshot.archiveboxCrawlId)) return;
@@ -358,7 +362,7 @@ function ArchiveBoxOverlay() {
       setRemoteDetail('');
       setStatus(t("Saved to ArchiveBox Server at depth $1", archiveDepth));
       console.info(`ArchiveBox: saved ${url} to ArchiveBox server`);
-      if (localSnapshotId) {
+      if (localSnapshotId && response.archivebox) {
         await uploadCurrentArtifactsIfArchived(localSnapshotId);
       }
     } else {
@@ -378,7 +382,11 @@ function ArchiveBoxOverlay() {
         setArchiveboxServerUrl(archivebox_server_url);
       })
       .catch(() => undefined)
-      .then(refresh);
+      .then(refresh)
+      .catch((error: unknown) => {
+        setOk(false);
+        setStatus(error instanceof Error ? error.message : String(error));
+      });
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') close();
     }

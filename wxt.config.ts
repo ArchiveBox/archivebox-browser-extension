@@ -1,10 +1,14 @@
 import { defineConfig } from 'wxt';
+import { version } from './package.json';
 
 // const chromeProfile = './tmp/chrome_profile';
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react', '@wxt-dev/i18n/module'],
   manifestVersion: 3,
+  zip: {
+    excludeSources: ['tmp/**', 'dist/**', 'test-results/**', 'docs/**'],
+  },
   // webExt: {
   //   chromiumProfile: chromeProfile,
   //   keepProfileChanges: true,
@@ -20,17 +24,18 @@ export default defineConfig({
     name: '__MSG_extensionName__',
     description: '__MSG_extensionDescription__',
     default_locale: 'en',
-    version: '3.3.1',
+    version,
     permissions: [
       'storage',
+      'alarms',
       'activeTab',
       'contextMenus',
       ...(['chrome', 'edge', 'firefox'].includes(browser) ? ['unlimitedStorage'] : []),
     ],
     optional_permissions: [
+      ...(browser === 'firefox' ? ['geolocation'] : []),
+      ...(browser !== 'safari' ? ['history', 'bookmarks'] : []),
       'cookies',
-      'history',
-      'bookmarks',
       'tabs',
       'scripting',
       ...(['chrome', 'edge'].includes(browser) ? ['pageCapture'] : []),

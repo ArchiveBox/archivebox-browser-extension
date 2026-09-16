@@ -1,4 +1,5 @@
-import { addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, syncArchiveBoxSnapshotMetadata, testApiKey, testServerUrl } from '@/src/lib/archivebox';
+import { configureCookieSync } from '@/src/lib/cookieSync';
+import { addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, syncArchiveBoxSnapshotMetadata, supportsArchiveBoxApi, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
@@ -858,7 +859,7 @@ async function syncSnapshotToServer(snapshot: Snapshot): Promise<boolean> {
   try {
     const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id], [snapshot.title]);
     await markSnapshotSynced(snapshot.id, archivebox);
-    await uploadSyncedSnapshotArtifacts(snapshot.id);
+    if (archivebox) await uploadSyncedSnapshotArtifacts(snapshot.id);
     console.info(`ArchiveBox: saved ${snapshot.url} to ArchiveBox server`);
     return true;
   } catch (error) {
@@ -930,6 +931,7 @@ async function getMessageTab(tabId: number): Promise<Browser.tabs.Tab> {
 }
 
 export default defineBackground(() => {
+  configureCookieSync();
   refreshUiLanguage().catch(() => undefined);
   browser.runtime.onStartup.addListener(configureAutoArchiving);
   browser.runtime.onInstalled.addListener(() => {
@@ -1061,9 +1063,10 @@ export default defineBackground(() => {
 
       case 'open_archivebox_snapshot':
         return getArchiveBoxServerUrl()
-          .then((serverUrl) => {
+          .then(async (serverUrl) => {
             if (!serverUrl) throw new Error(t("Server not configured"));
-            return browser.tabs.create({ url: archiveBoxSnapshotUrl(serverUrl, message.url) });
+            const legacy = !(await supportsArchiveBoxApi(serverUrl));
+            return browser.tabs.create({ url: archiveBoxSnapshotUrl(serverUrl, message.url, legacy) });
           })
           .then(() => ({ ok: true }))
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));

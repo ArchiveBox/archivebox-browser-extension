@@ -42,7 +42,8 @@ import { renderMhtmlToHtml } from '@/src/lib/mhtml';
 import { createSnapshot, filterSnapshots, uniqueTags } from '@/src/lib/snapshots';
 import { matchingTagSuggestions } from '@/src/lib/tags';
 import { setUiLanguage, t } from '@/src/lib/i18n';
-import { syncPersonaToArchiveBox } from '@/src/lib/personaSync';
+import { getCookieSyncStates, syncPersonaManually, type CookieSyncState } from '@/src/lib/cookieSync';
+import { currentPersonaSettings, detectPersonaLocation } from '@/src/lib/personaSettings';
 import { compactUuid, uuidv7 } from '@/src/lib/uuid';
 import {
   defaultConfig,
@@ -53,7 +54,8 @@ import {
   getSnapshots,
   setActivePersona,
   setConfig,
-  setPersonas,
+  mutatePersonas,
+  updatePersona,
   setSnapshots,
 } from '@/src/lib/storage';
 import type { ConfigState, Persona, RuntimeMessage, RuntimeResponse, Snapshot, StoredCookie } from '@/src/lib/types';
@@ -158,38 +160,6 @@ function tabManagerPlusSessionsToImportItems(sessions: TabManagerPlusSession[], 
         isNew: !existingUrls.has(tab.url),
       }));
   });
-}
-
-function detectOS(): string {
-  const ua = navigator.userAgent;
-  if (ua.includes('Windows')) return 'Windows';
-  if (ua.includes('Mac OS X')) return 'macOS';
-  if (ua.includes('Linux')) return 'Linux';
-  if (ua.includes('Android')) return 'Android';
-  if (ua.includes('iOS')) return 'iOS';
-  return t("Unknown");
-}
-
-async function detectGeography(): Promise<string> {
-  try {
-    const response = await fetch('https://ipapi.co/json/');
-    const data = await response.json() as { city?: string; country_name?: string };
-    return [data.city, data.country_name].filter(Boolean).join(', ') || t("Unknown");
-  } catch {
-    return t("Unknown");
-  }
-}
-
-async function currentPersonaSettings() {
-  return {
-    userAgent: navigator.userAgent,
-    language: navigator.language,
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    viewport: `${window.innerWidth}x${window.innerHeight}`,
-    viewportScale: String(window.devicePixelRatio || 1),
-    operatingSystem: detectOS(),
-    geography: await detectGeography(),
-  };
 }
 
 function snapshotDate(snapshot: Snapshot): string {
@@ -786,9 +756,12 @@ function OptionsMain() {
   const [apiStatus, setApiStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [testStatus, setTestStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [localCaptureStatus, setLocalCaptureStatus] = useState<Status>({ kind: 'idle', text: '' });
+  const [permissionsStatus, setPermissionsStatus] = useState<Status>({ kind: 'idle', text: '' });
+  const [requestingPermissions, setRequestingPermissions] = useState(false);
   const [savedUrlStatus, setSavedUrlStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [importStatus, setImportStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [cookieStatus, setCookieStatus] = useState<Status>({ kind: 'idle', text: '' });
+  const [cookieSyncStates, setCookieSyncStates] = useState<Record<string, CookieSyncState>>({});
   const [personaStatus, setPersonaStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [syncStatuses, setSyncStatuses] = useState<Record<string, Status>>({});
   const [personas, setPersonasState] = useState<Persona[]>([]);
@@ -835,6 +808,16 @@ function OptionsMain() {
     setUiLanguage(storedConfig.ui_language);
     setSnapshotsState(storedSnapshots);
     setConfigState(storedConfig);
+    if (personaState.personas.some((persona) => persona.name === 'Private')) {
+      const { privateSettingsInitialized } = await browser.storage.local.get('privateSettingsInitialized');
+      if (!privateSettingsInitialized) {
+        const defaults = currentPersonaSettings();
+        personaState.personas = await mutatePersonas((items) => items.map((persona) => persona.name === 'Private'
+          ? { ...persona, settings: { ...defaults, ...persona.settings } } : persona));
+        await browser.storage.local.set({ privateSettingsInitialized: true });
+      }
+    }
+    setCookieSyncStates(await getCookieSyncStates());
     setPersonasState(personaState.personas);
     setActivePersonaState(personaState.activePersona);
   }
@@ -851,8 +834,19 @@ function OptionsMain() {
       setFilterText(nextParams.get('search') || '');
       setHighlightedSnapshotId(nextParams.get('highlight') || '');
     }
+    function refreshPersonas(changes: Record<string, { newValue?: unknown }>, area: string) {
+      if (area !== 'local') return;
+      if (changes.entries) getSnapshots().then(setSnapshotsState);
+      if (Object.keys(changes).some((key) => key.startsWith('cookieSync:'))) getCookieSyncStates().then(setCookieSyncStates);
+      if (changes.personas) getPersonas().then((state) => setPersonasState(state.personas));
+      if (changes.activePersona) setActivePersonaState(String(changes.activePersona.newValue || ''));
+    }
+    browser.storage.onChanged.addListener(refreshPersonas);
     window.addEventListener('popstate', restoreFilterFromUrl);
-    return () => window.removeEventListener('popstate', restoreFilterFromUrl);
+    return () => {
+      browser.storage.onChanged.removeListener(refreshPersonas);
+      window.removeEventListener('popstate', restoreFilterFromUrl);
+    };
   }, []);
 
   useEffect(() => {
@@ -1245,6 +1239,46 @@ function OptionsMain() {
     }
   }
 
+  async function requestAllPermissions() {
+    if (typeof browser.permissions?.request !== 'function') {
+      setPermissionsStatus({ kind: 'warning', text: t("This browser does not support requesting optional permissions here.") });
+      return;
+    }
+    const manifest = browser.runtime.getManifest();
+    const optional = manifest.optional_permissions || [];
+    const dataCollection = typeof (browser.runtime as { getBrowserInfo?: unknown }).getBrowserInfo === 'function'
+      ? (manifest.browser_specific_settings?.gecko as { data_collection_permissions?: { optional?: string[] } } | undefined)?.data_collection_permissions?.optional || []
+      : [];
+    const isOrigin = (permission: string) => permission === '<all_urls>' || permission.includes('://');
+    const request = {
+      permissions: [...new Set(optional.filter((permission) => !isOrigin(permission)))] as Parameters<typeof browser.permissions.request>[0]['permissions'],
+      origins: [...new Set([...(manifest.optional_host_permissions || []), ...optional.filter(isOrigin)])],
+      ...(dataCollection.length ? { data_collection: [...new Set(dataCollection)] } : {}),
+    };
+    if (!request.permissions?.length && !request.origins.length && !dataCollection.length) {
+      setPermissionsStatus({ kind: 'success', text: t("This extension build has no optional permissions to request.") });
+      return;
+    }
+    setRequestingPermissions(true);
+    setPermissionsStatus({ kind: 'idle', text: t("Waiting for permission approval...") });
+    try {
+      // Keep request() in the click handler before any await to preserve the user gesture.
+      await browser.permissions.request(request);
+      const granted = typeof browser.permissions.contains === 'function'
+        ? await browser.permissions.contains(request) : false;
+      const actual = dataCollection.length && typeof browser.permissions.getAll === 'function'
+        ? await browser.permissions.getAll() as { data_collection?: string[] } : undefined;
+      const dataGranted = dataCollection.every((permission) => actual?.data_collection?.includes(permission));
+      setPermissionsStatus(granted && dataGranted
+        ? { kind: 'success', text: t("All requested permissions are granted.") }
+        : { kind: 'warning', text: t("Not all requested permissions were granted.") });
+    } catch (error) {
+      setPermissionsStatus({ kind: 'error', text: t("This browser could not grant the requested permissions: $1", error instanceof Error ? error.message : String(error)) });
+    } finally {
+      setRequestingPermissions(false);
+    }
+  }
+
   async function updateAutoArchive(enabled: boolean) {
     if (enabled) {
       setTestStatus({ kind: 'idle', text: t("Automatic archiving needs tabs and site access so it can detect matching pages as you browse.") });
@@ -1353,18 +1387,17 @@ function OptionsMain() {
       return;
     }
     const selectedCount = selectedCookieDomains.size;
-    const nextPersonas = personas.map((persona) => {
+    const nextPersonas = await mutatePersonas((items) => items.map((persona) => {
       if (persona.id !== targetPersonaId) return persona;
       const cookies = { ...persona.cookies };
       selectedCookieDomains.forEach((domain) => {
         cookies[domain] = cookiesByDomain[domain] || [];
       });
       return { ...persona, cookies, lastUsed: new Date().toISOString() };
-    });
+    }));
     setPersonasState(nextPersonas);
     setSelectedCookieDomains(new Set());
     setCookieProfileMenuOpen(false);
-    await setPersonas(nextPersonas);
     const persona = nextPersonas.find((item) => item.id === targetPersonaId);
     setCookieStatus({
       kind: 'success',
@@ -1391,23 +1424,21 @@ function OptionsMain() {
       ...defaultPersona(name),
       settings: await currentPersonaSettings(),
     };
-    const nextPersonas = [...personas, persona];
+    const nextPersonas = await mutatePersonas((items) => [...items, persona]);
     setPersonasState(nextPersonas);
-    await setPersonas(nextPersonas);
+    await chooseActivePersona(persona.id);
     setPersonaStatus({ kind: 'success', text: t("Created profile \"$1\"", name) });
   }
 
   async function savePersona(persona: Persona, patch: Partial<Persona>) {
-    const nextPersonas = personas.map((item) => item.id === persona.id ? { ...item, ...patch } : item);
-    setPersonasState(nextPersonas);
-    await setPersonas(nextPersonas);
+    await updatePersona(persona.id, (item) => ({ ...item, ...patch }));
+    setPersonasState((await getPersonas()).personas);
   }
 
   async function deletePersona(id: string) {
     if (!confirm(t("Delete this profile? This cannot be undone."))) return;
-    const nextPersonas = personas.filter((persona) => persona.id !== id);
+    const nextPersonas = await mutatePersonas((items) => items.filter((persona) => persona.id !== id));
     setPersonasState(nextPersonas);
-    await setPersonas(nextPersonas);
     if (activePersona === id) {
       const nextActive = nextPersonas[0]?.id || '';
       setActivePersonaState(nextActive);
@@ -1422,10 +1453,21 @@ function OptionsMain() {
   }
 
   async function detectPersonaSettings(persona: Persona) {
-    await savePersona(persona, {
-      settings: await currentPersonaSettings(),
-    });
-    setPersonaStatus({ kind: 'success', text: t("Updated browser settings for $1", persona.name) });
+    // Start the location request directly in the click handler, before awaiting storage.
+    const location = detectPersonaLocation().then((geolocation) => ({ geolocation, error: '' }),
+      (error: GeolocationPositionError) => ({ geolocation: null, error: error.message }));
+    await updatePersona(persona.id, (item) => ({ ...item, settings: { ...item.settings, ...currentPersonaSettings() } }));
+    const result = await location;
+    if (result.geolocation) {
+      await updatePersona(persona.id, (item) => ({ ...item, settings: {
+        ...item.settings, geolocation: result.geolocation,
+        geography: `${result.geolocation!.latitude}, ${result.geolocation!.longitude}`,
+      } }));
+    }
+    setPersonasState((await getPersonas()).personas);
+    setPersonaStatus({ kind: result.error ? 'warning' : 'success', text: result.error
+      ? t("Browser settings updated; location unavailable: $1", result.error)
+      : t("Updated browser settings for $1", persona.name) });
   }
 
   async function syncPersona(persona: Persona) {
@@ -1433,7 +1475,8 @@ function OptionsMain() {
     const personaToSync = latestPersonas.find((item) => item.id === persona.id) || persona;
     setPersonaStatus({ kind: 'idle', text: t("Syncing $1 to ArchiveBox...", personaToSync.name) });
     try {
-      const response = await syncPersonaToArchiveBox(personaToSync);
+      await requestServerHostPermission(archiveboxServerBaseUrl);
+      const response = await syncPersonaManually(personaToSync.id);
       const serverPersonaId = response.persona?.id;
       const serverPersonaUrl = serverPersonaId
         ? `${archiveboxServerBaseUrl}/admin/personas/persona/${serverPersonaId}/change/`
@@ -1455,25 +1498,32 @@ function OptionsMain() {
   }
 
   async function updatePersonaSetting(persona: Persona, key: EditablePersonaSettingKey, value: string) {
-    await savePersona(persona, {
-      settings: {
-        ...persona.settings,
-        [key]: value,
-      },
-    });
+    await updatePersona(persona.id, (item) => ({ ...item, settings: { ...item.settings, [key]: value } }));
+    setPersonasState((await getPersonas()).personas);
   }
 
   async function removePersonaDomain(persona: Persona, domain: string) {
-    const cookies = { ...persona.cookies };
-    delete cookies[domain];
-    await savePersona(persona, { cookies });
+    await updatePersona(persona.id, (item) => {
+      const cookies = { ...item.cookies };
+      delete cookies[domain];
+      return { ...item, cookies };
+    });
+    setPersonasState((await getPersonas()).personas);
   }
 
   async function loadHistory() {
+    if (!browser.runtime.getManifest().optional_permissions?.includes('history')) {
+      setImportStatus({ kind: 'warning', text: t("History import is not supported in this browser.") });
+      return;
+    }
     setImportStatus({ kind: 'idle', text: t("History import needs history permission so browser history URLs can be added to the saved URL list.") });
     const granted = await browser.permissions.request({ permissions: ['history'] });
     if (!granted && !(await browser.permissions.contains({ permissions: ['history'] }).catch(() => false))) {
       setImportStatus({ kind: 'error', text: t("History permission denied") });
+      return;
+    }
+    if (typeof browser.history?.search !== 'function') {
+      setImportStatus({ kind: 'warning', text: t("History import is not supported in this browser.") });
       return;
     }
     const existingUrls = new Set(snapshots.map((snapshot) => snapshot.url));
@@ -1487,10 +1537,18 @@ function OptionsMain() {
   }
 
   async function loadBookmarks() {
+    if (!browser.runtime.getManifest().optional_permissions?.includes('bookmarks')) {
+      setImportStatus({ kind: 'warning', text: t("Bookmark import is not supported in this browser.") });
+      return;
+    }
     setImportStatus({ kind: 'idle', text: t("Bookmark import needs bookmarks permission so bookmark URLs can be added to the saved URL list.") });
     const granted = await browser.permissions.request({ permissions: ['bookmarks'] });
     if (!granted && !(await browser.permissions.contains({ permissions: ['bookmarks'] }).catch(() => false))) {
       setImportStatus({ kind: 'error', text: t("Bookmark permission denied") });
+      return;
+    }
+    if (typeof browser.bookmarks?.getTree !== 'function') {
+      setImportStatus({ kind: 'warning', text: t("Bookmark import is not supported in this browser.") });
       return;
     }
     const existingUrls = new Set(snapshots.map((snapshot) => snapshot.url));
@@ -1627,7 +1685,7 @@ function OptionsMain() {
               }
             }
           }
-        } else if (config.archivebox_api_key) {
+        } else if (archivebox && config.archivebox_api_key) {
           const metadata = await syncArchiveBoxSnapshotMetadata(snapshot);
           const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
           serverSnapshotId = metadataSnapshotId || serverSnapshotId;
@@ -1642,7 +1700,7 @@ function OptionsMain() {
             };
           }
         }
-        if (config.archivebox_api_key) {
+        if (archivebox && config.archivebox_api_key) {
           await uploadSnapshotCaptureArtifactsToArchiveBox(snapshotForUpload, serverSnapshotId);
         }
         setSyncStatuses((current) => ({
@@ -2015,26 +2073,50 @@ function OptionsMain() {
           </div>
           <div className="section-divider" />
           <SectionHeader title={t("Advanced Archiving")} detail={t("Control local captures and automatic archiving behavior.")} />
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={config.save_screenshots_locally}
-              onChange={(event) => updateLocalCaptureSetting('save_screenshots_locally', event.currentTarget.checked)}
-            />
-            {t("Save full-page screenshots locally")}
-          </label>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={supportsMhtmlCapture && config.save_mhtml_locally}
-              disabled={!supportsMhtmlCapture}
-              onChange={(event) => updateLocalCaptureSetting('save_mhtml_locally', event.currentTarget.checked)}
-            />
-            {t("Save MHTML snapshots locally")}
-          </label>
+          <div className="capture-options-row">
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={config.save_screenshots_locally}
+                onChange={(event) => updateLocalCaptureSetting('save_screenshots_locally', event.currentTarget.checked)}
+              />
+              {t("Save full-page screenshots locally")}
+            </label>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                aria-label={t("Upload screenshots to server")}
+                checked={config.upload_screenshots_to_server}
+                onChange={(event) => saveConfig({ upload_screenshots_to_server: event.currentTarget.checked })}
+              />
+              {t("Upload to server")}
+            </label>
+          </div>
+          <div className="capture-options-row">
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={supportsMhtmlCapture && config.save_mhtml_locally}
+                disabled={!supportsMhtmlCapture}
+                onChange={(event) => updateLocalCaptureSetting('save_mhtml_locally', event.currentTarget.checked)}
+              />
+              {t("Save MHTML snapshots locally")}
+            </label>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                aria-label={t("Upload MHTML snapshots to server")}
+                checked={supportsMhtmlCapture && config.upload_mhtml_to_server}
+                disabled={!supportsMhtmlCapture}
+                onChange={(event) => saveConfig({ upload_mhtml_to_server: event.currentTarget.checked })}
+              />
+              {t("Upload to server")}
+            </label>
+          </div>
           {!supportsMhtmlCapture ? (
             <p className="help-text">{mhtmlUnsupportedMessage()}</p>
           ) : null}
+          {/* Unfinished SingleFile and Tab Manager Plus controls.
           <label className="toggle">
             <input
               type="checkbox"
@@ -2059,6 +2141,7 @@ function OptionsMain() {
           </Field>
           <p className="help-text">{t("Leave the Tab Manager Plus extension ID blank to use the default Chrome Web Store ID.")}</p>
           <p className="help-text">{t("$1 Leave the extension ID blank to use the default SingleFile Web Store / Add-ons ID.", singleFileCaptureUnavailableMessage())}</p>
+          */}
           <StatusBadge status={localCaptureStatus} />
           <div className="section-divider" />
           <SectionHeader title={t("Automatic Archiving")} detail={t("Automatically archive visited pages whose URLs match your patterns.")} />
@@ -2089,6 +2172,11 @@ function OptionsMain() {
             <button onClick={testUrlPatterns}>{t("Submit Test")}</button>
             <StatusBadge status={testStatus} />
           </Field>
+          <div className="section-divider" />
+          <div className="row-actions">
+            <button disabled={requestingPermissions} onClick={requestAllPermissions}>{t("Request all permissions")}</button>
+            <StatusBadge status={permissionsStatus} />
+          </div>
         </section>
       )}
 
@@ -2126,10 +2214,17 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
                     ['operatingSystem', t("Operating System")],
                     ['viewport', t("Viewport Size")],
                     ['viewportScale', t("CSS Pixel Scale")],
+                    ['colorScheme', t("Color Scheme")],
                   ] satisfies Array<[EditablePersonaSettingKey, string]>).map(([key, label]) => (
                     <label key={key}>
                       <span>{label}</span>
-                      <input value={persona.settings[key] || ''} onChange={(event) => updatePersonaSetting(persona, key, event.currentTarget.value)} />
+                      {key === 'colorScheme' ? (
+                        <select value={persona.settings[key] || ''} onChange={(event) => updatePersonaSetting(persona, key, event.currentTarget.value)}>
+                          <option value="">{t("Not set")}</option>
+                          <option value="light">{t("Light")}</option>
+                          <option value="dark">{t("Dark")}</option>
+                        </select>
+                      ) : <input value={persona.settings[key] || ''} onChange={(event) => updatePersonaSetting(persona, key, event.currentTarget.value)} />}
                     </label>
                   ))}
                 </div>
@@ -2138,6 +2233,15 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
                     <button key={domain} onClick={() => removePersonaDomain(persona, domain)}>{domain} ×</button>
                   ))}
                 </div>
+                {cookieSyncStates[persona.id] && cookieSyncStates[persona.id]?.serverOrigin !== archiveboxServerBaseUrl ? (
+                  <p role="status" className="status warning">{t("Cookie sync paused: sync this profile to the new server manually.")}</p>
+                ) : cookieSyncStates[persona.id]?.pending && (
+                  <p role="status" className={cookieSyncStates[persona.id]?.error ? 'status error' : 'status'}>
+                    {cookieSyncStates[persona.id]?.error
+                      ? t("Cookie sync failed; retrying automatically: $1", cookieSyncStates[persona.id]?.error || '')
+                      : t("Cookie sync pending")}
+                  </p>
+                )}
                 <div className="row-actions">
                   {persona.serverPersonaUrl ? (
                     <a className="persona-sync-link persona-sync-link--synced" href={persona.serverPersonaUrl} target="_blank" rel="noopener noreferrer" title={t("Open ArchiveBox persona")}>

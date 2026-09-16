@@ -1,4 +1,4 @@
-import { getConfig, getArchiveBoxServerUrl } from './storage';
+import { getConfig, getArchiveBoxServerUrl, getPersonas } from './storage';
 import { t } from './i18n';
 import { archiveBoxServerUrlMatches, isArchiveablePageUrl } from './archiveboxUrlExclusions';
 import type { ArchiveBoxAddResult, ArchiveDepth, Snapshot } from './types';
@@ -135,8 +135,19 @@ async function ensureServerHostPermission(serverUrl: string): Promise<void> {
   await requestServerHostPermission(serverUrl);
 }
 
-export function archiveBoxSnapshotUrl(serverUrl: string, url: string): string {
-  return `${serverBaseUrl(serverUrl)}/archive/${url}`;
+export function archiveBoxSnapshotUrl(serverUrl: string, url: string, legacy = false): string {
+  const path = legacy ? url.replace(/^https?:\/\//, '') : url;
+  return `${serverBaseUrl(serverUrl)}/archive/${path}`;
+}
+
+// The legacy server exposes /add/ but has no REST API. A read-only probe
+// avoids attempting persona sync or uploading artifacts to that server.
+export async function supportsArchiveBoxApi(serverUrl: string): Promise<boolean> {
+  const response = await fetchWithTimeout(`${serverBaseUrl(serverUrl)}/api/`, {
+    credentials: 'include',
+    mode: 'cors',
+  });
+  return response.status !== 404 && response.status !== 405;
 }
 
 export async function addToArchiveBox(
@@ -170,10 +181,25 @@ export async function addToArchiveBox(
     : [];
   const formattedTags = tags.join(',');
   const { archivebox_api_key } = await getConfig();
+  const { personas, activePersona } = await getPersonas();
+  const persona = personas.find((item) => item.id === activePersona);
 
   await ensureServerHostPermission(archiveboxServerUrl);
 
-  if (archivebox_api_key) {
+  const supportsApi = await supportsArchiveBoxApi(archiveboxServerUrl);
+  if (!supportsApi && persona && Object.keys(persona.cookies).length) {
+    throw new Error(t("This ArchiveBox server does not support persona cookie sync. Select a profile without cookies to submit URLs using the server's own settings, or upgrade the server to use this persona."));
+  }
+
+  if (supportsApi && persona) {
+    const { syncPersonaCookies } = await import('./cookieSync');
+    const synced = await syncPersonaCookies(persona.id);
+    if (!synced && Object.keys(persona.cookies).length) {
+      throw new Error(t("Sync this persona to the configured server before archiving with its cookies."));
+    }
+  }
+
+  if (supportsApi && archivebox_api_key) {
     const response = await fetch(`${archiveboxServerUrl}/api/v1/cli/add`, {
       headers: apiHeaders(archivebox_api_key),
       method: 'POST',
@@ -186,6 +212,7 @@ export async function addToArchiveBox(
         depth,
         snapshot_ids: archiveableSnapshotIds,
         titles: archiveableTitles,
+        ...(persona ? { persona: persona.name } : {}),
         update,
         update_all,
       }),
@@ -195,6 +222,9 @@ export async function addToArchiveBox(
       const data = await response.json().catch(() => null) as { result?: ArchiveBoxAddResult } | null;
       return data?.result || null;
     }
+    if (response.status !== 404 && response.status !== 405) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
   }
 
   const body = new FormData();
@@ -202,6 +232,7 @@ export async function addToArchiveBox(
   body.append('tag', formattedTags);
   body.append('parser', 'auto');
   body.append('depth', String(depth));
+  if (supportsApi && persona) body.append('persona', persona.name);
 
   const response = await fetch(`${archiveboxServerUrl}/add/`, {
     method: 'POST',
@@ -212,6 +243,14 @@ export async function addToArchiveBox(
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const html = await response.text();
+  if (/\/(?:admin|accounts)\/login\/?/.test(new URL(response.url).pathname) || /name=["']password["']/.test(html)) {
+    throw new Error(t("Log in to your ArchiveBox server in this browser, or enable PUBLIC_ADD_VIEW on the server, then try again."));
+  }
+  if (/class=["'][^"']*errorlist/.test(html) || (!supportsApi && !/id=["']stdout["']/.test(html))) {
+    throw new Error(t("ArchiveBox did not confirm that the URLs were added. Open the server's Add URLs page to check the form errors."));
   }
 
   return null;

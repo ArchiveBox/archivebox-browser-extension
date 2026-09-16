@@ -11,6 +11,8 @@ const defaultConfig: ConfigState = {
   enable_auto_archive: false,
   save_screenshots_locally: false,
   save_mhtml_locally: false,
+  upload_screenshots_to_server: false,
+  upload_mhtml_to_server: false,
   save_singlefile_locally: false,
   singlefile_extension_id: '',
   tab_manager_plus_extension_id: '',
@@ -26,6 +28,8 @@ export async function getConfig(): Promise<ConfigState> {
     'enable_auto_archive',
     'save_screenshots_locally',
     'save_mhtml_locally',
+    'upload_screenshots_to_server',
+    'upload_mhtml_to_server',
     'save_singlefile_locally',
     'singlefile_extension_id',
     'tab_manager_plus_extension_id',
@@ -45,6 +49,8 @@ export async function getConfig(): Promise<ConfigState> {
     enable_auto_archive: Boolean(local.enable_auto_archive),
     save_screenshots_locally: Boolean(local.save_screenshots_locally),
     save_mhtml_locally: Boolean(local.save_mhtml_locally),
+    upload_screenshots_to_server: Boolean(local.upload_screenshots_to_server),
+    upload_mhtml_to_server: Boolean(local.upload_mhtml_to_server),
     save_singlefile_locally: Boolean(local.save_singlefile_locally),
     singlefile_extension_id: String(local.singlefile_extension_id || ''),
     tab_manager_plus_extension_id: String(local.tab_manager_plus_extension_id || ''),
@@ -94,6 +100,20 @@ export async function getPersonas(): Promise<{
 
 export async function setPersonas(personas: Persona[]): Promise<void> {
   await browser.storage.local.set({ personas });
+}
+
+export async function mutatePersonas(update: (personas: Persona[]) => Persona[]): Promise<Persona[]> {
+  return navigator.locks.request('archivebox-personas', async () => {
+    const current = (await getPersonas()).personas;
+    const next = update(current);
+    if (JSON.stringify(next) !== JSON.stringify(current)) await setPersonas(next);
+    return next;
+  });
+}
+
+export async function updatePersona(id: string, update: (persona: Persona) => Persona): Promise<Persona | undefined> {
+  const personas = await mutatePersonas((items) => items.map((item) => item.id === id ? update(item) : item));
+  return personas.find((item) => item.id === id);
 }
 
 export async function setActivePersona(activePersona: string): Promise<void> {

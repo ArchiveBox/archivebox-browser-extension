@@ -10,6 +10,7 @@ import {
   readSnapshotOpfsFiles,
 } from './screenshotStorage';
 import type { Snapshot } from './types';
+import { getConfig } from './storage';
 
 const extensionArtifactSource = 'archivebox-browser-extension';
 const snapshotSyncLocks = new Map<string, Promise<{ opfs: boolean }>>();
@@ -143,10 +144,13 @@ async function uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked(snapshot: Snap
   opfs: boolean;
 }> {
   let uploadedAny = false;
+  const config = await getConfig();
   const opfsFiles = getOpfsFilesForSnapshot(snapshot, await readSnapshotOpfsFiles(snapshot));
   const archiveboxSnapshotId = snapshot.archiveboxSnapshotId || snapshot.id;
 
   for (const group of buildSnapshotArtifactGroups(snapshot, opfsFiles)) {
+    if (group.plugin === 'chrome_extension_screenshot' && !config.upload_screenshots_to_server) continue;
+    if (group.plugin === 'chrome_mhtml' && !config.upload_mhtml_to_server) continue;
     const groupUploaded = await uploadSnapshotArtifactGroup(snapshot, group, archiveboxSnapshotId);
     uploadedAny = uploadedAny || groupUploaded;
   }
