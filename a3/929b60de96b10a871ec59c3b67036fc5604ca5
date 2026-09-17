@@ -1,0 +1,14 @@
+entrypoints/popup/main.tsx
+  h_923c208e183a7b 434-438
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a3929b60de96b10a871ec59c3b67036fc5604ca5",
+  "prompts": {},
+  "humans": {
+    "h_923c208e183a7b": {
+      "author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
