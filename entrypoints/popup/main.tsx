@@ -431,6 +431,11 @@ function ArchiveBoxOverlay() {
   }
 
   function openOptions(id?: string) {
+    // Opening settings should not depend on a background worker waking up.
+    if (!id) {
+      void browser.runtime.openOptionsPage();
+      return;
+    }
     browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'open_options',
       id,
