@@ -1,3 +1,4 @@
+import { appConnection } from './appConnection';
 import type { ConfigState, Persona, Snapshot } from './types';
 import { archiveBoxServerUrlMatches } from './archiveboxUrlExclusions';
 import { uuidv7 } from './uuid';
@@ -35,12 +36,15 @@ export async function getConfig(): Promise<ConfigState> {
     'tab_manager_plus_extension_id',
   ]);
   const sync = await browser.storage.sync.get(['config_archiveBoxBaseUrl']);
+  // Keep each server/key pair together: never mix a manual server with an app token.
+  const manual = local.archivebox_server_url || local.archivebox_api_key || sync.config_archiveBoxBaseUrl;
+  const connection = manual ? undefined : await appConnection();
 
   return {
     archivebox_server_url: String(
-      local.archivebox_server_url || sync.config_archiveBoxBaseUrl || '',
+      local.archivebox_server_url || sync.config_archiveBoxBaseUrl || connection?.server || '',
     ),
-    archivebox_api_key: String(local.archivebox_api_key || ''),
+    archivebox_api_key: String(manual ? local.archivebox_api_key || '' : connection?.token || ''),
     ui_language: ['auto', 'en', 'es', 'zh_CN'].includes(String(local.ui_language))
       ? local.ui_language as ConfigState['ui_language']
       : 'auto',
@@ -59,6 +63,16 @@ export async function getConfig(): Promise<ConfigState> {
 
 export async function setConfig(config: Partial<ConfigState>): Promise<void> {
   const nextConfig: Partial<ConfigState> = { ...config };
+  if ('archivebox_server_url' in config || 'archivebox_api_key' in config) {
+    const current = await getConfig();
+    nextConfig.archivebox_server_url = config.archivebox_server_url ?? current.archivebox_server_url;
+    nextConfig.archivebox_api_key = config.archivebox_api_key ??
+      (nextConfig.archivebox_server_url === current.archivebox_server_url ? current.archivebox_api_key : '');
+    if (!nextConfig.archivebox_server_url) {
+      nextConfig.archivebox_api_key = '';
+      await browser.storage.sync.remove('config_archiveBoxBaseUrl');
+    }
+  }
   if (typeof nextConfig.archivebox_server_url === 'string') {
     nextConfig.archivebox_server_url = nextConfig.archivebox_server_url.replace(/\/$/, '');
   }

@@ -2047,6 +2047,9 @@ function OptionsMain() {
               <option value="zh_CN">中文（简体）</option>
             </select>
           </Field>
+          {import.meta.env.BROWSER === 'safari' && (
+            <p className="help-text">Configure a server and key here, or leave the server blank to use the ArchiveBox app connection automatically. Browser personas are selected separately.</p>
+          )}
           <Field label={t("ArchiveBox Server URL")}>
             <input value={config.archivebox_server_url} onChange={(event) => saveConfig({ archivebox_server_url: event.currentTarget.value })} placeholder={t("http://localhost:8000 or https://archivebox.example.com")} />
             <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin`, '_blank')}>{t("Admin")}</button>

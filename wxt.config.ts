@@ -30,6 +30,7 @@ export default defineConfig({
       'alarms',
       'activeTab',
       'contextMenus',
+      ...(browser === 'safari' ? ['nativeMessaging'] : []),
       ...(['chrome', 'edge', 'firefox'].includes(browser) ? ['unlimitedStorage'] : []),
     ],
     optional_permissions: [

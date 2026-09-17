@@ -122,6 +122,16 @@ pnpm submit:firefox
 
 Edge publishing uses WXT's Microsoft Edge Add-ons API support. Set `EDGE_PRODUCT_ID` from the Partner Center extension dashboard, plus the API credentials in `EDGE_CLIENT_ID` and `EDGE_API_KEY`.
 
+All browser-side code, including Safari's optional native-connection reader, lives
+here. Safari can use a manually configured server/key pair or automatically read
+the ArchiveBox app's connection when those fields are empty. Its persona selector
+stays independent of the native share sheet. Other browsers configure their own
+connection and do not request native-messaging permission.
+
+The native iOS/macOS apps, share extensions, Safari Swift handler, signing, and
+packaging live in [ios-archivebox](https://github.com/ArchiveBox/ios-archivebox).
+That repo bundles this repo's unmodified Safari build output.
+
 Safari publishing is not handled by `wxt submit`. Build the Safari WebExtension output, then convert/package it for macOS and iOS/iPadOS with Apple's Safari Web Extension tooling:
 
 ```bash

@@ -73,7 +73,7 @@ function serverBaseUrl(serverUrl: string): string {
 
 function serverUrlError(message: string, serverUrl: string): Error {
   const alternate = new URL(serverUrl);
-  alternate.hostname = alternate.hostname.startsWith('api.') ? alternate.hostname.slice(4) : `api.${alternate.hostname}`;
+  alternate.hostname = ['localhost', 'api.localhost'].includes(alternate.hostname) ? 'api.archivebox.localhost' : alternate.hostname.startsWith('api.') ? alternate.hostname.slice(4) : `api.${alternate.hostname}`;
   return new Error(`${message}. ${t("If your ArchiveBox uses the other security mode, try $1", alternate.origin)}`);
 }
 
