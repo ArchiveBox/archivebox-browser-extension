@@ -1,0 +1,24 @@
+README.md
+  h_923c208e183a7b 125-134
+src/lib/appConnection.ts
+  h_923c208e183a7b 1-13
+src/lib/archivebox.ts
+  h_923c208e183a7b 76
+src/lib/storage.ts
+  h_923c208e183a7b 1,39-41,45,47,66-75
+src/options/OptionsApp.tsx
+  h_923c208e183a7b 2050-2052
+wxt.config.ts
+  h_923c208e183a7b 33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2e1323932ff7a5d02db756ed2ced6e41d413efa1",
+  "prompts": {},
+  "humans": {
+    "h_923c208e183a7b": {
+      "author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
