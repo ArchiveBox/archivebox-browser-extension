@@ -36,7 +36,6 @@ for (const id of expected) if (!ids.has(id)) throw new Error(`Missing required s
 manifest.screenshots.sort((a, b) => (expected.indexOf(a.id) < 0 ? expected.length : expected.indexOf(a.id)) - (expected.indexOf(b.id) < 0 ? expected.length : expected.indexOf(b.id)));
 
 const readme = await readFile(path.join(root, 'README.md'), 'utf8');
-const headings = [];
 const slugs = new Map();
 const renderer = new marked.Renderer();
 renderer.heading = function ({ tokens, depth }) {
@@ -46,7 +45,6 @@ renderer.heading = function ({ tokens, depth }) {
   const n = slugs.get(slug) ?? 0;
   slugs.set(slug, n + 1);
   const id = n ? `${slug}-${n}` : slug;
-  if (depth === 2) headings.push({ title, id });
   return `<h${depth} id="${escape(id)}">${html}</h${depth}>\n`;
 };
 const assets = new Set();
@@ -62,9 +60,8 @@ function rewrite(url, image = false) {
   return `${repo}/blob/${siteRevision}/${local}`;
 }
 const markdown = marked.parse(readme, { renderer, gfm: true }).replace(/\b(href|src)=(['"])(.*?)\2/g, (_, attribute, quote, url) => `${attribute}=${quote}${escape(rewrite(url, attribute === 'src'))}${quote}`);
-const navigation = headings.map(({ title, id }) => `<a href="${base}#${escape(id)}">${title}</a>`).join('');
 function page(title, body, gallery = false) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#9b2854"><title>${escape(title)}</title><link rel="icon" href="${base}icon.png"><link rel="stylesheet" href="${base}style.css?v=${siteRevision}"></head><body><a class="skip-link" href="#content">Skip to content</a>${siteHeader}<div class="page-layout"><aside><details class="contents"><summary>On this page</summary><nav aria-label="README sections">${navigation}</nav></details></aside><main id="content" class="${gallery ? 'gallery' : 'markdown-body'}">${body}</main></div>${footerTemplate.replaceAll('__BASE__', base).replaceAll('__REVISION__', siteRevision)}<script src="${base}site.js?v=${siteRevision}" defer></script></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#9b2854"><title>${escape(title)}</title><link rel="icon" href="${base}icon.png"><link rel="stylesheet" href="${base}style.css?v=${siteRevision}"></head><body><a class="skip-link" href="#content">Skip to content</a>${siteHeader}<div class="page-layout"><main id="content" class="${gallery ? 'gallery' : 'markdown-body'}">${body}</main></div>${footerTemplate.replaceAll('__BASE__', base).replaceAll('__REVISION__', siteRevision)}<script src="${base}site.js?v=${siteRevision}" defer></script></body></html>`;
 }
 const gallery = `<h1>Screenshots</h1><p class="provenance">Version ${escape(manifest.version)} · <a href="${repo}/commit/${manifest.revision}">${manifest.revision.slice(0, 12)}</a> · <time datetime="${escape(manifest.generatedAt)}">${escape(manifest.generatedAt)}</time></p><div class="profile-switch" role="group" aria-label="Screenshot viewport">${profiles.map((profile) => `<button type="button" data-profile="${profile}" aria-pressed="${profile === 'desktop'}">${profile[0].toUpperCase() + profile.slice(1)}</button>`).join('')}</div>${manifest.screenshots.map((capture) => `<article class="capture" id="${escape(capture.id)}"><h2>${escape(capture.title)}</h2><p class="capture-meta"><code>${escape(capture.url)}</code> · <a href="${capture.source ? `${repo}/blob/${manifest.revision}/${escape(capture.source)}` : escape(capture.url)}">${capture.source ? 'View source' : 'View page'}</a></p>${capture.images.map((image) => `<figure data-viewport="${image.name}"><a class="screenshot-frame" href="${base}screenshots/${escape(image.file)}?v=${manifest.revision}"><img src="${base}screenshots/${escape(image.file)}?v=${manifest.revision}" alt="${escape(capture.title)} — ${image.name}" width="${image.imageWidth}" height="${image.imageHeight}" loading="lazy"></a><figcaption>${image.name} · ${image.width} × ${image.height} viewport · <a href="${base}screenshots/${escape(image.file)}?v=${manifest.revision}">Full image</a></figcaption></figure>`).join('')}</article>`).join('')}`;
 await rm(output, { recursive: true, force: true });

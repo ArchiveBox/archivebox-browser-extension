@@ -1,9 +1,3 @@
-const contents = document.querySelector('.contents');
-const desktopLayout = matchMedia('(min-width: 951px)');
-function setContentsLayout() { if (contents) contents.open = desktopLayout.matches; }
-setContentsLayout();
-desktopLayout.addEventListener('change', setContentsLayout);
-
 const figures = document.querySelectorAll('[data-viewport]');
 const buttons = document.querySelectorAll('[data-profile]');
 function selectProfile(profile) {

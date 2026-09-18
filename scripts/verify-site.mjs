@@ -46,12 +46,9 @@ try {
     for (const route of ['', 'screenshots/']) {
       await page.goto(`${origin}${prefix}${route}`);
       await expect(page.locator('h1')).toHaveCount(1);
-      if (width > 950) await expect(page.locator('.contents nav')).toBeVisible();
-      else {
-        await page.locator('.contents summary').click();
-        await expect(page.locator('.contents nav')).toBeVisible();
-        await page.locator('.contents summary').click();
-      }
+      await expect(page.locator('aside, .contents')).toHaveCount(0);
+      const content = await page.locator('main').boundingBox();
+      assert(content && Math.abs(content.x - (width - content.x - content.width)) <= 1, `${route || 'README'} is not centered at ${width}px`);
       const fits = await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
       assert(fits, `${route || 'README'} overflows at ${width}px`);
       if (route) {
