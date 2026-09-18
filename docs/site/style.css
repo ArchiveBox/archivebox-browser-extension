@@ -91,3 +91,5 @@ header nav .project-menu__links a:hover, header nav .project-menu__links a[aria-
 
 .abx-footer-local > div > a + a { margin-left: 12px; }
 /* END ARCHIVEBOX CHROME */
+
+.homepage-screenshots{display:grid;grid-template-columns:repeat(3,minmax(240px,1fr));gap:18px;overflow-x:auto;padding:4px 0 16px;margin:24px 0}.homepage-screenshots a{display:block;min-width:0;aspect-ratio:16/10;overflow:hidden;border:1px solid var(--line);border-radius:14px;background:#f5f0f3}.homepage-screenshots img{display:block;width:100%;height:100%;object-fit:cover;object-position:top}.homepage-screenshots a:nth-child(2) img{object-fit:contain;object-position:center}

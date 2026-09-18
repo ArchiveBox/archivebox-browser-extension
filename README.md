@@ -17,9 +17,11 @@ This is a browser extension that lets you send individual browser tabs or all UR
 
 [Browse all screens →](https://archivebox.github.io/archivebox-browser-extension/screenshots/)
 
-[![Saved URLs](https://archivebox.github.io/archivebox-browser-extension/screenshots/saved-urls-desktop.png)](https://archivebox.github.io/archivebox-browser-extension/screenshots/)
-
-The gallery is captured from the current extension on every commit to `main`, at desktop, tablet, and mobile sizes. It includes the browser store listings, popup, Saved URLs, Configuration, Cookies, and populated bookmark and history imports.
+<div class="homepage-screenshots">
+  <a href="https://archivebox.github.io/archivebox-browser-extension/screenshots/#chrome-web-store"><img src="https://archivebox.github.io/archivebox-browser-extension/screenshots/chrome-web-store-desktop.png" alt="ArchiveBox on the Chrome Web Store" loading="lazy"></a>
+  <a href="https://archivebox.github.io/archivebox-browser-extension/screenshots/#popup"><img src="https://archivebox.github.io/archivebox-browser-extension/screenshots/popup-desktop.png" alt="Save a page with its title and suggested tags" loading="lazy"></a>
+  <a href="https://archivebox.github.io/archivebox-browser-extension/screenshots/#saved-urls"><img src="https://archivebox.github.io/archivebox-browser-extension/screenshots/saved-urls-desktop.png" alt="ArchiveBox collection list" loading="lazy"></a>
+</div>
 
 #### Recent Changes
 
@@ -112,63 +114,6 @@ node scripts/test-retention-live.mjs
 ```
 
 The live test imports bookmarks through the options UI, submits them, checks disconnected/missing-server preservation, verifies OPFS and metadata deletion, restarts the service worker, and waits for automatic expiration after resubmission. It creates server test records and deletes one of its own records to test a missing snapshot; use a disposable collection. UI default/persistence and layout checks run with `pnpm exec playwright test tests/retention.test.ts tests/options-responsive.test.ts`.
-
-### Website and screenshot gallery
-
-The [extension website](https://archivebox.github.io/archivebox-browser-extension/) renders this README directly. Edit this file to change the site’s text; there is no second copy to maintain.
-
-Every push to `main` runs the **Extension website and screenshots** workflow. It builds the extension, captures its screens in a disposable browser profile with populated saved URLs, cookies, bookmarks, and history, then publishes the README and [screenshot gallery](https://archivebox.github.io/archivebox-browser-extension/screenshots/) together. Pull requests build the same artifact without deploying. The gallery records the source revision and capture time.
-
-To reproduce the site locally:
-
-```bash
-pnpm exec playwright install chromium
-pnpm build
-pnpm screenshots
-pnpm site:build --baseurl /archivebox-browser-extension/
-```
-
-GitHub Pages must use **GitHub Actions** as its publishing source. Capture or validation failures stop deployment so an incomplete gallery cannot replace the current site. Generated screenshots and site output are build artifacts, not committed files.
-
-To create store upload bundles:
-
-```bash
-pnpm zip
-pnpm zip:edge
-pnpm zip:firefox
-pnpm zip:safari
-```
-
-To submit store uploads with WXT, add the store credentials to `.env` using `.env.example` as the template, then run the matching submit script:
-
-```bash
-pnpm submit:chrome
-pnpm submit:edge:dry-run
-pnpm submit:edge
-pnpm submit:firefox
-```
-
-Edge publishing uses WXT's Microsoft Edge Add-ons API support. Set `EDGE_PRODUCT_ID` from the Partner Center extension dashboard, plus the API credentials in `EDGE_CLIENT_ID` and `EDGE_API_KEY`.
-
-All browser-side code, including Safari's optional native-connection reader, lives
-here. Safari can use a manually configured server/key pair or automatically read
-the ArchiveBox app's connection when those fields are empty. Its persona selector
-stays independent of the native share sheet. Other browsers configure their own
-connection and do not request native-messaging permission.
-
-The native iOS/macOS apps, share extensions, Safari Swift handler, signing, and
-packaging live in [ios-archivebox](https://github.com/ArchiveBox/ios-archivebox).
-That repo bundles this repo's unmodified Safari build output.
-
-Safari publishing is not handled by `wxt submit`. Build the Safari WebExtension output, then convert/package it for macOS and iOS/iPadOS with Apple's Safari Web Extension tooling:
-
-```bash
-pnpm convert:safari
-```
-
-For App Store/TestFlight distribution, upload the generated Xcode app project through App Store Connect, or use Apple's Safari Web Extension Packager flow.
-
-Please open an issue to discuss any proposed changes *before* starting work on any PRs.
 
 ## Changelog
 
