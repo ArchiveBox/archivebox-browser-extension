@@ -1,7 +1,6 @@
 /** Real-browser gallery. Run after pnpm build; never writes extension state fixtures. */
 import { chromium, expect } from '@playwright/test';
-import { spawn, execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
@@ -22,10 +21,7 @@ const server = createServer((req, res) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
-const canary = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary';
-const executable = process.env.CHROME_FOR_TESTING_BIN || process.env.CHROME_BIN || (existsSync(canary) ? canary : chromium.executablePath());
-const chrome = spawn(executable, [`--user-data-dir=${profile}`, '--remote-debugging-port=0', '--enable-unsafe-extension-debugging', '--headless=new', '--no-first-run', '--no-default-browser-check', '--lang=en-US', ...(process.platform === 'linux' ? ['--no-sandbox'] : [])], { stdio: 'ignore' });
-let browser;
+let context;
 const screenshots = [];
 async function capture(page, id, title, source, url = page.url().replace(/^chrome-extension:\/\/[^/]+\//, '')) {
   const entry = { id, title, url, source, images: [] };
@@ -43,10 +39,6 @@ async function capture(page, id, title, source, url = page.url().replace(/^chrom
   console.log(`Captured ${id} (${sizes.length} viewports)`);
 }
 try {
-  let port;
-  await expect.poll(async () => port = await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8').then(text => text.split('\n')[0]).catch(() => ''), { timeout: 30000 }).not.toBe('');
-  browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
-  const session = await browser.newBrowserCDPSession();
   const extensionPath = path.join(profile, 'extension');
   await cp(path.join(root, '.output/chrome-mv3'), extensionPath, { recursive: true });
   const manifestFile = path.join(extensionPath, 'manifest.json');
@@ -56,8 +48,13 @@ try {
   manifest.permissions = [...new Set([...manifest.permissions, ...manifest.optional_permissions])];
   manifest.host_permissions = ['<all_urls>'];
   await writeFile(manifestFile, JSON.stringify(manifest));
-  const { id } = await session.send('Extensions.loadUnpacked', { path: extensionPath });
-  const context = browser.contexts()[0];
+  context = await chromium.launchPersistentContext(profile, {
+    channel: 'chromium',
+    headless: true,
+    args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+  });
+  const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
+  const id = new URL(worker.url()).hostname;
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.setViewportSize(sizes[0]);
@@ -171,8 +168,7 @@ try {
   await cp(staging, path.join(root, 'tmp/screenshot-capture-failure'), { recursive: true });
   throw error;
 } finally {
-  await browser?.close();
-  if (chrome.exitCode === null && chrome.signalCode === null) { const exited = new Promise(resolve => chrome.once('exit', resolve)); chrome.kill('SIGTERM'); await exited; }
+  await context?.close();
   await new Promise(resolve => server.close(resolve));
   await rm(profile, { recursive: true, force: true });
 }
