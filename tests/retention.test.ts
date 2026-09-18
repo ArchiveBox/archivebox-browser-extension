@@ -76,7 +76,7 @@ test('local retention defaults to 30 days and persists every choice', async ({},
         { id: 'unsent-visible', url: 'https://example.com/visible', title: 'Unsent visible', timestamp: new Date().toISOString(), tags: [] },
       ] });
     });
-    await page.getByPlaceholder('http://localhost:8000 or https://archivebox.example.com').fill('http://127.0.0.1:18764');
+    await page.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com').fill('http://127.0.0.1:18764');
     await expect.poll(() => page.evaluate(async () => {
       const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
       return (await api.storage.local.get('archivebox_server_url')).archivebox_server_url;

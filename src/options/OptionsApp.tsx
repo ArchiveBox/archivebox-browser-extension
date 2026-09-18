@@ -2068,14 +2068,14 @@ function OptionsMain() {
             <p className="help-text">Configure a server and key here, or leave the server blank to use the ArchiveBox app connection automatically. Browser personas are selected separately.</p>
           )}
           <Field label={t("ArchiveBox Server URL")}>
-            <input value={config.archivebox_server_url} onChange={(event) => saveConfig({ archivebox_server_url: event.currentTarget.value })} placeholder={t("http://localhost:8000 or https://archivebox.example.com")} />
+            <input value={config.archivebox_server_url} onChange={(event) => saveConfig({ archivebox_server_url: event.currentTarget.value })} placeholder={t("http://localhost:5797 or https://archivebox.example.com")} />
             <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin`, '_blank')}>{t("Admin")}</button>
             <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin/login/`, '_blank')}>{t("Login")}</button>
             <button disabled={!archiveboxServerUrlIsValid} onClick={testServer}>{t("Test")}</button>
             <StatusBadge status={serverStatus} />
           </Field>
           <p className="help-text">
-            {t("The base URL of your self-hosted ArchiveBox server. Local HTTP servers such as")} <code>http://localhost:8000</code> {t("are supported, as are HTTPS deployments.")}
+            {t("The base URL of your self-hosted ArchiveBox server. Local HTTP servers such as")} <code>http://localhost:5797</code> {t("are supported, as are HTTPS deployments.")}
           </p>
           <Field label={t("API Key")}>
             <input value={config.archivebox_api_key} onChange={(event) => saveConfig({ archivebox_api_key: event.currentTarget.value.trim() })} placeholder="... abcexamplekey1234 ..." />
