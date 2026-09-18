@@ -3,6 +3,7 @@ name: Capture extension screenshots
 on:
   push:
     branches: [main]
+    paths-ignore: ['README.md', 'docs/site/**', '.github/workflows/pages.yml', 'release.json', 'docs/TESTFLIGHT.md']
   workflow_dispatch:
 
 permissions:
