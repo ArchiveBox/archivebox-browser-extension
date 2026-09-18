@@ -7,22 +7,21 @@
 
 html,
 body {
-  width: 560px;
+  width: min(560px, 100vw);
   min-height: 0;
   margin: 0;
-  overflow-x: hidden;
   background: #9f4e4e;
   color-scheme: light;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 #root {
-  width: 560px;
+  width: 100%;
 }
 
 .archivebox-overlay {
   position: relative;
-  width: 560px;
+  width: 100%;
   overflow: visible;
   border: 1px solid #7f3838;
   border-radius: 0;
@@ -160,6 +159,15 @@ body {
 .archivebox-overlay .archivebox-tag-chip {
   padding-top: 0;
   padding-bottom: 0;
+  min-width: 0;
+}
+
+.archivebox-overlay .archivebox-tag-chip > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  line-height: 22px;
 }
 
 .archivebox-overlay__tag-chip {
@@ -421,7 +429,8 @@ button.archivebox-overlay__tag-chip {
 }
 
 .archivebox-overlay .archivebox-tag-autocomplete {
-  }
+  width: 100%;
+}
 
 .archivebox-overlay__crawl {
   position: relative;
@@ -455,6 +464,7 @@ button.archivebox-overlay__tag-chip {
   z-index: 3;
   display: grid;
   width: 250px;
+  max-width: calc(100vw - 22px);
   border: 1px solid #d8bebe;
   border-radius: 6px;
   background: #fff;
@@ -620,6 +630,7 @@ button.archivebox-overlay__tag-chip {
   padding: 4px 8px;
   font-size: 11px;
   font-weight: 650;
+  overflow-wrap: anywhere;
 }
 
 .archivebox-overlay__status a {
@@ -650,5 +661,24 @@ button.archivebox-overlay__tag-chip {
 
   .archivebox-overlay__states {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .archivebox-overlay__header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .archivebox-overlay__crawl-button {
+    width: 100%;
+  }
+
+  .archivebox-overlay__capture-button {
+    flex: 1 1 auto;
+    max-width: 100%;
+    height: auto;
+    min-height: 32px;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 }

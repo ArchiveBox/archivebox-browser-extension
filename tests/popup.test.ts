@@ -1333,7 +1333,7 @@ test('saved URL sync uploads local OPFS artifacts', async () => {
   }
 });
 
-test('opening the popup for an already-synced URL does not enqueue another crawl', async () => {
+test('an already-synced URL without a server shows its connection is unavailable', async () => {
   const server = await startFixtureServer();
   const harness = await launchHarness();
 
@@ -1360,7 +1360,10 @@ test('opening the popup for an already-synced URL does not enqueue another crawl
     const popup = await openNativePopup(harness, page);
     await waitForPopupText(harness, popup, testPageUrl);
     const popupText = htmlText(await popupHtml(harness, popup));
-    expect(popupText).toContain('ServerArchived');
+    expect(popupText).toContain('ServerConnection unavailable');
+    expect(popupText).not.toContain('ServerArchived');
+    expect(popupText).not.toContain('Saved to ArchiveBox Server');
+    expect(await popupElementsHtml(popup, '[title="View archived copy on server"]')).toHaveLength(0);
     expect(popupText).not.toContain('Sync failed');
   } finally {
     await closeHarness(harness);
@@ -1630,6 +1633,57 @@ test('action popup saves MHTML + screenshots without console errors or closing t
     ))).toEqual([]);
 
     background.close();
+  } finally {
+    await closeHarness(harness);
+    await new Promise<void>((resolve) => server.server.close(() => resolve()));
+  }
+});
+
+test('popup fits mobile viewports without horizontal overflow', async () => {
+  const server = await startFixtureServer();
+  const harness = await launchHarness();
+  try {
+    await setExtensionStorage(harness, {
+      entries: [],
+      archivebox_server_url: '',
+      archivebox_api_key: '',
+      save_mhtml_locally: false,
+      save_screenshots_locally: false,
+    });
+    const page = await harness.context.newPage();
+    await page.goto(`${server.url}?long-url=${'a'.repeat(150)}`);
+    const popupPage = await harness.context.newPage();
+    await popupPage.goto(`chrome-extension://${harness.extensionId}/popup.html`);
+    await expect(popupPage.locator('.archivebox-overlay__page-title')).toContainText('ArchiveBox Playwright Fixture');
+    const longTag = 'responsive-tag-'.repeat(8);
+    await popupPage.getByPlaceholder('+ tag', { exact: true }).fill(longTag);
+    await popupPage.getByPlaceholder('+ tag', { exact: true }).press('Enter');
+    await expect(popupPage.locator('.archivebox-tag-chip--current')).toContainText(longTag);
+    for (const width of [320, 375, 390, 430, 560, 800]) {
+      await popupPage.setViewportSize({ width, height: 900 });
+      for (const menuOpen of [false, true]) {
+        if (menuOpen) await popupPage.locator('.archivebox-overlay__crawl-button').click();
+        const result = await popupPage.evaluate(() => ({
+          width: document.querySelector('.archivebox-overlay')!.getBoundingClientRect().width,
+          scrollWidth: document.documentElement.scrollWidth,
+          overflow: [...document.querySelectorAll('body, #root, .archivebox-overlay, .archivebox-overlay *')]
+            .filter(el => {
+              const rect = el.getBoundingClientRect();
+              return rect.width > 0 && (rect.left < -1 || rect.right > innerWidth + 1);
+            }).map(el => el.className || el.tagName),
+        }));
+        expect(result.overflow, `viewport ${width}, menu ${menuOpen}`).toEqual([]);
+        expect(result.width).toBe(Math.min(width, 560));
+        expect(result.scrollWidth).toBe(width);
+        if (width === 390 && !menuOpen) {
+          const screenshotPath = test.info().outputPath('popup-mobile.png');
+          await popupPage.screenshot({ path: screenshotPath });
+          await test.info().attach('popup-mobile', { path: screenshotPath, contentType: 'image/png' });
+        }
+        if (menuOpen) await popupPage.locator('.archivebox-overlay__crawl-button').click();
+      }
+    }
+    await popupPage.close();
   } finally {
     await closeHarness(harness);
     await new Promise<void>((resolve) => server.server.close(() => resolve()));

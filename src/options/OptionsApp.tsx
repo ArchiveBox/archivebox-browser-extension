@@ -2322,9 +2322,9 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
                     else next.add(domain);
                     return next;
                   })} /></td>
-                  <td>{domain}</td>
-                  <td>{cookies.length}</td>
-                  <td><button onClick={() => copyDomainCookies(domain, cookies)}>{t("Copy cookies.txt")}</button></td>
+                  <td data-label={t("Domain")}>{domain}</td>
+                  <td data-label={t("Cookies")}>{cookies.length}</td>
+                  <td data-label={t("Export cookies.txt")}><button onClick={() => copyDomainCookies(domain, cookies)}>{t("Copy cookies.txt")}</button></td>
                 </tr>
               ))}
             </tbody>
@@ -2371,9 +2371,9 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
               {filteredImportItems.map((item) => (
                 <tr className={item.isNew ? '' : 'muted'} key={item.id}>
                   <td><input type="checkbox" checked={item.selected} disabled={!item.isNew} onChange={() => setImportItems((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, selected: !candidate.selected } : candidate))} /></td>
-                  <td><code>{item.url}</code></td>
-                  <td>{item.title}</td>
-                  <td>{snapshotDate(item)}</td>
+                  <td data-label={t("URL")}><code>{item.url}</code></td>
+                  <td data-label={t("Title")}>{item.title}</td>
+                  <td data-label={t("Timestamp")}>{snapshotDate(item)}</td>
                 </tr>
               ))}
             </tbody>
