@@ -1,0 +1,57 @@
+name: Capture extension screenshots
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-captures-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm compile
+      - run: pnpm build
+      - name: Capture real extension screens and public store listings
+        run: pnpm screenshots
+      - name: Render README and screenshot gallery
+        run: pnpm site:build --baseurl /archivebox-browser-extension/
+      - name: Verify published paths, images, and responsive gallery
+        run: pnpm site:verify
+      - name: Preserve capture evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: extension-screenshots
+          path: |
+            docs/site/screenshots/
+            tmp/screenshot-capture-failure/
+            test-results/site/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Save validated screenshot gallery
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-screenshots
+          path: docs/site/screenshots
+          if-no-files-found: error
+          retention-days: 90

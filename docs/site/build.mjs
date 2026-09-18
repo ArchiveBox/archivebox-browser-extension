@@ -1,9 +1,11 @@
 import { readFile, writeFile, mkdir, cp, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { marked } from 'marked';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
+const siteRevision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
 const site = path.join(root, 'docs/site');
 const output = path.join(site, '_site');
 const baseIndex = process.argv.indexOf('--baseurl');
@@ -57,12 +59,12 @@ function rewrite(url, image = false) {
   if (/^screenshots\/?(?:#.*)?$/.test(local)) return base + local;
   if (local.startsWith('docs/site/screenshots/')) return base + local.slice('docs/site/'.length);
   if (image) { assets.add(local); return base + local; }
-  return `${repo}/blob/${manifest.revision}/${local}`;
+  return `${repo}/blob/${siteRevision}/${local}`;
 }
 const markdown = marked.parse(readme, { renderer, gfm: true }).replace(/\b(href|src)=(['"])(.*?)\2/g, (_, attribute, quote, url) => `${attribute}=${quote}${escape(rewrite(url, attribute === 'src'))}${quote}`);
 const navigation = headings.map(({ title, id }) => `<a href="${base}#${escape(id)}">${title}</a>`).join('');
 function page(title, body, gallery = false) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#9b2854"><title>${escape(title)}</title><link rel="icon" href="${base}icon.png"><link rel="stylesheet" href="${base}style.css?v=${manifest.revision}"></head><body><a class="skip-link" href="#content">Skip to content</a>${siteHeader}<div class="page-layout"><aside><details class="contents"><summary>On this page</summary><nav aria-label="README sections">${navigation}</nav></details></aside><main id="content" class="${gallery ? 'gallery' : 'markdown-body'}">${body}</main></div>${footerTemplate.replaceAll('__BASE__', base).replaceAll('__REVISION__', manifest.revision)}<script src="${base}site.js?v=${manifest.revision}" defer></script></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#9b2854"><title>${escape(title)}</title><link rel="icon" href="${base}icon.png"><link rel="stylesheet" href="${base}style.css?v=${siteRevision}"></head><body><a class="skip-link" href="#content">Skip to content</a>${siteHeader}<div class="page-layout"><aside><details class="contents"><summary>On this page</summary><nav aria-label="README sections">${navigation}</nav></details></aside><main id="content" class="${gallery ? 'gallery' : 'markdown-body'}">${body}</main></div>${footerTemplate.replaceAll('__BASE__', base).replaceAll('__REVISION__', siteRevision)}<script src="${base}site.js?v=${siteRevision}" defer></script></body></html>`;
 }
 const gallery = `<h1>Screenshots</h1><p class="provenance">Version ${escape(manifest.version)} · <a href="${repo}/commit/${manifest.revision}">${manifest.revision.slice(0, 12)}</a> · <time datetime="${escape(manifest.generatedAt)}">${escape(manifest.generatedAt)}</time></p><div class="profile-switch" role="group" aria-label="Screenshot viewport">${profiles.map((profile) => `<button type="button" data-profile="${profile}" aria-pressed="${profile === 'desktop'}">${profile[0].toUpperCase() + profile.slice(1)}</button>`).join('')}</div>${manifest.screenshots.map((capture) => `<article class="capture" id="${escape(capture.id)}"><h2>${escape(capture.title)}</h2><p class="capture-meta"><code>${escape(capture.url)}</code> · <a href="${capture.source ? `${repo}/blob/${manifest.revision}/${escape(capture.source)}` : escape(capture.url)}">${capture.source ? 'View source' : 'View page'}</a></p>${capture.images.map((image) => `<figure data-viewport="${image.name}"><a class="screenshot-frame" href="${base}screenshots/${escape(image.file)}?v=${manifest.revision}"><img src="${base}screenshots/${escape(image.file)}?v=${manifest.revision}" alt="${escape(capture.title)} — ${image.name}" width="${image.imageWidth}" height="${image.imageHeight}" loading="lazy"></a><figcaption>${image.name} · ${image.width} × ${image.height} viewport · <a href="${base}screenshots/${escape(image.file)}?v=${manifest.revision}">Full image</a></figcaption></figure>`).join('')}</article>`).join('')}`;
 await rm(output, { recursive: true, force: true });
