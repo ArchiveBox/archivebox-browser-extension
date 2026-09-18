@@ -9,3 +9,4 @@ node_modules
 test-results/
 tmp/chrome_profile/
 tmp/chrome-mv3-playwright/
+tmp/screenshot-capture-failure/

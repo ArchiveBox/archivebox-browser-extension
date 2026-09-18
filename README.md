@@ -13,16 +13,13 @@ This is a browser extension that lets you send individual browser tabs or all UR
 - <a href="https://microsoftedge.microsoft.com/addons/detail/archivebox/dmlljpjhnfjgchbkcgheebcffocgooeh"><img src="https://github.com/user-attachments/assets/4ee7d4fb-e676-4a75-973d-ac029f265b86" height="30px" align="top"/> Microsoft Edge</a>
 - <img src="https://github.com/user-attachments/assets/c20f8f8a-01f2-427b-ac75-ffddcb62953f" height="30px" align="top"/> Safari / iOS Safari *(supported; requires manual install)*
 
-![configuring-server](https://github.com/user-attachments/assets/308c4462-ca09-434f-89a6-3f6bac404be2)
-![url-submission](https://github.com/user-attachments/assets/cfc8f670-562a-4c17-a533-4b1b0560c5c8)
-![admin-ui](https://github.com/user-attachments/assets/97d90d4c-d0f3-4bc1-b7ef-1c9e410c576f)
+## Screenshots
 
-<img width="1367" alt="image" src="https://github.com/user-attachments/assets/393da1fa-c75a-4ab8-ae98-5745dca4683c">
-<img width="2056" alt="image" src="https://github.com/user-attachments/assets/4290f090-3e33-4a12-82b8-65bafd86a2ee">
+[Browse all screens →](https://archivebox.github.io/archivebox-browser-extension/screenshots/)
 
-![image](https://github.com/user-attachments/assets/2977d572-9086-4ea7-a4a2-2726e762a125)
-![image](https://github.com/user-attachments/assets/bb2f2bde-5c40-48e4-9499-1fada83425cf)
-<img width="1402" alt="image" src="https://github.com/user-attachments/assets/aeb7ed60-d9b0-4393-8c71-2aa42921f7a2">
+[![Saved URLs](https://archivebox.github.io/archivebox-browser-extension/screenshots/saved-urls-desktop.png)](https://archivebox.github.io/archivebox-browser-extension/screenshots/)
+
+The gallery is captured from the current extension on every commit to `main`, at desktop, tablet, and mobile sizes. It includes the browser store listings, popup, Saved URLs, Configuration, Cookies, and populated bookmark and history imports.
 
 #### Recent Changes
 
@@ -67,9 +64,9 @@ SingleFile HTML capture uses the SingleFile browser extension through its extern
     ```
     <img width="400" alt="Screenshot of ArchiveBox CLI configuring PUBLIC_ADD_VIEW=True" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/b0dc715c-4f88-49dd-a019-ffd65ebcc7c4">
 3. Configure the extension to point to your ArchiveBox server's base URL (e.g. `http://localhost:8000`, `https://archivebox.example.com`, etc.)  
-    <img width="500" alt="Screenshot of extension config area: example with localhost" src="https://github.com/user-attachments/assets/308c4462-ca09-434f-89a6-3f6bac404be2" align="top"><img width="250" alt="Screenshot of extension config area: example with demo" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/82d6ae08-6327-45ef-a536-cb775ec58b41" align="top">
+    <img width="720" alt="Extension configuration" src="https://archivebox.github.io/archivebox-browser-extension/screenshots/configuration-desktop.png">
 4. ✅ *Test it out by right-clicking on any page and selecting `Save to ArchiveBox`, or by clicking the extension icon in the menubar.*  
-    <img width="400" alt="Screenshot of right-clicking to add a page to ArchiveBox using extension" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/6c0b8125-e1b9-4c64-b79a-c74a8d85c176" align="top"><img width="600" alt="Screenshot of ArchiveBox server with added URL" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/ab2dc48a-e2cd-4bef-aea3-553a91bc70c9" align="top">
+    <img width="560" alt="ArchiveBox popup" src="https://archivebox.github.io/archivebox-browser-extension/screenshots/popup-desktop.png">
 
 ---
 
@@ -101,6 +98,23 @@ pnpm dev:safari    # Safari WebExtension build
 ```
 
 For a production-style local build, load `.output/chrome-mv3` into Chrome / Chromium using the [Load Unpacked Extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) UI, load `.output/edge-mv3` into Edge using `edge://extensions`, load `.output/firefox-mv3` into Firefox using `about:debugging`, or load `.output/safari-mv3` in Safari with Settings → Developer → Add Temporary Extension.
+
+### Website and screenshot gallery
+
+The [extension website](https://archivebox.github.io/archivebox-browser-extension/) renders this README directly. Edit this file to change the site’s text; there is no second copy to maintain.
+
+Every push to `main` runs the **Extension website and screenshots** workflow. It builds the extension, captures its screens in a disposable browser profile with populated saved URLs, cookies, bookmarks, and history, then publishes the README and [screenshot gallery](https://archivebox.github.io/archivebox-browser-extension/screenshots/) together. Pull requests build the same artifact without deploying. The gallery records the source revision and capture time.
+
+To reproduce the site locally:
+
+```bash
+pnpm exec playwright install chromium
+pnpm build
+pnpm screenshots
+pnpm site:build --baseurl /archivebox-browser-extension/
+```
+
+GitHub Pages must use **GitHub Actions** as its publishing source. Capture or validation failures stop deployment so an incomplete gallery cannot replace the current site. Generated screenshots and site output are build artifacts, not committed files.
 
 To create store upload bundles:
 

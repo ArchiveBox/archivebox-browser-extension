@@ -26,7 +26,10 @@
     "submit:stores": "wxt submit --chrome-extension-id habonpimjphpdnmcfkaockjnffodikoj --chrome-zip .output/archivebox-browser-extension-$npm_package_version-chrome.zip --edge-zip .output/archivebox-browser-extension-$npm_package_version-edge.zip --firefox-extension-id archivebox@tjhorner.dev --firefox-zip .output/archivebox-browser-extension-$npm_package_version-firefox.zip --firefox-sources-zip .output/archivebox-browser-extension-$npm_package_version-sources.zip",
     "convert:safari": "pnpm build:safari && xcrun safari-web-extension-converter .output/safari-mv3",
     "compile": "tsc --noEmit",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "site:build": "node docs/site/build.mjs",
+    "screenshots": "node scripts/capture-screenshots.mjs",
+    "site:verify": "node scripts/verify-site.mjs"
   },
   "dependencies": {
     "@wxt-dev/i18n": "^0.2.5",
@@ -40,6 +43,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@wxt-dev/module-react": "^1.1.5",
+    "marked": "^18.0.13",
     "typescript": "^5.9.3",
     "wxt": "^0.20.26"
   }
