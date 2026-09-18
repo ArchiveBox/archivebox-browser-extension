@@ -1,0 +1,39 @@
+.github/workflows/pages.yml
+  s_ffefb637465167::t_ac4adb85d7431b 1-69
+.gitignore
+  s_ffefb637465167::t_eccb7ef6d423db 12
+README.md
+  s_ffefb637465167::t_7c48e1654cd85e 16,18,20-22,67,69,102-118
+docs/site/.gitignore
+  s_ffefb637465167::t_27d54c35702289 1-2
+docs/site/README.md
+  s_ffefb637465167::t_7ba86a39cbde6a 1-18
+docs/site/site.js
+  s_ffefb637465167::t_ebef638c0ffdf5 1-23
+docs/site/style.css
+  s_ffefb637465167::t_7d6c478cb00758 1-4
+package.json
+  s_ffefb637465167::t_16fb4f23f51eef 29-32,46
+pnpm-lock.yaml
+  s_ffefb637465167::t_ea8716d6b47461 39-41,1253-1257,2854-2855
+scripts/capture-screenshots.mjs
+  s_ffefb637465167::t_10b3eda0ac6715 1-178
+scripts/verify-site.mjs
+  s_ffefb637465167::t_56da1a0d19feb7 1-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ad71056f6b74562ea62b2441f5f940ca197c4d71",
+  "prompts": {},
+  "sessions": {
+    "s_ffefb637465167": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a07a32-a857-7453-a522-512c1140b8a1",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
