@@ -1,0 +1,35 @@
+entrypoints/popup/main.tsx
+  s_ffefb637465167::t_8e2e1396573b50 10,79,81-92,186,188,243,247,273,275,324,330,343,345,450
+src/lib/archivebox.ts
+  s_ffefb637465167::t_91d481682a2e84 1,4,162-170,172-174,176-195,197,199-202,204-249,252-259,263,266,270-279,281-283,636-654
+src/lib/archiveboxArtifacts.ts
+  s_ffefb637465167::t_040fdcdac76d5a 1,14,134-137
+src/lib/i18nMessages.ts
+  s_ffefb637465167::t_00512d2bc8b413 3-8,344-349
+src/lib/retention.ts
+  s_ffefb637465167::t_476028a7521b15 1-83
+src/lib/screenshotStorage.ts
+  s_ffefb637465167::t_48b4e5667acf8a 532-587
+src/lib/types.ts
+  s_ffefb637465167::t_e399bd718f1349 11-12,103
+src/options/OptionsApp.tsx
+  s_ffefb637465167::t_d757b97a100c0c 59,732-747,855-862,1116-1119,1141,1143,1621,1686,1688,1697,1699,1712,1714,1775,1777,1788,2167-2182
+tests/retention.test.ts
+  s_ffefb637465167::t_b7daa8ca1ac18d 1-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "25c3b14bfe04e911efcd20bad9da72430e22ade5",
+  "prompts": {},
+  "sessions": {
+    "s_ffefb637465167": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a07a32-a857-7453-a522-512c1140b8a1",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
