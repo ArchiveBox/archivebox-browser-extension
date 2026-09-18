@@ -1,0 +1,22 @@
+README.md
+  h_923c208e183a7b 62
+scripts/test-retention-live.mjs
+  h_923c208e183a7b 50
+src/lib/i18nMessages.ts
+  h_923c208e183a7b 152,493
+src/options/OptionsApp.tsx
+  h_923c208e183a7b 2071,2078
+tests/retention.test.ts
+  h_923c208e183a7b 79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5c9d83243c257e60e829db7c3976ed2f8f15ed4a",
+  "prompts": {},
+  "humans": {
+    "h_923c208e183a7b": {
+      "author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
