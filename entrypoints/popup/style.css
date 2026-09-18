@@ -586,7 +586,8 @@ button.archivebox-overlay__tag-chip {
   color: #795600;
 }
 
-.archivebox-overlay__pill--removed {
+.archivebox-overlay__pill--removed,
+.archivebox-overlay__pill--unavailable {
   border-color: #d3d0c8;
   background: #f4f1ea;
   color: #5e5750;

@@ -158,7 +158,7 @@ export async function addToArchiveBox(
   update_all = false,
   snapshotIds: string[] = [],
   titles: string[] = [],
-): Promise<ArchiveBoxAddResult | null> {
+): Promise<ArchiveBoxAddResult> {
   const configuredServerUrl = await getArchiveBoxServerUrl();
   if (!configuredServerUrl) {
     throw new Error(t("Server not configured"));
@@ -203,6 +203,7 @@ export async function addToArchiveBox(
     const response = await fetch(`${archiveboxServerUrl}/api/v1/cli/add`, {
       headers: apiHeaders(archivebox_api_key),
       method: 'POST',
+      redirect: 'error',
       credentials: 'include',
       mode: 'cors',
       body: JSON.stringify({
@@ -219,8 +220,18 @@ export async function addToArchiveBox(
     });
 
     if (response.ok) {
-      const data = await response.json().catch(() => null) as { result?: ArchiveBoxAddResult } | null;
-      return data?.result || null;
+      const data = await response.json().catch(() => null) as {
+        success?: boolean;
+        errors?: unknown[];
+        result?: ArchiveBoxAddResult;
+      } | null;
+      if (data?.success !== true || !Array.isArray(data.errors) || data.errors.length
+        || typeof data.result?.crawl_id !== 'string' || !data.result.crawl_id.trim()
+        || !Array.isArray(data.result.queued_urls)
+        || !archiveableUrls.every((url) => data.result!.queued_urls!.includes(url))) {
+        throw new Error(t("ArchiveBox did not confirm that the URLs were added. Open the server's Add URLs page to check the form errors."));
+      }
+      return data.result;
     }
     if (response.status !== 404 && response.status !== 405) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -249,11 +260,14 @@ export async function addToArchiveBox(
   if (/\/(?:admin|accounts)\/login\/?/.test(new URL(response.url).pathname) || /name=["']password["']/.test(html)) {
     throw new Error(t("Log in to your ArchiveBox server in this browser, or enable PUBLIC_ADD_VIEW on the server, then try again."));
   }
-  if (/class=["'][^"']*errorlist/.test(html) || (!supportsApi && !/id=["']stdout["']/.test(html))) {
+  const resultUrl = new URL(response.url);
+  const crawlId = resultUrl.pathname.match(/\/admin\/core\/crawl\/([0-9a-f-]+)\/change\/?$/i)?.[1];
+  if (/class=["'][^"']*errorlist/.test(html) || !response.redirected || !crawlId
+    || resultUrl.origin !== new URL(archiveboxServerUrl).origin) {
     throw new Error(t("ArchiveBox did not confirm that the URLs were added. Open the server's Add URLs page to check the form errors."));
   }
 
-  return null;
+  return { crawl_id: crawlId, queued_urls: archiveableUrls };
 }
 
 export async function syncArchiveBoxSnapshotMetadata(snapshot: Snapshot): Promise<ArchiveBoxSnapshotMetadataResponse> {

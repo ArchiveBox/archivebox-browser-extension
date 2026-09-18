@@ -1365,6 +1365,14 @@ test('an already-synced URL without a server shows its connection is unavailable
     expect(popupText).not.toContain('Saved to ArchiveBox Server');
     expect(await popupElementsHtml(popup, '[title="View archived copy on server"]')).toHaveLength(0);
     expect(popupText).not.toContain('Sync failed');
+    popup.cdp.close();
+
+    await setExtensionStorage(harness, { archivebox_server_url: server.url.replace('127.0.0.1', 'localhost') });
+    const reopened = await openNativePopup(harness, page);
+    await waitForPopupText(harness, reopened, 'Previously submitted');
+    expect(await popupElementsHtml(reopened, '.archivebox-overlay__pill--archived')).toHaveLength(0);
+    expect(htmlText(await popupHtml(harness, reopened))).not.toContain('Saved to ArchiveBox Server');
+    reopened.cdp.close();
   } finally {
     await closeHarness(harness);
     await new Promise<void>((resolve) => server.server.close(() => resolve()));
@@ -1684,6 +1692,25 @@ test('popup fits mobile viewports without horizontal overflow', async () => {
       }
     }
     await popupPage.close();
+  } finally {
+    await closeHarness(harness);
+    await new Promise<void>((resolve) => server.server.close(() => resolve()));
+  }
+});
+
+test('HTTP 200 from a normal website cannot confirm an ArchiveBox submission', async () => {
+  const server = await startFixtureServer();
+  const harness = await launchHarness();
+  try {
+    for (const key of ['', 'invalid-key']) {
+      await setExtensionStorage(harness, { archivebox_server_url: server.url, archivebox_api_key: key });
+      const response = await harness.storagePage.evaluate(async () => {
+        const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
+        return api.runtime.sendMessage({ type: 'archivebox_add', body: { urls: ['https://example.com/post-confirmation-check'], tags: [], depth: 0 } });
+      });
+      expect(response.ok).toBe(false);
+      expect(response.errorMessage).toContain('did not confirm');
+    }
   } finally {
     await closeHarness(harness);
     await new Promise<void>((resolve) => server.server.close(() => resolve()));

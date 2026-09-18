@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { archiveBoxServerUrlMatches, hasServerHostPermission, supportsArchiveBoxApi, isArchiveablePageUrl, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
-import { mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
+import { mhtmlUnsupportedMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { assertLocalCaptureStorageAvailable } from '@/src/lib/screenshotStorage';
 import { createSnapshot } from '@/src/lib/snapshots';
@@ -13,7 +13,7 @@ import type { ArchiveDepth, RuntimeMessage, RuntimeResponse, Snapshot } from '@/
 import { compactUuid } from '@/src/lib/uuid';
 import './style.css';
 
-type RemoteArchiveStatus = 'not_archived' | 'archived' | 'sync_failed';
+type RemoteArchiveStatus = 'not_archived' | 'archived' | 'sync_failed' | 'unavailable' | 'previously_submitted';
 type LocalArchiveStatus = 'saved' | 'unsaved' | 'removed';
 type ScreenshotCaptureState = {
   phase: 'idle' | 'visible' | 'capturing' | 'canceling';
@@ -108,7 +108,6 @@ function ArchiveBoxOverlay() {
   const [statusLink, setStatusLink] = useState<{ href: string; label: string; status: string } | null>(null);
   const [ok, setOk] = useState<boolean | null>(null);
   const [depth, setDepth] = useState<ArchiveDepth>(0);
-  const [archiveboxServerUrl, setArchiveboxServerUrl] = useState('');
   const [localStatus, setLocalStatus] = useState<LocalArchiveStatus>('unsaved');
   const [remoteStatus, setRemoteStatus] = useState<RemoteArchiveStatus>('not_archived');
   const [remoteDetail, setRemoteDetail] = useState('');
@@ -146,25 +145,26 @@ function ArchiveBoxOverlay() {
 
   async function refresh() {
     const { archivebox_server_url } = await getConfig();
-    setArchiveboxServerUrl(archivebox_server_url);
     const nextActivePage = activePage || await getActivePage();
     setActivePage(nextActivePage);
     const { currentSnapshot, snapshots } = await getCurrentSnapshot(nextActivePage);
     setSnapshot({ ...currentSnapshot });
     setDepth(currentSnapshot.depth ?? 0);
     setLocalStatus('saved');
-    setRemoteStatus(currentSnapshot.archiveboxCrawlId ? 'archived' : 'not_archived');
-    if (currentSnapshot.archiveboxCrawlId) {
-      setStatus(t("Saved to ArchiveBox Server at depth $1", currentSnapshot.depth ?? 0));
+    setRemoteStatus(!archivebox_server_url ? 'unavailable' : currentSnapshot.archiveboxCrawlId ? 'previously_submitted' : 'not_archived');
+    setRemoteDetail(archivebox_server_url ? '' : t("Server not configured"));
+    if (!archivebox_server_url) {
+      setOk(false);
+      setStatus(t("Saved locally. Server connection unavailable."));
+    } else if (currentSnapshot.archiveboxCrawlId) {
+      setOk(null);
+      setStatus(t("Previously submitted. Server status has not been checked in this session."));
     }
     setAllTags([...new Set([...snapshots].reverse().flatMap((item) => item.tags))]);
   }
 
   async function ensureConfiguredServerPermission(requestPermission: boolean): Promise<void> {
-    const configuredServerUrl = archiveboxServerUrl || (await getConfig()).archivebox_server_url;
-    if (configuredServerUrl && configuredServerUrl !== archiveboxServerUrl) {
-      setArchiveboxServerUrl(configuredServerUrl);
-    }
+    const configuredServerUrl = (await getConfig()).archivebox_server_url;
     if (!configuredServerUrl) throw new Error(t("Server not configured"));
     if (requestPermission) {
       await requestServerHostPermission(configuredServerUrl);
@@ -212,13 +212,11 @@ function ArchiveBoxOverlay() {
       latestSnapshot = await ensureServerSnapshotId(snapshotId, latestSnapshot);
       await uploadSnapshotCaptureArtifactsToArchiveBox(latestSnapshot);
       setOk(true);
-      setRemoteStatus('archived');
       setRemoteDetail('');
       setStatus(t("Saved local $1 and uploaded to ArchiveBox Server", artifactLabel));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       setOk(false);
-      setRemoteStatus('archived');
       setRemoteDetail('');
       setStatus(t("Saved local $1. Failed to upload artifact: $2", artifactLabel, errorMessage));
     }
@@ -235,7 +233,6 @@ function ArchiveBoxOverlay() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       setOk(false);
-      setRemoteStatus('archived');
       setRemoteDetail('');
       setStatus(t("Saved URL. Failed to upload local artifacts: $1", errorMessage));
     }
@@ -255,9 +252,8 @@ function ArchiveBoxOverlay() {
       try {
         await syncArchiveBoxSnapshotTags(currentSnapshot.archiveboxSnapshotId || currentSnapshot.id, previousTags, tags);
         setOk(true);
-        setRemoteStatus('archived');
         setRemoteDetail('');
-        setStatus(t("Saved to ArchiveBox Server at depth $1", depth));
+        setStatus(t("Updated tags on ArchiveBox Server"));
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         setOk(false);
@@ -358,9 +354,9 @@ function ArchiveBoxOverlay() {
         }
       }
       setOk(true);
-      setRemoteStatus('archived');
       setRemoteDetail('');
-      setStatus(t("Saved to ArchiveBox Server at depth $1", archiveDepth));
+      setRemoteStatus('archived');
+      setStatus(t("Submitted to ArchiveBox Server at depth $1", archiveDepth));
       console.info(`ArchiveBox: saved ${url} to ArchiveBox server`);
       if (localSnapshotId && response.archivebox) {
         await uploadCurrentArtifactsIfArchived(localSnapshotId);
@@ -377,9 +373,8 @@ function ArchiveBoxOverlay() {
 
   useEffect(() => {
     getConfig()
-      .then(({ ui_language, archivebox_server_url }) => {
+      .then(({ ui_language }) => {
         setUiLanguage(ui_language);
-        setArchiveboxServerUrl(archivebox_server_url);
       })
       .catch(() => undefined)
       .then(refresh)
@@ -941,7 +936,7 @@ function ArchiveBoxOverlay() {
             >
               {snapshot?.mhtml ? `✓ ${t("MHTML")}` : t("MHTML")}
             </button>
-          ) : (
+          ) : import.meta.env.BROWSER !== 'safari' && (
             <button
               className="archivebox-overlay__capture-button archivebox-overlay__capture-button--disabled"
               onClick={() => captureLocalArtifact('mhtml')}
@@ -950,6 +945,7 @@ function ArchiveBoxOverlay() {
               {t("MHTML unavailable")}
             </button>
           )}
+          {/* SingleFile capture is unfinished; keep its button hidden for now.
           <button
             className={`archivebox-overlay__capture-button${snapshot?.singlefile ? ' archivebox-overlay__capture-button--saved' : ''}`}
             onClick={() => captureLocalArtifact('singlefile')}
@@ -957,6 +953,7 @@ function ArchiveBoxOverlay() {
           >
             {snapshot?.singlefile ? `✓ ${t("SingleFile")}` : t("SingleFile")}
           </button>
+          */}
         </div>
         <div className="archivebox-overlay__crawl">
           <button
@@ -1003,21 +1000,25 @@ function ArchiveBoxOverlay() {
             title={remoteDetail || undefined}
           >
             {remoteStatus === 'archived'
-              ? t("Archived")
+              ? t("Submitted")
+              : remoteStatus === 'previously_submitted'
+                ? t("Previously submitted")
+              : remoteStatus === 'unavailable'
+                ? t("Connection unavailable")
               : remoteStatus === 'sync_failed'
                 ? t("Sync failed")
                 : t("Not yet archived")}
           </span>
-          {remoteStatus !== 'archived' ? (
+          {remoteStatus !== 'archived' && remoteStatus !== 'previously_submitted' ? (
             <button className="archivebox-overlay__action" onClick={syncRemoteSnapshot} title={t("Sync to ArchiveBox server")}>
               ↑
             </button>
           ) : (
             <>
-              <button className="archivebox-overlay__action" onClick={removeRemoteSnapshot} disabled={remoteStatus !== 'archived'} title={t("Remove from ArchiveBox server")}>
+              <button className="archivebox-overlay__action" onClick={removeRemoteSnapshot} title={t("Remove from ArchiveBox server")}>
                 🗑
               </button>
-              <button className="archivebox-overlay__action" onClick={viewRemoteSnapshot} disabled={remoteStatus !== 'archived'} title={t("View archived copy on server")}>
+              <button className="archivebox-overlay__action" onClick={viewRemoteSnapshot} title={t("View archived copy on server")}>
                 👁
               </button>
             </>
