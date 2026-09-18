@@ -1,0 +1,25 @@
+entrypoints/popup/style.css
+  s_ffefb637465167::t_3ffcc6fa0bae81 10,19,24,162-170,432-433,467,633,666-684
+src/options/OptionsApp.tsx
+  s_ffefb637465167::t_da1cafef4ddb4c 2325-2327,2374-2376
+src/options/options.css
+  s_ffefb637465167::t_b817df2d9aa4fe 42,734,1683,1685,1688-1689,1694-1703,1726-1966
+tests/options-responsive.test.ts
+  s_ffefb637465167::t_9113ebac13041e 1-153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bf3557a65c722b373f9d49daf80336e2c166fcdc",
+  "prompts": {},
+  "sessions": {
+    "s_ffefb637465167": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a07a32-a857-7453-a522-512c1140b8a1",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
