@@ -1,3 +1,4 @@
+import { withSnapshotArtifacts } from './retention';
 import {
   addFilesToSnapshotArchiveResult,
   addFileToSnapshotArchiveResultChunked,
@@ -10,7 +11,7 @@ import {
   readSnapshotOpfsFiles,
 } from './screenshotStorage';
 import type { Snapshot } from './types';
-import { getConfig } from './storage';
+import { getConfig, getSnapshots } from './storage';
 
 const extensionArtifactSource = 'archivebox-browser-extension';
 const snapshotSyncLocks = new Map<string, Promise<{ opfs: boolean }>>();
@@ -130,7 +131,10 @@ export async function uploadSnapshotCaptureArtifactsToArchiveBox(snapshot: Snaps
   const previousSync = snapshotSyncLocks.get(snapshot.id) || Promise.resolve(emptySyncResult);
   const sync = previousSync
     .catch(() => emptySyncResult)
-    .then(() => uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked({ ...snapshot, archiveboxSnapshotId }))
+    .then(() => withSnapshotArtifacts(snapshot.id, async () => {
+      const current = (await getSnapshots()).find((item) => item.id === snapshot.id);
+      return current ? uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked({ ...current, archiveboxSnapshotId }) : emptySyncResult;
+    }))
     .finally(() => {
       if (snapshotSyncLocks.get(snapshot.id) === sync) {
         snapshotSyncLocks.delete(snapshot.id);

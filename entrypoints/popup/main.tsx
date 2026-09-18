@@ -7,7 +7,7 @@ import { mhtmlUnsupportedMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapt
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { assertLocalCaptureStorageAvailable } from '@/src/lib/screenshotStorage';
 import { createSnapshot } from '@/src/lib/snapshots';
-import { getConfig, getSnapshots, setSnapshots } from '@/src/lib/storage';
+import { getConfig, getSnapshots, mutateSnapshots } from '@/src/lib/storage';
 import { matchingTagSuggestions } from '@/src/lib/tags';
 import type { ArchiveDepth, RuntimeMessage, RuntimeResponse, Snapshot } from '@/src/lib/types';
 import { compactUuid } from '@/src/lib/uuid';
@@ -76,20 +76,20 @@ async function getCurrentSnapshot(activePage: ActivePage): Promise<{
   snapshots: Snapshot[];
   created: boolean;
 }> {
-  const snapshots = await getSnapshots();
-  const pageUrl = activePage.url;
-  let currentSnapshot = snapshots.find((snapshot) => snapshot.url === pageUrl);
+  let currentSnapshot!: Snapshot;
   let created = false;
-
-  if (!currentSnapshot) {
-    currentSnapshot = createSnapshot(pageUrl, [], activePage.title, activePage.favIconUrl || null);
-    snapshots.push(currentSnapshot);
-    await setSnapshots(snapshots);
-    created = true;
-  } else {
-    currentSnapshot.title = currentSnapshot.title || activePage.title;
-    currentSnapshot.favIconUrl = currentSnapshot.favIconUrl || activePage.favIconUrl || null;
-  }
+  const snapshots = await mutateSnapshots((snapshots) => {
+    currentSnapshot = snapshots.find((snapshot) => snapshot.url === activePage.url)!;
+    if (!currentSnapshot) {
+      currentSnapshot = createSnapshot(activePage.url, [], activePage.title, activePage.favIconUrl || null);
+      snapshots.push(currentSnapshot);
+      created = true;
+    } else {
+      currentSnapshot.title ||= activePage.title;
+      currentSnapshot.favIconUrl ||= activePage.favIconUrl || null;
+    }
+    return snapshots;
+  });
 
   return { currentSnapshot, snapshots, created };
 }
@@ -183,10 +183,9 @@ function ArchiveBoxOverlay() {
     const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
     if (!metadataSnapshotId) return latestSnapshot;
 
-    const nextSnapshots = (await getSnapshots()).map((item) => item.id === snapshotId
+    const nextSnapshots = await mutateSnapshots((snapshots) => snapshots.map((item) => item.id === snapshotId
       ? { ...item, archiveboxSnapshotId: metadataSnapshotId }
-      : item);
-    await setSnapshots(nextSnapshots);
+      : item));
     setSnapshot((current) => current?.id === snapshotId
       ? { ...current, archiveboxSnapshotId: metadataSnapshotId }
       : current);
@@ -241,11 +240,11 @@ function ArchiveBoxOverlay() {
   async function saveTags(tags: string[]) {
     const nextActivePage = activePage || await getActivePage();
     setActivePage(nextActivePage);
-    const { currentSnapshot, snapshots } = await getCurrentSnapshot(nextActivePage);
+    const { currentSnapshot } = await getCurrentSnapshot(nextActivePage);
     const previousTags = currentSnapshot.tags;
     currentSnapshot.tags = tags;
     currentSnapshot.depth = depth;
-    await setSnapshots(snapshots);
+    await mutateSnapshots((items) => items.map((item) => item.id === currentSnapshot.id ? { ...item, tags, depth } : item));
     setSnapshot({ ...currentSnapshot });
     setLocalStatus('saved');
     if (currentSnapshot.archiveboxCrawlId) {
@@ -271,9 +270,9 @@ function ArchiveBoxOverlay() {
     setDepth(nextDepth);
     const nextActivePage = activePage || await getActivePage();
     setActivePage(nextActivePage);
-    const { currentSnapshot, snapshots } = await getCurrentSnapshot(nextActivePage);
+    const { currentSnapshot } = await getCurrentSnapshot(nextActivePage);
     currentSnapshot.depth = nextDepth;
-    await setSnapshots(snapshots);
+    await mutateSnapshots((items) => items.map((item) => item.id === currentSnapshot.id ? { ...item, depth: nextDepth } : item));
     setSnapshot({ ...currentSnapshot });
     setLocalStatus('saved');
     await sendToArchiveBox(currentSnapshot.url, currentSnapshot.tags, nextDepth, currentSnapshot.id, true);
@@ -322,15 +321,13 @@ function ArchiveBoxOverlay() {
         return;
       }
       if (localSnapshotId && archiveboxCrawlId) {
-        const snapshots = await getSnapshots();
-        const nextSnapshots = snapshots.map((item) => item.id === localSnapshotId
+        const nextSnapshots = await mutateSnapshots((snapshots) => snapshots.map((item) => item.id === localSnapshotId
           ? {
               ...item,
               archiveboxCrawlId,
               ...(archiveboxSnapshotId ? { archiveboxSnapshotId } : {}),
             }
-          : item);
-        await setSnapshots(nextSnapshots);
+          : item));
         setSnapshot((current) => current?.id === localSnapshotId
           ? {
               ...current,
@@ -343,10 +340,9 @@ function ArchiveBoxOverlay() {
           const metadata = await syncArchiveBoxSnapshotMetadata(syncedSnapshot);
           const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
           if (metadataSnapshotId) {
-            const metadataSnapshots = (await getSnapshots()).map((item) => item.id === localSnapshotId
+            await mutateSnapshots((snapshots) => snapshots.map((item) => item.id === localSnapshotId
               ? { ...item, archiveboxSnapshotId: metadataSnapshotId }
-              : item);
-            await setSnapshots(metadataSnapshots);
+              : item));
             setSnapshot((current) => current?.id === localSnapshotId
               ? { ...current, archiveboxSnapshotId: metadataSnapshotId }
               : current);
@@ -451,8 +447,7 @@ function ArchiveBoxOverlay() {
     setLocalStatus('removed');
     setOk(null);
     setStatus(t("Removed from local saved URLs"));
-    const snapshots = await getSnapshots();
-    await setSnapshots(snapshots.filter((item) => item.url !== activePage.url));
+    await mutateSnapshots((snapshots) => snapshots.filter((item) => item.url !== activePage.url));
     setIsFadingOut(true);
     window.setTimeout(close, 450);
   }

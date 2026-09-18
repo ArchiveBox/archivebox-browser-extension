@@ -1,3 +1,4 @@
+import { configureLocalRetention, withSnapshotArtifacts } from '@/src/lib/retention';
 import { configureCookieSync } from '@/src/lib/cookieSync';
 import { addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, syncArchiveBoxSnapshotMetadata, supportsArchiveBoxApi, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
@@ -5,7 +6,7 @@ import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCap
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { appendSnapshotScreenshotParts, writeSnapshotMhtmlBytes, writeSnapshotScreenshot, writeSnapshotScreenshotParts, writeSnapshotSingleFileHtml } from '@/src/lib/screenshotStorage';
 import { createSnapshot } from '@/src/lib/snapshots';
-import { getArchiveBoxServerUrl, getConfig, getSnapshots, setSnapshots } from '@/src/lib/storage';
+import { getArchiveBoxServerUrl, getConfig, getSnapshots, mutateSnapshots } from '@/src/lib/storage';
 import type { ArchiveBoxAddResult, RuntimeMessage, RuntimeResponse, Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotSingleFile } from '@/src/lib/types';
 import { compactUuid } from '@/src/lib/uuid';
 
@@ -373,22 +374,19 @@ async function measureScreenshotPage(tab: Browser.tabs.Tab): Promise<PageMetrics
 }
 
 async function attachScreenshotToSnapshot(snapshotId: string, screenshot: SnapshotScreenshot): Promise<void> {
-  const snapshots = await getSnapshots();
-  await setSnapshots(snapshots.map((snapshot) => (
+  await mutateSnapshots((snapshots) => snapshots.map((snapshot) => (
     snapshot.id === snapshotId ? { ...snapshot, screenshot } : snapshot
   )));
 }
 
 async function attachMhtmlToSnapshot(snapshotId: string, mhtml: SnapshotMhtml): Promise<void> {
-  const snapshots = await getSnapshots();
-  await setSnapshots(snapshots.map((snapshot) => (
+  await mutateSnapshots((snapshots) => snapshots.map((snapshot) => (
     snapshot.id === snapshotId ? { ...snapshot, mhtml } : snapshot
   )));
 }
 
 async function attachSingleFileToSnapshot(snapshotId: string, singlefile: SnapshotSingleFile): Promise<void> {
-  const snapshots = await getSnapshots();
-  await setSnapshots(snapshots.map((snapshot) => (
+  await mutateSnapshots((snapshots) => snapshots.map((snapshot) => (
     snapshot.id === snapshotId ? { ...snapshot, singlefile } : snapshot
   )));
 }
@@ -653,61 +651,70 @@ async function captureAndAttachSnapshotScreenshot(
   snapshot: Snapshot,
   fullPage = true,
 ): Promise<SnapshotScreenshot> {
-  if (await usesFastTestCapture()) {
-    const screenshot = await writeSnapshotScreenshot(snapshot, dataUrlToBlob(testScreenshotPngDataUrl), 1, 1);
-    await attachScreenshotToSnapshot(snapshot.id, screenshot);
-    return screenshot;
-  }
-
-  let screenshot: SnapshotScreenshot;
-  if (!fullPage) {
-    screenshot = await captureVisibleScreenshot(tab, snapshot);
-  } else {
-    try {
-      screenshot = await captureFullPageScreenshot(tab, snapshot);
-    } catch (error) {
-      console.warn(`Falling back to visible-area screenshot for ${snapshot.url}:`, error);
-      screenshot = await captureVisibleScreenshot(tab, snapshot);
+  return withSnapshotArtifacts(snapshot.id, async () => {
+    if (!(await getSnapshotById(snapshot.id))) throw new Error(t("Saved snapshot not found."));
+    if (await usesFastTestCapture()) {
+      const screenshot = await writeSnapshotScreenshot(snapshot, dataUrlToBlob(testScreenshotPngDataUrl), 1, 1);
+      await attachScreenshotToSnapshot(snapshot.id, screenshot);
+      return screenshot;
     }
-  }
-  await attachScreenshotToSnapshot(snapshot.id, screenshot);
-  console.info(`ArchiveBox: saved screenshot for ${snapshot.url}`);
-  return screenshot;
+
+    let screenshot: SnapshotScreenshot;
+    if (!fullPage) {
+      screenshot = await captureVisibleScreenshot(tab, snapshot);
+    } else {
+      try {
+        screenshot = await captureFullPageScreenshot(tab, snapshot);
+      } catch (error) {
+        console.warn(`Falling back to visible-area screenshot for ${snapshot.url}:`, error);
+        screenshot = await captureVisibleScreenshot(tab, snapshot);
+      }
+    }
+    await attachScreenshotToSnapshot(snapshot.id, screenshot);
+    console.info(`ArchiveBox: saved screenshot for ${snapshot.url}`);
+    return screenshot;
+  });
 }
 
 async function captureAndAttachSnapshotMhtml(
   tab: Browser.tabs.Tab,
   snapshot: Snapshot,
 ): Promise<SnapshotMhtml> {
-  if (await usesFastTestCapture()) {
-    const bytes = new TextEncoder().encode([
-      'MIME-Version: 1.0',
-      'Content-Type: text/html; charset=utf-8',
-      '',
-      '<!doctype html><title>ArchiveBox test MHTML</title><p>archivebox-popup-integration-fixture</p>',
-    ].join('\r\n')).buffer;
-    const mhtml = await writeSnapshotMhtmlBytes(snapshot, bytes);
+  return withSnapshotArtifacts(snapshot.id, async () => {
+    if (!(await getSnapshotById(snapshot.id))) throw new Error(t("Saved snapshot not found."));
+    if (await usesFastTestCapture()) {
+      const bytes = new TextEncoder().encode([
+        'MIME-Version: 1.0',
+        'Content-Type: text/html; charset=utf-8',
+        '',
+        '<!doctype html><title>ArchiveBox test MHTML</title><p>archivebox-popup-integration-fixture</p>',
+      ].join('\r\n')).buffer;
+      const mhtml = await writeSnapshotMhtmlBytes(snapshot, bytes);
+      await attachMhtmlToSnapshot(snapshot.id, mhtml);
+      snapshot.mhtml = mhtml;
+      return mhtml;
+    }
+
+    const mhtml = await captureMhtml(tab, snapshot);
     await attachMhtmlToSnapshot(snapshot.id, mhtml);
     snapshot.mhtml = mhtml;
+    console.info(`ArchiveBox: saved MHTML for ${snapshot.url}`);
     return mhtml;
-  }
-
-  const mhtml = await captureMhtml(tab, snapshot);
-  await attachMhtmlToSnapshot(snapshot.id, mhtml);
-  snapshot.mhtml = mhtml;
-  console.info(`ArchiveBox: saved MHTML for ${snapshot.url}`);
-  return mhtml;
+  });
 }
 
 async function captureAndAttachSnapshotSingleFile(
   tab: Browser.tabs.Tab,
   snapshot: Snapshot,
 ): Promise<SnapshotSingleFile> {
-  const singlefile = await captureSingleFileHtml(tab, snapshot);
-  await attachSingleFileToSnapshot(snapshot.id, singlefile);
-  snapshot.singlefile = singlefile;
-  console.info(`ArchiveBox: saved SingleFile HTML for ${snapshot.url}`);
-  return singlefile;
+  return withSnapshotArtifacts(snapshot.id, async () => {
+    if (!(await getSnapshotById(snapshot.id))) throw new Error(t("Saved snapshot not found."));
+    const singlefile = await captureSingleFileHtml(tab, snapshot);
+    await attachSingleFileToSnapshot(snapshot.id, singlefile);
+    snapshot.singlefile = singlefile;
+    console.info(`ArchiveBox: saved SingleFile HTML for ${snapshot.url}`);
+    return singlefile;
+  });
 }
 
 async function captureAndAttachSnapshotArtifacts(
@@ -768,25 +775,27 @@ async function ensureSnapshotForTab(tab: Browser.tabs.Tab): Promise<{
   created: boolean;
 }> {
   if (!tab.url) throw new Error(t("No URL found for the current tab."));
-  const snapshots = await getSnapshots();
-  let snapshot = snapshots.find((item) => item.url === tab.url);
+  let snapshot!: Snapshot;
   let created = false;
+  await mutateSnapshots((snapshots) => {
+    snapshot = snapshots.find((item) => item.url === tab.url)!;
 
-  if (!snapshot) {
-    snapshot = createSnapshot(
-      tab.url,
-      [],
-      tab.title || '',
-      tab.favIconUrl || null,
-    );
-    snapshots.push(snapshot);
-    created = true;
-  } else {
-    snapshot.title = snapshot.title || tab.title || '';
-    snapshot.favIconUrl = snapshot.favIconUrl || tab.favIconUrl || null;
-  }
+    if (!snapshot) {
+      snapshot = createSnapshot(
+        tab.url!,
+        [],
+        tab.title || '',
+        tab.favIconUrl || null,
+      );
+      snapshots.push(snapshot);
+      created = true;
+    } else {
+      snapshot.title = snapshot.title || tab.title || '';
+      snapshot.favIconUrl = snapshot.favIconUrl || tab.favIconUrl || null;
+    }
 
-  await setSnapshots(snapshots);
+    return snapshots;
+  });
   return { snapshot, created };
 }
 
@@ -815,22 +824,19 @@ async function markSnapshotSynced(snapshotId: string, archivebox: ArchiveBoxAddR
   }
   if (!archivebox?.crawl_id) return;
 
-  const snapshots = await getSnapshots();
   let serverSnapshotId = returnedSnapshotId || snapshotId;
-  const nextSnapshots = snapshots.map((snapshot) => snapshot.id === snapshotId
+  const nextSnapshots = await mutateSnapshots((snapshots) => snapshots.map((snapshot) => snapshot.id === snapshotId
     ? { ...snapshot, archiveboxCrawlId: archivebox.crawl_id, archiveboxSnapshotId: serverSnapshotId }
-    : snapshot);
-  await setSnapshots(nextSnapshots);
+    : snapshot));
   const snapshot = nextSnapshots.find((item) => item.id === snapshotId);
   if (snapshot) {
     const metadata = await syncArchiveBoxSnapshotMetadata(snapshot);
     const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
     if (metadataSnapshotId && metadataSnapshotId !== serverSnapshotId) {
       serverSnapshotId = metadataSnapshotId;
-      const metadataSnapshots = (await getSnapshots()).map((item) => item.id === snapshotId
+      await mutateSnapshots((snapshots) => snapshots.map((item) => item.id === snapshotId
         ? { ...item, archiveboxSnapshotId: serverSnapshotId }
-        : item);
-      await setSnapshots(metadataSnapshots);
+        : item));
     }
   }
 }
@@ -886,8 +892,13 @@ async function autoArchive(
     tab.title || '',
     tab.favIconUrl || null,
   );
-  snapshots.push(snapshot);
-  await setSnapshots(snapshots);
+  let added = false;
+  await mutateSnapshots((items) => {
+    if (items.some((item) => item.url === snapshot.url)) return items;
+    added = true;
+    return [...items, snapshot];
+  });
+  if (!added) return;
   console.info(`ArchiveBox: auto-archiving ${snapshot.url}`);
 
   await captureConfiguredSnapshotArtifacts(tab, snapshot, true).catch((error) => {
@@ -932,6 +943,7 @@ async function getMessageTab(tabId: number): Promise<Browser.tabs.Tab> {
 
 export default defineBackground(() => {
   configureCookieSync();
+  configureLocalRetention();
   refreshUiLanguage().catch(() => undefined);
   browser.runtime.onStartup.addListener(configureAutoArchiving);
   browser.runtime.onInstalled.addListener(() => {

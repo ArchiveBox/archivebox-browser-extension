@@ -1,5 +1,11 @@
 export const translations = {
   "es": {
+    "After saving on server, remove local copies after:": "Después de guardar en el servidor, eliminar las copias locales tras:",
+    "1 minute": "1 minuto",
+    "1 day": "1 día",
+    "30 days": "30 días",
+    "90 days": "90 días",
+    "Starts after successful submission. Local copies are removed only while connected to the same server and after confirming the snapshot still exists there. Server copies are kept.": "El plazo comienza tras el envío correcto. Las copias locales solo se eliminan con conexión al mismo servidor y tras confirmar que la captura sigue allí. Las copias del servidor se conservan.",
     "Save to ArchiveBox": "Guardar en ArchiveBox",
     "Add": "Añadir",
     "Admin": "Admin",
@@ -335,6 +341,12 @@ export const translations = {
     "MHTML file does not contain any readable parts": "El archivo MHTML no contiene ninguna parte legible."
   },
   "zh_CN": {
+    "After saving on server, remove local copies after:": "保存到服务器后，经过以下时间删除本地副本：",
+    "1 minute": "1 分钟",
+    "1 day": "1 天",
+    "30 days": "30 天",
+    "90 days": "90 天",
+    "Starts after successful submission. Local copies are removed only while connected to the same server and after confirming the snapshot still exists there. Server copies are kept.": "成功提交后开始计时。仅在连接到同一服务器并确认快照仍存在时删除本地副本。服务器副本会保留。",
     "Save to ArchiveBox": "保存到 ArchiveBox",
     "Add": "添加",
     "Admin": "管理",

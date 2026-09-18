@@ -1,7 +1,7 @@
-import { getConfig, getArchiveBoxServerUrl, getPersonas } from './storage';
+import { getConfig, getArchiveBoxServerUrl, getPersonas, mutateSnapshots } from './storage';
 import { t } from './i18n';
 import { archiveBoxServerUrlMatches, isArchiveablePageUrl } from './archiveboxUrlExclusions';
-import type { ArchiveBoxAddResult, ArchiveDepth, Snapshot } from './types';
+import type { ArchiveBoxAddResult, ArchiveDepth, ConfigState, Snapshot } from './types';
 
 export { archiveBoxServerUrlMatches, isArchiveablePageUrl } from './archiveboxUrlExclusions';
 
@@ -159,115 +159,129 @@ export async function addToArchiveBox(
   snapshotIds: string[] = [],
   titles: string[] = [],
 ): Promise<ArchiveBoxAddResult> {
-  const configuredServerUrl = await getArchiveBoxServerUrl();
-  if (!configuredServerUrl) {
-    throw new Error(t("Server not configured"));
-  }
-  const archiveboxServerUrl = serverBaseUrl(configuredServerUrl);
-  const archiveableItems = urls
-    .map((url, index) => ({ url, index }))
-    .filter(({ url }) => !archiveBoxServerUrlMatches(configuredServerUrl, url));
-
-  if (!archiveableItems.length) {
-    throw new Error(t("ArchiveBox server URLs are ignored."));
-  }
-
-  const archiveableUrls = archiveableItems.map(({ url }) => url);
-  const archiveableSnapshotIds = snapshotIds.length
-    ? archiveableItems.map(({ index }) => snapshotIds[index] || '')
-    : [];
-  const archiveableTitles = titles.length
-    ? archiveableItems.map(({ index }) => titles[index] || '')
-    : [];
-  const formattedTags = tags.join(',');
-  const { archivebox_api_key } = await getConfig();
-  const { personas, activePersona } = await getPersonas();
-  const persona = personas.find((item) => item.id === activePersona);
-
-  await ensureServerHostPermission(archiveboxServerUrl);
-
-  const supportsApi = await supportsArchiveBoxApi(archiveboxServerUrl);
-  if (!supportsApi && persona && Object.keys(persona.cookies).length) {
-    throw new Error(t("This ArchiveBox server does not support persona cookie sync. Select a profile without cookies to submit URLs using the server's own settings, or upgrade the server to use this persona."));
-  }
-
-  if (supportsApi && persona) {
-    const { syncPersonaCookies } = await import('./cookieSync');
-    const synced = await syncPersonaCookies(persona.id);
-    if (!synced && Object.keys(persona.cookies).length) {
-      throw new Error(t("Sync this persona to the configured server before archiving with its cookies."));
+  return navigator.locks.request('archivebox-submissions', async () => {
+    const { archivebox_server_url: configuredServerUrl, archivebox_api_key } = await getConfig();
+    if (!configuredServerUrl) {
+      throw new Error(t("Server not configured"));
     }
-  }
+    const archiveboxServerUrl = serverBaseUrl(configuredServerUrl);
+    const archiveableItems = urls
+      .map((url, index) => ({ url, index }))
+      .filter(({ url }) => !archiveBoxServerUrlMatches(configuredServerUrl, url));
 
-  if (supportsApi && archivebox_api_key) {
-    const response = await fetch(`${archiveboxServerUrl}/api/v1/cli/add`, {
-      headers: apiHeaders(archivebox_api_key),
+    if (!archiveableItems.length) {
+      throw new Error(t("ArchiveBox server URLs are ignored."));
+    }
+
+    const archiveableUrls = archiveableItems.map(({ url }) => url);
+    const archiveableSnapshotIds = snapshotIds.length
+      ? archiveableItems.map(({ index }) => snapshotIds[index] || '')
+      : [];
+    const archiveableTitles = titles.length
+      ? archiveableItems.map(({ index }) => titles[index] || '')
+      : [];
+    async function recordSubmission(result: ArchiveBoxAddResult): Promise<void> {
+      const submittedAt = new Date().toISOString();
+      await mutateSnapshots((entries) => entries.map((snapshot) => {
+        const index = archiveableSnapshotIds.indexOf(snapshot.id);
+        if (index < 0 || snapshot.url !== archiveableUrls[index]) return snapshot;
+        const remoteId = result.snapshot_ids?.[index]?.replaceAll('-', '');
+        if (remoteId && remoteId !== snapshot.id.replaceAll('-', '')) return snapshot;
+        return { ...snapshot, archiveboxSubmittedAt: submittedAt, archiveboxSubmittedTo: archiveboxServerUrl };
+      }));
+    }
+    const formattedTags = tags.join(',');
+    const { personas, activePersona } = await getPersonas();
+    const persona = personas.find((item) => item.id === activePersona);
+
+    await ensureServerHostPermission(archiveboxServerUrl);
+
+    const supportsApi = await supportsArchiveBoxApi(archiveboxServerUrl);
+    if (!supportsApi && persona && Object.keys(persona.cookies).length) {
+      throw new Error(t("This ArchiveBox server does not support persona cookie sync. Select a profile without cookies to submit URLs using the server's own settings, or upgrade the server to use this persona."));
+    }
+
+    if (supportsApi && persona) {
+      const { syncPersonaCookies } = await import('./cookieSync');
+      const synced = await syncPersonaCookies(persona.id);
+      if (!synced && Object.keys(persona.cookies).length) {
+        throw new Error(t("Sync this persona to the configured server before archiving with its cookies."));
+      }
+    }
+
+    if (supportsApi && archivebox_api_key) {
+      const response = await fetch(`${archiveboxServerUrl}/api/v1/cli/add`, {
+        headers: apiHeaders(archivebox_api_key),
+        method: 'POST',
+        redirect: 'error',
+        credentials: 'include',
+        mode: 'cors',
+        body: JSON.stringify({
+          urls: archiveableUrls,
+          tag: formattedTags,
+          formattedTags,
+          depth,
+          snapshot_ids: archiveableSnapshotIds,
+          titles: archiveableTitles,
+          ...(persona ? { persona: persona.name } : {}),
+          update,
+          update_all,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json().catch(() => null) as {
+          success?: boolean;
+          errors?: unknown[];
+          result?: ArchiveBoxAddResult;
+        } | null;
+        if (data?.success !== true || !Array.isArray(data.errors) || data.errors.length
+          || typeof data.result?.crawl_id !== 'string' || !data.result.crawl_id.trim()
+          || !Array.isArray(data.result.queued_urls)
+          || !archiveableUrls.every((url) => data.result!.queued_urls!.includes(url))) {
+          throw new Error(t("ArchiveBox did not confirm that the URLs were added. Open the server's Add URLs page to check the form errors."));
+        }
+        await recordSubmission(data.result);
+        return data.result;
+      }
+      if (response.status !== 404 && response.status !== 405) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+    }
+
+    const body = new FormData();
+    body.append('url', archiveableUrls.join('\n'));
+    body.append('tag', formattedTags);
+    body.append('parser', 'auto');
+    body.append('depth', String(depth));
+    if (supportsApi && persona) body.append('persona', persona.name);
+
+    const response = await fetch(`${archiveboxServerUrl}/add/`, {
       method: 'POST',
-      redirect: 'error',
       credentials: 'include',
       mode: 'cors',
-      body: JSON.stringify({
-        urls: archiveableUrls,
-        tag: formattedTags,
-        formattedTags,
-        depth,
-        snapshot_ids: archiveableSnapshotIds,
-        titles: archiveableTitles,
-        ...(persona ? { persona: persona.name } : {}),
-        update,
-        update_all,
-      }),
+      body,
     });
 
-    if (response.ok) {
-      const data = await response.json().catch(() => null) as {
-        success?: boolean;
-        errors?: unknown[];
-        result?: ArchiveBoxAddResult;
-      } | null;
-      if (data?.success !== true || !Array.isArray(data.errors) || data.errors.length
-        || typeof data.result?.crawl_id !== 'string' || !data.result.crawl_id.trim()
-        || !Array.isArray(data.result.queued_urls)
-        || !archiveableUrls.every((url) => data.result!.queued_urls!.includes(url))) {
-        throw new Error(t("ArchiveBox did not confirm that the URLs were added. Open the server's Add URLs page to check the form errors."));
-      }
-      return data.result;
-    }
-    if (response.status !== 404 && response.status !== 405) {
+    if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-  }
 
-  const body = new FormData();
-  body.append('url', archiveableUrls.join('\n'));
-  body.append('tag', formattedTags);
-  body.append('parser', 'auto');
-  body.append('depth', String(depth));
-  if (supportsApi && persona) body.append('persona', persona.name);
+    const html = await response.text();
+    if (/\/(?:admin|accounts)\/login\/?/.test(new URL(response.url).pathname) || /name=["']password["']/.test(html)) {
+      throw new Error(t("Log in to your ArchiveBox server in this browser, or enable PUBLIC_ADD_VIEW on the server, then try again."));
+    }
+    const resultUrl = new URL(response.url);
+    const crawlId = resultUrl.pathname.match(/\/admin\/core\/crawl\/([0-9a-f-]+)\/change\/?$/i)?.[1];
+    if (/class=["'][^"']*errorlist/.test(html) || !response.redirected || !crawlId
+      || resultUrl.origin !== new URL(archiveboxServerUrl).origin) {
+      throw new Error(t("ArchiveBox did not confirm that the URLs were added. Open the server's Add URLs page to check the form errors."));
+    }
 
-  const response = await fetch(`${archiveboxServerUrl}/add/`, {
-    method: 'POST',
-    credentials: 'include',
-    mode: 'cors',
-    body,
+    const result = { crawl_id: crawlId, queued_urls: archiveableUrls };
+    await recordSubmission(result);
+    return result;
   });
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  }
-
-  const html = await response.text();
-  if (/\/(?:admin|accounts)\/login\/?/.test(new URL(response.url).pathname) || /name=["']password["']/.test(html)) {
-    throw new Error(t("Log in to your ArchiveBox server in this browser, or enable PUBLIC_ADD_VIEW on the server, then try again."));
-  }
-  const resultUrl = new URL(response.url);
-  const crawlId = resultUrl.pathname.match(/\/admin\/core\/crawl\/([0-9a-f-]+)\/change\/?$/i)?.[1];
-  if (/class=["'][^"']*errorlist/.test(html) || !response.redirected || !crawlId
-    || resultUrl.origin !== new URL(archiveboxServerUrl).origin) {
-    throw new Error(t("ArchiveBox did not confirm that the URLs were added. Open the server's Add URLs page to check the form errors."));
-  }
-
-  return { crawl_id: crawlId, queued_urls: archiveableUrls };
 }
 
 export async function syncArchiveBoxSnapshotMetadata(snapshot: Snapshot): Promise<ArchiveBoxSnapshotMetadataResponse> {
@@ -618,4 +632,23 @@ export async function testApiKey(serverUrl: string, apiKey: string): Promise<str
     throw new Error(t("Invalid API key response"));
   }
   return data.user_id;
+}
+
+// Retention must not use cached submission state as proof of current connectivity.
+export async function snapshotExistsOnServer(snapshot: Snapshot, config: ConfigState): Promise<boolean> {
+  try {
+    const origin = serverBaseUrl(config.archivebox_server_url);
+    if (snapshot.archiveboxSubmittedTo !== origin) return false;
+    const id = snapshot.archiveboxSnapshotId || snapshot.id;
+    const response = await fetchWithTimeout(
+      origin + '/api/v1/core/snapshot/' + encodeURIComponent(id) + '?with_archiveresults=false',
+      { headers: apiHeaders(config.archivebox_api_key), credentials: 'include', redirect: 'error', cache: 'no-store' },
+    );
+    if (!response.ok) return false;
+    const remote = await response.json() as { id?: string; url?: string };
+    return typeof remote.id === 'string'
+      && remote.id.replaceAll('-', '') === id.replaceAll('-', '') && remote.url === snapshot.url;
+  } catch {
+    return false;
+  }
 }

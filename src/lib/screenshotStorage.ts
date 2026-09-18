@@ -529,3 +529,59 @@ export async function readSnapshotSingleFileBlob(singlefile?: SnapshotSingleFile
     return null;
   }
 }
+
+/** Delete the entire UUID tree, including unindexed/partial captures and empty host directories. */
+export async function deleteSnapshotOpfs(snapshot: Snapshot): Promise<void> {
+  const root = await navigator.storage.getDirectory();
+  const id = pathSafeSegment(snapshot.id);
+  const isMissing = (error: unknown) => error instanceof DOMException && error.name === 'NotFoundError';
+  async function isEmpty(directory: FileSystemDirectoryHandle): Promise<boolean> {
+    for await (const _ of (directory as FileSystemDirectoryHandleWithEntries).entries()) return false;
+    return true;
+  }
+  async function removeTree(directory: FileSystemDirectoryHandle): Promise<boolean> {
+    let removed = false;
+    for await (const [name, handle] of (directory as FileSystemDirectoryHandleWithEntries).entries()) {
+      if (handle.kind !== 'directory') continue;
+      if (name.toLowerCase() === id) {
+        await directory.removeEntry(name, { recursive: true });
+        removed = true;
+      } else if (await removeTree(handle as FileSystemDirectoryHandle)) {
+        if (await isEmpty(handle as FileSystemDirectoryHandle)) await directory.removeEntry(name);
+        removed = true;
+      }
+    }
+    return removed;
+  }
+  try {
+    const snapshots = await root.getDirectoryHandle('snapshots');
+    await removeTree(snapshots);
+    if (await isEmpty(snapshots)) await root.removeEntry('snapshots');
+  } catch (error) {
+    if (!isMissing(error)) throw error;
+  }
+  // Also remove explicitly referenced files from older storage layouts.
+  const paths = [snapshot.screenshot?.path, ...(snapshot.screenshot?.parts || []).map((part) => part.path),
+    snapshot.mhtml?.path, snapshot.singlefile?.path];
+  for (const path of new Set(paths.filter((path): path is string => Boolean(path)))) {
+    const segments = path.split('/');
+    if (segments.some((segment) => !segment || segment === '.' || segment === '..')) throw new Error('Invalid capture path');
+    const name = segments.pop()!;
+    try {
+      let directory = root;
+      const parents: Array<{ parent: FileSystemDirectoryHandle; name: string; child: FileSystemDirectoryHandle }> = [];
+      for (const segment of segments) {
+        const child = await directory.getDirectoryHandle(segment);
+        parents.push({ parent: directory, name: segment, child });
+        directory = child;
+      }
+      await directory.removeEntry(name);
+      for (const parent of parents.reverse()) {
+        if (!(await isEmpty(parent.child))) break;
+        await parent.parent.removeEntry(parent.name);
+      }
+    } catch (error) {
+      if (!isMissing(error)) throw error;
+    }
+  }
+}

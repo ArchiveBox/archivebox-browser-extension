@@ -56,7 +56,7 @@ import {
   setConfig,
   mutatePersonas,
   updatePersona,
-  setSnapshots,
+  mutateSnapshots,
 } from '@/src/lib/storage';
 import type { ConfigState, Persona, RuntimeMessage, RuntimeResponse, Snapshot, StoredCookie } from '@/src/lib/types';
 
@@ -729,6 +729,22 @@ export default function OptionsApp() {
     }).catch(() => setLanguageLoaded(true));
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('screenshot') || params.get('mhtml') || params.get('singlefile');
+    if (!id) return;
+    function onEntriesChanged(changes: Record<string, { newValue?: unknown }>, area: string) {
+      if (area !== 'local' || !changes.entries) return;
+      const entries = changes.entries.newValue;
+      if (Array.isArray(entries) && !entries.some((entry: Snapshot) => entry.id === id)) {
+        // Unload rendered captures and blob URLs when their local record expires.
+        window.location.replace(extensionUrl('/options.html'));
+      }
+    }
+    browser.storage.onChanged.addListener(onEntriesChanged);
+    return () => browser.storage.onChanged.removeListener(onEntriesChanged);
+  }, []);
+
   const params = new URLSearchParams(window.location.search);
   const screenshotSnapshotId = params.get('screenshot');
   if (screenshotSnapshotId) {
@@ -836,7 +852,14 @@ function OptionsMain() {
     }
     function refreshPersonas(changes: Record<string, { newValue?: unknown }>, area: string) {
       if (area !== 'local') return;
-      if (changes.entries) getSnapshots().then(setSnapshotsState);
+      if (changes.entries) getSnapshots().then((entries) => {
+        setSnapshotsState(entries);
+        const ids = new Set(entries.map((entry) => entry.id));
+        setSelectedSnapshots((current) => new Set([...current].filter((id) => ids.has(id))));
+        setSyncStatuses((current) => Object.fromEntries(Object.entries(current).filter(([id]) => ids.has(id))));
+        setInlineTagEditor((current) => current && ids.has(current.snapshotId) ? current : null);
+        if (!entries.length) { setModalTags([]); setEditingTags(false); }
+      });
       if (Object.keys(changes).some((key) => key.startsWith('cookieSync:'))) getCookieSyncStates().then(setCookieSyncStates);
       if (changes.personas) getPersonas().then((state) => setPersonasState(state.personas));
       if (changes.activePersona) setActivePersonaState(String(changes.activePersona.newValue || ''));
@@ -1090,9 +1113,10 @@ function OptionsMain() {
     });
   }
 
-  async function persistSnapshots(nextSnapshots: Snapshot[]) {
-    setSnapshotsState(nextSnapshots);
-    await setSnapshots(nextSnapshots);
+  async function persistSnapshots(update: (entries: Snapshot[]) => Snapshot[]) {
+    const next = await mutateSnapshots(update);
+    setSnapshotsState(next);
+    return next;
   }
 
   function toggleSnapshot(id: string) {
@@ -1114,10 +1138,9 @@ function OptionsMain() {
         return;
       }
     }
-    const nextSnapshots = snapshots.map((snapshot) => (
+    await persistSnapshots((snapshots) => snapshots.map((snapshot) => (
       snapshot.id === snapshotId ? { ...snapshot, tags } : snapshot
-    ));
-    await persistSnapshots(nextSnapshots);
+    )));
     setSavedUrlStatus({ kind: 'success', text: message });
   }
 
@@ -1595,9 +1618,7 @@ function OptionsMain() {
       timestamp: new Date().toISOString(),
       tags: [...new Set([...snapshot.tags, ...tagsToAdd])],
     }));
-    const latestSnapshots = await getSnapshots();
-    const nextSnapshots = [...latestSnapshots, ...imported];
-    await persistSnapshots(nextSnapshots);
+    await persistSnapshots((snapshots) => [...snapshots, ...imported]);
     setImportItems(importItems.map((item) => selectedIds.has(item.id)
       ? { ...item, selected: false, isNew: false }
       : item));
@@ -1662,10 +1683,9 @@ function OptionsMain() {
           throw new Error(t("ArchiveBox returned a different snapshot ID than the extension sent."));
         }
         if (archiveboxCrawlId) {
-          const nextSnapshots = (await getSnapshots()).map((item) => item.id === snapshot.id
+          const nextSnapshots = await persistSnapshots((snapshots) => snapshots.map((item) => item.id === snapshot.id
             ? { ...item, archiveboxCrawlId, archiveboxSnapshotId: serverSnapshotId }
-            : item);
-          await persistSnapshots(nextSnapshots);
+            : item));
           const syncedSnapshot = nextSnapshots.find((item) => item.id === snapshot.id);
           if (syncedSnapshot) {
             snapshotForUpload = syncedSnapshot;
@@ -1674,10 +1694,9 @@ function OptionsMain() {
               const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
               serverSnapshotId = metadataSnapshotId || serverSnapshotId;
               if (metadataSnapshotId && metadataSnapshotId !== syncedSnapshot.archiveboxSnapshotId) {
-                const metadataSnapshots = (await getSnapshots()).map((item) => item.id === snapshot.id
+                const metadataSnapshots = await persistSnapshots((snapshots) => snapshots.map((item) => item.id === snapshot.id
                   ? { ...item, archiveboxSnapshotId: metadataSnapshotId }
-                  : item);
-                await persistSnapshots(metadataSnapshots);
+                  : item));
                 snapshotForUpload = metadataSnapshots.find((item) => item.id === snapshot.id) || {
                   ...syncedSnapshot,
                   archiveboxSnapshotId: metadataSnapshotId,
@@ -1690,10 +1709,9 @@ function OptionsMain() {
           const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
           serverSnapshotId = metadataSnapshotId || serverSnapshotId;
           if (metadataSnapshotId && metadataSnapshotId !== snapshot.archiveboxSnapshotId) {
-            const metadataSnapshots = (await getSnapshots()).map((item) => item.id === snapshot.id
+            const metadataSnapshots = await persistSnapshots((snapshots) => snapshots.map((item) => item.id === snapshot.id
               ? { ...item, archiveboxSnapshotId: metadataSnapshotId }
-              : item);
-            await persistSnapshots(metadataSnapshots);
+              : item));
             snapshotForUpload = metadataSnapshots.find((item) => item.id === snapshot.id) || {
               ...snapshot,
               archiveboxSnapshotId: metadataSnapshotId,
@@ -1754,10 +1772,9 @@ function OptionsMain() {
         return;
       }
     }
-    const nextSnapshots = snapshots.map((snapshot) => selectedSnapshots.has(snapshot.id)
+    await persistSnapshots((snapshots) => snapshots.map((snapshot) => selectedSnapshots.has(snapshot.id)
       ? { ...snapshot, tags: modalTags }
-      : snapshot);
-    await persistSnapshots(nextSnapshots);
+      : snapshot));
     setEditingTags(false);
     setSavedUrlStatus({ kind: 'success', text: t("Updated tags on $1 snapshots", selectedSnapshots.size) });
   }
@@ -1768,7 +1785,7 @@ function OptionsMain() {
     if (!confirm(t("Delete $1 snapshots?", selectedIds.size))) return;
 
     const snapshotsToDelete = snapshots.filter((snapshot) => selectedIds.has(snapshot.id));
-    await persistSnapshots(snapshots.filter((snapshot) => !selectedIds.has(snapshot.id)));
+    await persistSnapshots((snapshots) => snapshots.filter((snapshot) => !selectedIds.has(snapshot.id)));
     setSelectedSnapshots(new Set());
 
     const serverErrors: string[] = [];
@@ -2146,6 +2163,22 @@ function OptionsMain() {
           <p className="help-text">{t("$1 Leave the extension ID blank to use the default SingleFile Web Store / Add-ons ID.", singleFileCaptureUnavailableMessage())}</p>
           */}
           <StatusBadge status={localCaptureStatus} />
+          <div className="section-divider" />
+          <Field label={t("After saving on server, remove local copies after:")}>
+            <select
+              aria-label={t("After saving on server, remove local copies after:")}
+              value={config.local_retention_ms}
+              onChange={(event) => saveConfig({ local_retention_ms: event.currentTarget.value === 'never'
+                ? 'never' : Number(event.currentTarget.value) as ConfigState['local_retention_ms'] })}
+            >
+              <option value="60000">{t("1 minute")}</option>
+              <option value="86400000">{t("1 day")}</option>
+              <option value="2592000000">{t("30 days")}</option>
+              <option value="7776000000">{t("90 days")}</option>
+              <option value="never">{t("never")}</option>
+            </select>
+          </Field>
+          <p className="help-text">{t("Starts after successful submission. Local copies are removed only while connected to the same server and after confirming the snapshot still exists there. Server copies are kept.")}</p>
           <div className="section-divider" />
           <SectionHeader title={t("Automatic Archiving")} detail={t("Automatically archive visited pages whose URLs match your patterns.")} />
           <label className="toggle">

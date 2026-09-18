@@ -8,6 +8,8 @@ export type Snapshot = {
   title: string;
   favIconUrl?: string | null;
   depth?: ArchiveDepth;
+  archiveboxSubmittedAt?: string;
+  archiveboxSubmittedTo?: string;
   archiveboxCrawlId?: string;
   archiveboxSnapshotId?: string;
   screenshot?: SnapshotScreenshot;
@@ -98,6 +100,7 @@ export type ConfigState = {
   ui_language: 'auto' | 'en' | 'es' | 'zh_CN';
   match_urls: string;
   exclude_urls: string;
+  local_retention_ms: 60000 | 86400000 | 2592000000 | 7776000000 | 'never';
   enable_auto_archive: boolean;
   save_screenshots_locally: boolean;
   save_mhtml_locally: boolean;

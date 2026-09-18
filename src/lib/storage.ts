@@ -9,6 +9,7 @@ const defaultConfig: ConfigState = {
   ui_language: 'auto',
   match_urls: '',
   exclude_urls: '',
+  local_retention_ms: 2592000000,
   enable_auto_archive: false,
   save_screenshots_locally: false,
   save_mhtml_locally: false,
@@ -26,6 +27,7 @@ export async function getConfig(): Promise<ConfigState> {
     'ui_language',
     'match_urls',
     'exclude_urls',
+    'local_retention_ms',
     'enable_auto_archive',
     'save_screenshots_locally',
     'save_mhtml_locally',
@@ -50,6 +52,8 @@ export async function getConfig(): Promise<ConfigState> {
       : 'auto',
     match_urls: typeof local.match_urls === 'string' ? local.match_urls : '',
     exclude_urls: typeof local.exclude_urls === 'string' ? local.exclude_urls : '',
+    local_retention_ms: [60000, 86400000, 2592000000, 7776000000, 'never'].includes(local.local_retention_ms as number | string)
+      ? local.local_retention_ms as ConfigState['local_retention_ms'] : defaultConfig.local_retention_ms,
     enable_auto_archive: Boolean(local.enable_auto_archive),
     save_screenshots_locally: Boolean(local.save_screenshots_locally),
     save_mhtml_locally: Boolean(local.save_mhtml_locally),
@@ -62,21 +66,23 @@ export async function getConfig(): Promise<ConfigState> {
 }
 
 export async function setConfig(config: Partial<ConfigState>): Promise<void> {
-  const nextConfig: Partial<ConfigState> = { ...config };
-  if ('archivebox_server_url' in config || 'archivebox_api_key' in config) {
-    const current = await getConfig();
-    nextConfig.archivebox_server_url = config.archivebox_server_url ?? current.archivebox_server_url;
-    nextConfig.archivebox_api_key = config.archivebox_api_key ??
-      (nextConfig.archivebox_server_url === current.archivebox_server_url ? current.archivebox_api_key : '');
-    if (!nextConfig.archivebox_server_url) {
-      nextConfig.archivebox_api_key = '';
-      await browser.storage.sync.remove('config_archiveBoxBaseUrl');
+  await navigator.locks.request('archivebox-snapshots', async () => {
+    const nextConfig: Partial<ConfigState> = { ...config };
+    if ('archivebox_server_url' in config || 'archivebox_api_key' in config) {
+      const current = await getConfig();
+      nextConfig.archivebox_server_url = config.archivebox_server_url ?? current.archivebox_server_url;
+      nextConfig.archivebox_api_key = config.archivebox_api_key ??
+        (nextConfig.archivebox_server_url === current.archivebox_server_url ? current.archivebox_api_key : '');
+      if (!nextConfig.archivebox_server_url) {
+        nextConfig.archivebox_api_key = '';
+        await browser.storage.sync.remove('config_archiveBoxBaseUrl');
+      }
     }
-  }
-  if (typeof nextConfig.archivebox_server_url === 'string') {
-    nextConfig.archivebox_server_url = nextConfig.archivebox_server_url.replace(/\/$/, '');
-  }
-  await browser.storage.local.set(nextConfig);
+    if (typeof nextConfig.archivebox_server_url === 'string') {
+      nextConfig.archivebox_server_url = nextConfig.archivebox_server_url.replace(/\/$/, '');
+    }
+    await browser.storage.local.set(nextConfig);
+  });
 }
 
 export async function getArchiveBoxServerUrl(): Promise<string> {
@@ -88,8 +94,20 @@ export async function getSnapshots(): Promise<Snapshot[]> {
   return filterConfiguredArchiveBoxSnapshots(Array.isArray(entries) ? (entries as Snapshot[]) : []);
 }
 
-export async function setSnapshots(entries: Snapshot[]): Promise<void> {
-  await browser.storage.local.set({ entries: await filterConfiguredArchiveBoxSnapshots(entries) });
+// All read/modify/write operations share a cross-context lock, including TTL cleanup.
+export async function mutateSnapshots(update: (entries: Snapshot[]) => Snapshot[] | Promise<Snapshot[]>): Promise<Snapshot[]> {
+  return navigator.locks.request('archivebox-snapshots', async () => {
+    const { entries = [] } = await browser.storage.local.get('entries');
+    const current = Array.isArray(entries) ? entries as Snapshot[] : [];
+    const existingIds = new Set(current.map((entry) => entry.id));
+    const next = await update(current);
+    const visible = await filterConfiguredArchiveBoxSnapshots(next);
+    const visibleIds = new Set(visible.map((entry) => entry.id));
+    // Exclusions reject new server URLs; they must not silently delete older,
+    // unsent records just because cleanup updated a different snapshot.
+    await browser.storage.local.set({ entries: next.filter((entry) => existingIds.has(entry.id) || visibleIds.has(entry.id)) });
+    return visible;
+  });
 }
 
 async function filterConfiguredArchiveBoxSnapshots(entries: Snapshot[]): Promise<Snapshot[]> {
