@@ -51,15 +51,8 @@ Local copies in OPFS are removed after 30 days by default; you can configure the
 ## Setup
 
 1. Set up an [ArchiveBox](https://github.com/ArchiveBox/ArchiveBox#quickstart) server and make sure it's accessible to the machine you're browsing on
-2. Configure your ArchiveBox server to allow URL submissions without requiring login ([more info here...](https://github.com/ArchiveBox/ArchiveBox/wiki/Configuration#public_index--public_snapshots--public_add_view))  
-    *`>= v0.8.5`: users of the new BETA releases can use an API key generated at `/admin/api/apitoken/` instead.*  
-    *Alternatively: if you stay signed in to your ArchiveBox instance in the same browser, it will share your login credentials.*
-    ```bash
-    archivebox config --set PUBLIC_ADD_VIEW=True
-    # (make sure to restart the server after if you apply this change)
-    ```
-    <img width="400" alt="Screenshot of ArchiveBox CLI configuring PUBLIC_ADD_VIEW=True" src="https://github.com/ArchiveBox/archivebox-extension/assets/511499/b0dc715c-4f88-49dd-a019-ffd65ebcc7c4">
-3. Configure the extension to point to your ArchiveBox server's base URL (e.g. `http://localhost:5797`, `https://archivebox.example.com`, etc.)
+2. In ArchiveBox 0.9.0, open **Admin → API → API Keys → Create an API Key**, create a key, and copy it.
+3. Open **Extension options → Configuration**, paste the key into **API Key**, and enter your ArchiveBox server URL (e.g. `https://archivebox.example.com`) in **Server URL**. Save the configuration and test the connection.
     <img width="720" alt="Extension configuration" src="https://archivebox.github.io/archivebox-browser-extension/screenshots/configuration-desktop.png">
 4. ✅ *Test it out by right-clicking on any page and selecting `Save to ArchiveBox`, or by clicking the extension icon in the menubar.*  
     <img width="560" alt="ArchiveBox popup" src="https://archivebox.github.io/archivebox-browser-extension/screenshots/popup-desktop.png">
