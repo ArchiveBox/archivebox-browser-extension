@@ -45,18 +45,8 @@ When local capture saving is enabled in the options page, the extension stores c
 
 - Full-page screenshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_screenshot/screenshot.png`
 - MHTML snapshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_mhtml/snapshot.mhtml`
-- SingleFile HTML snapshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_singlefile/snapshot.html`
 
-Screenshots are shown as thumbnails in the Saved URLs table when at least one saved URL has a screenshot, and can be exported as PNG from the Export menu. MHTML and SingleFile HTML snapshots can also be exported from the same menu. The ZIP export includes the selected CSV/JSON metadata plus local artifacts under the same `snapshots/YYYYMMDD/example.com/{uuid}/...` paths used in OPFS. When a SingleFile HTML or MHTML snapshot is available, the Saved URLs table title opens an extension-local framed viewer for that snapshot.
-
-In Configuration, **After saving on server, remove local copies after** defaults to **30 days**; you can choose 1 minute, 1 day, 30 days, 90 days, or never. The clock starts (or restarts) when the server confirms a successful submission, including queued jobs. Cleanup runs approximately once a minute while the browser is running and checks again on startup. It removes the local Saved URLs entry, capture files, and snapshot metadata, without deleting the server copy.
-
-Cleanup requires access to the same server that accepted the submission and a fresh API response confirming the exact snapshot ID and URL. Offline, unauthenticated, missing, and unverifiable server snapshots stay local. Captures/uploads in progress are left until a later check. Existing records without a recorded submission time and destination stay local until successfully resubmitted. Shared cookie profiles and browser history/bookmarks are independent data and are not removed.
-
-MHTML capture uses Chromium's `pageCapture.saveAsMHTML()` extension API and is available in Chrome / Edge / Chromium builds. Firefox and Safari builds still save the URL and screenshot where the browser supports tab capture, but skip MHTML capture because the page capture API is not available there.
-
-SingleFile HTML capture uses the SingleFile browser extension through its external capture API. The first request opens SingleFile's options page so the user can approve or deny ArchiveBox as an allowed caller, then subsequent captures can run silently and save the returned HTML into ArchiveBox's local OPFS snapshot tree.
-
+Local copies in OPFS are removed after 30 days by default; you can configure the extension to keep them indefinitely or remove them as soon as the server receives the URL.
 
 ## Setup
 
