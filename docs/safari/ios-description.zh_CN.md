@@ -1,0 +1,14 @@
+- 通过 ArchiveBox 分享菜单保存来自 Safari、邮件、信息及其他应用的链接。
+- 浏览已保存的网页快照，搜索归档，并用标签整理网页。
+- 使用快捷指令或 Siri 保存网址和搜索归档。
+- 为需要登录的网页选择身份配置。
+- 使用服务器网址和 API 密钥连接你自己的 ArchiveBox 服务器。保存新链接和浏览收藏需要服务器可访问。
+- 通过内置的 ArchiveBox 扩展直接从 Safari 保存网页。
+- Safari 扩展支持英语、西班牙语和简体中文。
+- 免费开源，无开发者分析追踪，无需注册云端账户。
+
+- 应用网站: https://app.archivebox.io/
+- 扩展网站与设置指南: https://extension.archivebox.io/
+- 应用源代码: https://github.com/ArchiveBox/ios-archivebox
+- 扩展源代码: https://github.com/ArchiveBox/archivebox-browser-extension
+- 帮助与问题反馈: https://github.com/ArchiveBox/ios-archivebox/issues

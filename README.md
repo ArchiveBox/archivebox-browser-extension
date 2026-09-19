@@ -23,21 +23,20 @@ This is a browser extension that lets you send individual browser tabs or all UR
   <a href="https://extension.archivebox.io/screenshots/#saved-urls"><img src="https://extension.archivebox.io/screenshots/saved-urls-desktop.png" alt="ArchiveBox collection list" loading="lazy"></a>
 </div>
 
-#### Recent Changes
+## Features
 
-- [x] updated the extension to Manifest v3 using WXT, React, and TypeScript
-- [x] added a Saved URLs view where you can see, search, sort, tag, sync, delete, and export the URLs you've collected so far
-- [x] added the ability to import URLs from browser history / bookmarks by date range or filter query
-- [x] added the ability to export selected URLs as CSV/JSON, selected screenshots as PNG, selected MHTML snapshots as `.mhtml`, selected SingleFile captures as `.html`, or a ZIP bundle containing all selected snapshot data and local artifacts
-- [x] added extension-local full-page screenshot capture for saved URLs
-- [x] added extension-local MHTML capture for saved URLs on Chrome / Edge / Chromium browsers
-- [x] added extension-local SingleFile HTML capture for saved URLs when the SingleFile extension is installed and approved
-- [x] added the ability to edit extension config options, allowlist/denylist, ArchiveBox server URL, API key, and authentication profiles from the options page
-- [x] added the ability to test the connection to your ArchiveBox server
-- [x] added build and packaging support for Chrome, Edge, Firefox, and Safari from the WXT/React codebase
-
-
-
+- 📸 Save the current page with the toolbar button, keyboard shortcut, or right-click menu.
+- 🏛️ Send URLs to your own ArchiveBox server to preserve websites for later.
+- 🏷️ Search, sort, tag, and manage your saved URLs in one place.
+- ⚙️ Automatically archive pages that match your chosen URL patterns, with allowlists and denylists.
+- 📥 Review and bulk import URLs from browser history or bookmarks on Chrome, Edge, and Firefox.
+- 🖼️ Keep local screenshots, including full-page captures when permission is granted.
+- 📄 Save local MHTML copies of pages. (Chrome and Edge.)
+- 📑 Save HTML copies with the optional SingleFile extension installed and connected.
+- 📤 Export saved URLs as CSV or JSON, screenshots as PNG, page captures as HTML or MHTML, or everything together in a ZIP.
+- 👤 Choose cookies and browser settings to sync to an ArchiveBox authentication profile for sites that require a login.
+- 🧹 Choose how long to keep local copies, including cleanup after successful submission to your server.
+- 🌐 Use the extension in English, Spanish, or Simplified Chinese.
 
 ## Local Captures
 

@@ -1,0 +1,16 @@
+{
+  "checkedAt": "2026-09-19T07:04:30.050Z",
+  "status": "draft",
+  "locales": [
+    "en",
+    "es",
+    "zh-CN"
+  ],
+  "descriptionsSaved": true,
+  "screenshots": [],
+  "pending": [
+    "Upload the five listing.json screenshots to English and duplicate for all languages.",
+    "Submit the completed draft for review."
+  ],
+  "blocker": "Browser file uploads require the user to enable Allow access to file URLs for the browser extension."
+}

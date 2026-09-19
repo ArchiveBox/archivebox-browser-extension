@@ -1,0 +1,19 @@
+- 📸 Guarda la página actual desde la barra de herramientas, un atajo de teclado o el menú contextual.
+- 🏛️ Envía URL a tu propio servidor ArchiveBox para conservar sitios web y consultarlos más adelante.
+- 🏷️ Busca, ordena, etiqueta y gestiona tus URL guardadas en un solo lugar.
+- ⚙️ Archiva automáticamente las páginas que coincidan con tus patrones de URL, con listas de inclusión y exclusión.
+- 📥 Revisa e importa URL en bloque desde el historial o los marcadores del navegador.
+- 🖼️ Conserva capturas locales, incluidas capturas de página completa cuando concedas el permiso.
+- 📄 Guarda copias locales de páginas en formato MHTML. (Chrome y Edge.)
+- 📑 Guarda copias HTML con la extensión opcional SingleFile instalada y conectada.
+- 📤 Exporta URL como CSV o JSON, capturas como PNG, páginas como HTML o MHTML, o todo junto en un ZIP.
+- 👤 Elige las cookies y los ajustes del navegador que quieras sincronizar con un perfil de autenticación de ArchiveBox para sitios que requieren iniciar sesión.
+- 🧹 Elige cuánto tiempo conservar las copias locales, incluida su eliminación después de enviarlas correctamente a tu servidor.
+- 🌐 Usa la extensión en inglés, español o chino simplificado.
+- 🔑 Conecta con la URL y la clave API de tu servidor ArchiveBox; las funciones del servidor requieren que sea accesible.
+- 🔓 Gratis y de código abierto. Sin analítica del desarrollador; tu archivo permanece local o se envía al servidor que configures.
+
+- 🌍 Sitio web y configuración: https://extension.archivebox.io/
+- 💻 Código fuente: https://github.com/ArchiveBox/archivebox-browser-extension
+- 🐛 Ayuda y problemas: https://github.com/ArchiveBox/archivebox-browser-extension/issues
+- 🔒 Privacidad: https://github.com/ArchiveBox/archivebox-browser-extension/blob/main/PRIVACY.md

@@ -1,0 +1,59 @@
+[
+  {
+    "id": 410586,
+    "caption": {
+      "en-US": "Save a page with tags",
+      "es-ES": "Guarda una página con etiquetas",
+      "zh-CN": "保存网页并添加标签"
+    },
+    "image_size": [
+      560,
+      242
+    ],
+    "image_url": "https://addons.mozilla.org/user-media/previews/full/410/410586.png?modified=1789800809",
+    "position": 0,
+    "thumbnail_size": [
+      533,
+      230
+    ],
+    "thumbnail_url": "https://addons.mozilla.org/user-media/previews/thumbs/410/410586.jpg?modified=1789800809"
+  },
+  {
+    "id": 410587,
+    "caption": {
+      "en-US": "Search and organize saved URLs",
+      "es-ES": "Busca y organiza URL guardadas",
+      "zh-CN": "搜索和整理已保存的网址"
+    },
+    "image_size": [
+      1600,
+      1366
+    ],
+    "image_url": "https://addons.mozilla.org/user-media/previews/full/410/410587.png?modified=1789800831",
+    "position": 1,
+    "thumbnail_size": [
+      469,
+      400
+    ],
+    "thumbnail_url": "https://addons.mozilla.org/user-media/previews/thumbs/410/410587.jpg?modified=1789800831"
+  },
+  {
+    "id": 410588,
+    "caption": {
+      "en-US": "Authentication profiles",
+      "es-ES": "Perfiles de autenticación",
+      "zh-CN": "身份验证配置"
+    },
+    "image_size": [
+      1600,
+      1091
+    ],
+    "image_url": "https://addons.mozilla.org/user-media/previews/full/410/410588.png?modified=1789800875",
+    "position": 2,
+    "thumbnail_size": [
+      533,
+      363
+    ],
+    "thumbnail_url": "https://addons.mozilla.org/user-media/previews/thumbs/410/410588.jpg?modified=1789800875"
+  }
+]

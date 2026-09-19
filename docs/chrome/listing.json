@@ -1,0 +1,61 @@
+{
+  "name": "ArchiveBox",
+  "urls": {
+    "website": "https://extension.archivebox.io/",
+    "source": "https://github.com/ArchiveBox/archivebox-browser-extension",
+    "support": "https://github.com/ArchiveBox/archivebox-browser-extension/issues",
+    "privacy": "https://github.com/ArchiveBox/archivebox-browser-extension/blob/main/PRIVACY.md"
+  },
+  "locales": {
+    "en": {
+      "name": "ArchiveBox",
+      "summary": "Save pages, screenshots, and bookmarks locally or to your own ArchiveBox server.",
+      "description": "- 📸 Save the current page with the toolbar button, keyboard shortcut, or right-click menu.\n- 🏛️ Send URLs to your own ArchiveBox server to preserve websites for later.\n- 🏷️ Search, sort, tag, and manage your saved URLs in one place.\n- ⚙️ Automatically archive pages that match your chosen URL patterns, with allowlists and denylists.\n- 📥 Review and bulk import URLs from browser history or bookmarks.\n- 🖼️ Keep local screenshots, including full-page captures when permission is granted.\n- 📄 Save local MHTML copies of pages.\n- 📑 Save HTML copies with the optional SingleFile extension installed and connected.\n- 📤 Export saved URLs as CSV or JSON, screenshots as PNG, page captures as HTML or MHTML, or everything together in a ZIP.\n- 👤 Choose cookies and browser settings to sync to an ArchiveBox authentication profile for sites that require a login.\n- 🧹 Choose how long to keep local copies, including cleanup after successful submission to your server.\n- 🌐 Use the extension in English, Spanish, or Simplified Chinese.\n- 🔑 Connect with your ArchiveBox server URL and API key; server features require a reachable server.\n- 🔓 Free and open source. No developer analytics; your archive stays local or goes to the server you configure.\n\n- 🌍 Website and setup: https://extension.archivebox.io/\n- 💻 Source code: https://github.com/ArchiveBox/archivebox-browser-extension\n- 🐛 Help and issues: https://github.com/ArchiveBox/archivebox-browser-extension/issues\n- 🔒 Privacy: https://github.com/ArchiveBox/archivebox-browser-extension/blob/main/PRIVACY.md",
+      "keywords": "archivebox,archive,bookmarks,history,save page,self hosted,web archiving"
+    },
+    "es": {
+      "name": "ArchiveBox",
+      "summary": "Guarda páginas, capturas y marcadores localmente o en tu propio servidor ArchiveBox.",
+      "description": "- 📸 Guarda la página actual desde la barra de herramientas, un atajo de teclado o el menú contextual.\n- 🏛️ Envía URL a tu propio servidor ArchiveBox para conservar sitios web y consultarlos más adelante.\n- 🏷️ Busca, ordena, etiqueta y gestiona tus URL guardadas en un solo lugar.\n- ⚙️ Archiva automáticamente las páginas que coincidan con tus patrones de URL, con listas de inclusión y exclusión.\n- 📥 Revisa e importa URL en bloque desde el historial o los marcadores del navegador.\n- 🖼️ Conserva capturas locales, incluidas capturas de página completa cuando concedas el permiso.\n- 📄 Guarda copias locales de páginas en formato MHTML.\n- 📑 Guarda copias HTML con la extensión opcional SingleFile instalada y conectada.\n- 📤 Exporta URL como CSV o JSON, capturas como PNG, páginas como HTML o MHTML, o todo junto en un ZIP.\n- 👤 Elige las cookies y los ajustes del navegador que quieras sincronizar con un perfil de autenticación de ArchiveBox para sitios que requieren iniciar sesión.\n- 🧹 Elige cuánto tiempo conservar las copias locales, incluida su eliminación después de enviarlas correctamente a tu servidor.\n- 🌐 Usa la extensión en inglés, español o chino simplificado.\n- 🔑 Conecta con la URL y la clave API de tu servidor ArchiveBox; las funciones del servidor requieren que sea accesible.\n- 🔓 Gratis y de código abierto. Sin analítica del desarrollador; tu archivo permanece local o se envía al servidor que configures.\n\n- 🌍 Sitio web y configuración: https://extension.archivebox.io/\n- 💻 Código fuente: https://github.com/ArchiveBox/archivebox-browser-extension\n- 🐛 Ayuda y problemas: https://github.com/ArchiveBox/archivebox-browser-extension/issues\n- 🔒 Privacidad: https://github.com/ArchiveBox/archivebox-browser-extension/blob/main/PRIVACY.md",
+      "keywords": "archivebox,archivo,marcadores,historial,guardar página,autoalojado,archivo web"
+    },
+    "zh_CN": {
+      "name": "ArchiveBox",
+      "summary": "将网页、截图和书签保存到本地或你自己的 ArchiveBox 服务器。",
+      "description": "- 📸 通过工具栏按钮、键盘快捷键或右键菜单保存当前网页。\n- 🏛️ 将网址发送到你自己的 ArchiveBox 服务器，保存网站以便日后查看。\n- 🏷️ 在同一处搜索、排序、添加标签并管理已保存的网址。\n- ⚙️ 根据你选择的网址规则自动归档网页，支持允许列表和排除列表。\n- 📥 预览并批量导入浏览器历史记录或书签中的网址。\n- 🖼️ 保留本地截图；授予权限后还可截取完整网页。\n- 📄 将网页的 MHTML 副本保存到本地。\n- 📑 安装并连接可选的 SingleFile 扩展后，即可保存 HTML 副本。\n- 📤 将网址导出为 CSV 或 JSON、截图导出为 PNG、网页副本导出为 HTML 或 MHTML，或将所有内容打包为 ZIP。\n- 👤 选择要同步到 ArchiveBox 身份验证配置中的 Cookie 和浏览器设置，以归档需要登录的网站。\n- 🧹 选择本地副本的保留时间，也可在成功提交到服务器后清理本地副本。\n- 🌐 支持英语、西班牙语和简体中文界面。\n- 🔑 使用 ArchiveBox 服务器网址和 API 密钥连接；服务器功能需要服务器可访问。\n- 🔓 免费开源，无开发者分析追踪；归档保留在本地或发送到你配置的服务器。\n\n- 🌍 网站与设置指南: https://extension.archivebox.io/\n- 💻 源代码: https://github.com/ArchiveBox/archivebox-browser-extension\n- 🐛 帮助与问题反馈: https://github.com/ArchiveBox/archivebox-browser-extension/issues\n- 🔒 隐私: https://github.com/ArchiveBox/archivebox-browser-extension/blob/main/PRIVACY.md",
+      "keywords": "archivebox,归档,书签,历史记录,保存网页,自托管,网页归档"
+    }
+  },
+  "packageVersion": "3.3.2",
+  "storeLocales": {
+    "en": "en",
+    "es": "es",
+    "zh_CN": "zh_CN"
+  },
+  "permissions": {
+    "required": {
+      "storage": "Save your settings, saved URLs, and local captures.",
+      "alarms": "Schedule local-copy cleanup and retry interrupted cookie synchronization.",
+      "activeTab": "Save the page you select with the toolbar or context menu.",
+      "contextMenus": "Offer Save to ArchiveBox in the right-click menu.",
+      "unlimitedStorage": "Keep larger local captures."
+    },
+    "optional": {
+      "history": "Import URLs you select from browsing history.",
+      "bookmarks": "Import URLs you select from bookmarks.",
+      "cookies": "Sync selected website cookies to your configured ArchiveBox server.",
+      "tabs": "Automatically save pages matching your URL rules.",
+      "scripting": "Capture full-page screenshots and read browser settings you choose to sync.",
+      "pageCapture": "Save local MHTML copies in Chrome and Edge."
+    },
+    "websites": "Connect to the ArchiveBox server and websites you approve; automatic archiving needs access to pages matching your rules."
+  },
+  "reviewerNotes": "Save and manage local URLs without an account. To test server archiving, configure an ArchiveBox server URL and API key. Optional cookies and browser settings go only to the server the user configures. Setup: https://extension.archivebox.io/",
+  "screenshots": [
+    "popup-ui-1280x800.png",
+    "saved-urls-1280x800.png",
+    "server-configuration-1280x800.png",
+    "bulk-import-urls-1280x800.png",
+    "authentication-profiles-1280x800.png"
+  ]
+}

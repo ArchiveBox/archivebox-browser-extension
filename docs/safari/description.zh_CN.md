@@ -1,0 +1,17 @@
+- 通过工具栏按钮、键盘快捷键或右键菜单保存当前网页。
+- 将网址发送到你自己的 ArchiveBox 服务器，保存网站以便日后查看。
+- 在同一处搜索、排序、添加标签并管理已保存的网址。
+- 根据你选择的网址规则自动归档网页，支持允许列表和排除列表。
+- 保留本地截图；授予权限后还可截取完整网页。
+- 安装并连接可选的 SingleFile 扩展后，即可保存 HTML 副本。
+- 将网址导出为 CSV 或 JSON、截图导出为 PNG、网页副本导出为 HTML，或将所有内容打包为 ZIP。
+- 选择要同步到 ArchiveBox 身份验证配置中的 Cookie 和浏览器设置，以归档需要登录的网站。
+- 选择本地副本的保留时间，也可在成功提交到服务器后清理本地副本。
+- 支持英语、西班牙语和简体中文界面。
+- 使用 ArchiveBox 服务器网址和 API 密钥连接；服务器功能需要服务器可访问。
+- 免费开源，无开发者分析追踪；归档保留在本地或发送到你配置的服务器。
+
+- 网站与设置指南: https://extension.archivebox.io/
+- 源代码: https://github.com/ArchiveBox/archivebox-browser-extension
+- 帮助与问题反馈: https://github.com/ArchiveBox/archivebox-browser-extension/issues
+- 隐私: https://github.com/ArchiveBox/archivebox-browser-extension/blob/main/PRIVACY.md

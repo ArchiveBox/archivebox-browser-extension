@@ -1,0 +1,37 @@
+{
+  "generatedAt": "2026-09-19T06:13:14.302Z",
+  "revision": "091b56eea7eef2ac4188574b837f966361cea0f8",
+  "gallery": "https://extension.archivebox.io/screenshots/",
+  "screenshots": [
+    {
+      "feature": "popup",
+      "source": "https://extension.archivebox.io/screenshots/popup-desktop.png",
+      "sha256": "dfb9c68f2f1bd2f6af58fc50959ded7c3ef3eee4953f569c1771d5b11a7fd523",
+      "edge": "popup-ui-1280x800.png"
+    },
+    {
+      "feature": "saved-urls",
+      "source": "https://extension.archivebox.io/screenshots/saved-urls-desktop.png",
+      "sha256": "5a79f404b50a77c96118afa6ebbf713209f39aa71ae4bd64e51ccb4e4c9d3c2f",
+      "edge": "saved-urls-1280x800.png"
+    },
+    {
+      "feature": "configuration",
+      "source": "https://extension.archivebox.io/screenshots/configuration-desktop.png",
+      "sha256": "3a30190a7fedcdaf50f9b36016ef10edf76d76c98a18a88ba34c7b262ad61e27",
+      "edge": "server-configuration-1280x800.png"
+    },
+    {
+      "feature": "import-bookmarks",
+      "source": "https://extension.archivebox.io/screenshots/import-bookmarks-desktop.png",
+      "sha256": "072a75282823f04897c9a41ccd30c24c2f303c2c67426cb6c226ab4992c48dae",
+      "edge": "bulk-import-urls-1280x800.png"
+    },
+    {
+      "feature": "cookies",
+      "source": "https://extension.archivebox.io/screenshots/cookies-desktop.png",
+      "sha256": "c71e43d2b370c970f4f30ae9b6d9b0972c524e25b6bbcd0fdd07cfc93d283838",
+      "edge": "authentication-profiles-1280x800.png"
+    }
+  ]
+}

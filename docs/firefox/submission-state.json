@@ -1,0 +1,19 @@
+{
+  "checkedAt": "2026-09-19T07:04:30.050Z",
+  "status": "public",
+  "locales": [
+    "en-US",
+    "es-ES",
+    "zh-CN"
+  ],
+  "newPreviewIds": [
+    410586,
+    410587,
+    410588
+  ],
+  "pending": [
+    "Upload bulk-import-urls.png and export-menu.png with translated captions.",
+    "Remove obsolete preview 258559 after replacements are confirmed."
+  ],
+  "blocker": "Mozilla hourly API write limit; last response requested waiting 3223 seconds."
+}

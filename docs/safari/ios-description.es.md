@@ -1,0 +1,14 @@
+- Guarda enlaces desde Safari, Mail, Mensajes y otras apps con la hoja para compartir de ArchiveBox.
+- Explora tus páginas guardadas, busca en tu archivo y organiza las páginas con etiquetas.
+- Guarda URL y busca en tu archivo con Atajos o Siri.
+- Elige un perfil para las páginas que requieren iniciar sesión.
+- Conecta con tu propio servidor ArchiveBox mediante su URL y clave API. El servidor debe estar accesible para guardar nuevos enlaces y explorar tu colección.
+- Guarda páginas directamente desde Safari con la extensión ArchiveBox incluida.
+- Usa la extensión de Safari en inglés, español o chino simplificado.
+- Gratis y de código abierto, sin analítica del desarrollador ni cuenta en la nube obligatoria.
+
+- Sitio web de la app: https://app.archivebox.io/
+- Sitio web y configuración de la extensión: https://extension.archivebox.io/
+- Código fuente de la app: https://github.com/ArchiveBox/ios-archivebox
+- Código fuente de la extensión: https://github.com/ArchiveBox/archivebox-browser-extension
+- Ayuda y problemas: https://github.com/ArchiveBox/ios-archivebox/issues

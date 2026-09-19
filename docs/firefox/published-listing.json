@@ -1,0 +1,108 @@
+{
+  "checkedAt": "2026-09-19T07:03:51.916Z",
+  "url": "https://addons.mozilla.org/en-US/firefox/addon/archivebox-exporter/",
+  "version": "3.3.2",
+  "name": {
+    "en-US": "ArchiveBox",
+    "es-ES": "ArchiveBox",
+    "zh-CN": "ArchiveBox"
+  },
+  "summary": {
+    "en-US": "Save pages, screenshots, and bookmarks locally or to your own ArchiveBox server.",
+    "es-ES": "Guarda páginas, capturas y marcadores localmente o en tu propio servidor ArchiveBox.",
+    "zh-CN": "将网页、截图和书签保存到本地或你自己的 ArchiveBox 服务器。"
+  },
+  "description": {
+    "en-US": "<ul><li>📸 Save the current page with the toolbar button, keyboard shortcut, or right-click menu.</li><li>🏛 Send URLs to your own ArchiveBox server to preserve websites for later.</li><li>🏷 Search, sort, tag, and manage your saved URLs in one place.</li><li>⚙ Automatically archive pages that match your chosen URL patterns, with allowlists and denylists.</li><li>📥 Review and bulk import URLs from browser history or bookmarks.</li><li>🖼 Keep local screenshots, including full-page captures when permission is granted.</li><li>📑 Save HTML copies with the optional SingleFile extension installed and connected.</li><li>📤 Export saved URLs as CSV or JSON, screenshots as PNG, page captures as HTML, or everything together in a ZIP.</li><li>👤 Choose cookies and browser settings to sync to an ArchiveBox authentication profile for sites that require a login.</li><li>🧹 Choose how long to keep local copies, including cleanup after successful submission to your server.</li><li>🌐 Use the extension in English, Spanish, or Simplified Chinese.</li><li>🔑 Connect with your ArchiveBox server URL and API key; server features require a reachable server.</li><li>🔓 Free and open source. No developer analytics; your archive stays local or goes to the server you configure.</li><li>🌍 Website and setup: <a href=\"https://prod.outgoing.prod.webservices.mozgcp.net/v1/89a526585ee34f5a12e3eba21a7cc723012f72e3a19011a3bf1bec2fcb123a73/https%3A//extension.archivebox.io/\" rel=\"nofollow\">https://extension.archivebox.io/</a></li><li>💻 Source code: <a href=\"https://prod.outgoing.prod.webservices.mozgcp.net/v1/9169fb8b642d2a04c296c0006c529ccb74305120a78576a88542ccd7041a5e51/https%3A//github.com/ArchiveBox/archivebox-browser-extension\" rel=\"nofollow\">https://github.com/ArchiveBox/archivebox-browser-extension</a></li><li>🐛 Help and issues: <a href=\"https://prod.outgoing.prod.webservices.mozgcp.net/v1/adcf698287bfec376a41760d762d73760521218d6c68f4ed336af418b7ff2439/https%3A//github.com/ArchiveBox/archivebox-browser-extension/issues\" rel=\"nofollow\">https://github.com/ArchiveBox/archivebox-browser-extension/issues</a></li><li>🔒 Privacy: <a href=\"https://prod.outgoing.prod.webservices.mozgcp.net/v1/5054179dc87a2a91e649a73a016bde516247f82743482c72552753df102a1a49/https%3A//github.com/ArchiveBox/archivebox-browser-extension/blob/main/PRIVACY.md\" rel=\"nofollow\">https://github.com/ArchiveBox/archivebox-browser-extension/blob/main/PRIVACY.md</a></li></ul>",
+    "es-ES": "<ul><li>📸 Guarda la página actual desde la barra de herramientas, un atajo de teclado o el menú contextual.</li><li>🏛 Envía URL a tu propio servidor ArchiveBox para conservar sitios web y consultarlos más adelante.</li><li>🏷 Busca, ordena, etiqueta y gestiona tus URL guardadas en un solo lugar.</li><li>⚙ Archiva automáticamente las páginas que coincidan con tus patrones de URL, con listas de inclusión y exclusión.</li><li>📥 Revisa e importa URL en bloque desde el historial o los marcadores del navegador.</li><li>🖼 Conserva capturas locales, incluidas capturas de página completa cuando concedas el permiso.</li><li>📑 Guarda copias HTML con la extensión opcional SingleFile instalada y conectada.</li><li>📤 Exporta URL como CSV o JSON, capturas como PNG, páginas como HTML, o todo junto en un ZIP.</li><li>👤 Elige las cookies y los ajustes del navegador que quieras sincronizar con un perfil de autenticación de ArchiveBox para sitios que requieren iniciar sesión.</li><li>🧹 Elige cuánto tiempo conservar las copias locales, incluida su eliminación después de enviarlas correctamente a tu servidor.</li><li>🌐 Usa la extensión en inglés, español o chino simplificado.</li><li>🔑 Conecta con la URL y la clave API de tu servidor ArchiveBox; las funciones del servidor requieren que sea accesible.</li><li>🔓 Gratis y de código abierto. Sin analítica del desarrollador; tu archivo permanece local o se envía al servidor que configures.</li><li>🌍 Sitio web y configuración: <a href=\"https://prod.outgoing.prod.webservices.mozgcp.net/v1/89a526585ee34f5a12e3eba21a7cc723012f72e3a19011a3bf1bec2fcb123a73/https%3A//extension.archivebox.io/\" rel=\"nofollow\">https://extension.archivebox.io/</a></li><li>💻 Código fuente: <a href=\"https://prod.outgoing.prod.webservices.mozgcp.net/v1/9169fb8b642d2a04c296c0006c529ccb74305120a78576a88542ccd7041a5e51/https%3A//github.com/ArchiveBox/archivebox-browser-extension\" rel=\"nofollow\">https://github.com/ArchiveBox/archivebox-browser-extension</a></li><li>🐛 Ayuda y problemas: <a href=\"https://prod.outgoing.prod.webservices.mozgcp.net/v1/adcf698287bfec376a41760d762d73760521218d6c68f4ed336af418b7ff2439/https%3A//github.com/ArchiveBox/archivebox-browser-extension/issues\" rel=\"nofollow\">https://github.com/ArchiveBox/archivebox-browser-extension/issues</a></li><li>🔒 Privacidad: <a href=\"https://prod.outgoing.prod.webservices.mozgcp.net/v1/5054179dc87a2a91e649a73a016bde516247f82743482c72552753df102a1a49/https%3A//github.com/ArchiveBox/archivebox-browser-extension/blob/main/PRIVACY.md\" rel=\"nofollow\">https://github.com/ArchiveBox/archivebox-browser-extension/blob/main/PRIVACY.md</a></li></ul>",
+    "zh-CN": "<ul><li>📸 通过工具栏按钮、键盘快捷键或右键菜单保存当前网页。</li><li>🏛 将网址发送到你自己的 ArchiveBox 服务器，保存网站以便日后查看。</li><li>🏷 在同一处搜索、排序、添加标签并管理已保存的网址。</li><li>⚙ 根据你选择的网址规则自动归档网页，支持允许列表和排除列表。</li><li>📥 预览并批量导入浏览器历史记录或书签中的网址。</li><li>🖼 保留本地截图；授予权限后还可截取完整网页。</li><li>📑 安装并连接可选的 SingleFile 扩展后，即可保存 HTML 副本。</li><li>📤 将网址导出为 CSV 或 JSON、截图导出为 PNG、网页副本导出为 HTML，或将所有内容打包为 ZIP。</li><li>👤 选择要同步到 ArchiveBox 身份验证配置中的 Cookie 和浏览器设置，以归档需要登录的网站。</li><li>🧹 选择本地副本的保留时间，也可在成功提交到服务器后清理本地副本。</li><li>🌐 支持英语、西班牙语和简体中文界面。</li><li>🔑 使用 ArchiveBox 服务器网址和 API 密钥连接；服务器功能需要服务器可访问。</li><li>🔓 免费开源，无开发者分析追踪；归档保留在本地或发送到你配置的服务器。</li><li>🌍 网站与设置指南: <a href=\"https://prod.outgoing.prod.webservices.mozgcp.net/v1/89a526585ee34f5a12e3eba21a7cc723012f72e3a19011a3bf1bec2fcb123a73/https%3A//extension.archivebox.io/\" rel=\"nofollow\">https://extension.archivebox.io/</a></li><li>💻 源代码: <a href=\"https://prod.outgoing.prod.webservices.mozgcp.net/v1/9169fb8b642d2a04c296c0006c529ccb74305120a78576a88542ccd7041a5e51/https%3A//github.com/ArchiveBox/archivebox-browser-extension\" rel=\"nofollow\">https://github.com/ArchiveBox/archivebox-browser-extension</a></li><li>🐛 帮助与问题反馈: <a href=\"https://prod.outgoing.prod.webservices.mozgcp.net/v1/adcf698287bfec376a41760d762d73760521218d6c68f4ed336af418b7ff2439/https%3A//github.com/ArchiveBox/archivebox-browser-extension/issues\" rel=\"nofollow\">https://github.com/ArchiveBox/archivebox-browser-extension/issues</a></li><li>🔒 隐私: <a href=\"https://prod.outgoing.prod.webservices.mozgcp.net/v1/5054179dc87a2a91e649a73a016bde516247f82743482c72552753df102a1a49/https%3A//github.com/ArchiveBox/archivebox-browser-extension/blob/main/PRIVACY.md\" rel=\"nofollow\">https://github.com/ArchiveBox/archivebox-browser-extension/blob/main/PRIVACY.md</a></li></ul>"
+  },
+  "homepage": {
+    "url": {
+      "en-US": "https://extension.archivebox.io/",
+      "es-ES": "https://extension.archivebox.io/",
+      "zh-CN": "https://extension.archivebox.io/"
+    },
+    "outgoing": {
+      "en-US": "https://prod.outgoing.prod.webservices.mozgcp.net/v1/89a526585ee34f5a12e3eba21a7cc723012f72e3a19011a3bf1bec2fcb123a73/https%3A//extension.archivebox.io/",
+      "es-ES": "https://prod.outgoing.prod.webservices.mozgcp.net/v1/89a526585ee34f5a12e3eba21a7cc723012f72e3a19011a3bf1bec2fcb123a73/https%3A//extension.archivebox.io/",
+      "zh-CN": "https://prod.outgoing.prod.webservices.mozgcp.net/v1/89a526585ee34f5a12e3eba21a7cc723012f72e3a19011a3bf1bec2fcb123a73/https%3A//extension.archivebox.io/"
+    }
+  },
+  "previews": [
+    {
+      "id": 258559,
+      "caption": {
+        "en-US": "The extension settings, where you can add domains or regexes to automatically be archived."
+      },
+      "image_size": [
+        1280,
+        800
+      ],
+      "image_url": "https://addons.mozilla.org/user-media/previews/full/258/258559.png?modified=1625181770",
+      "position": 0,
+      "thumbnail_size": [
+        533,
+        333
+      ],
+      "thumbnail_url": "https://addons.mozilla.org/user-media/previews/thumbs/258/258559.jpg?modified=1625181770"
+    },
+    {
+      "id": 410586,
+      "caption": {
+        "en-US": "Save a page with tags",
+        "es-ES": "Guarda una página con etiquetas",
+        "zh-CN": "保存网页并添加标签"
+      },
+      "image_size": [
+        560,
+        242
+      ],
+      "image_url": "https://addons.mozilla.org/user-media/previews/full/410/410586.png?modified=1789800809",
+      "position": 0,
+      "thumbnail_size": [
+        533,
+        230
+      ],
+      "thumbnail_url": "https://addons.mozilla.org/user-media/previews/thumbs/410/410586.jpg?modified=1789800809"
+    },
+    {
+      "id": 410587,
+      "caption": {
+        "en-US": "Search and organize saved URLs",
+        "es-ES": "Busca y organiza URL guardadas",
+        "zh-CN": "搜索和整理已保存的网址"
+      },
+      "image_size": [
+        1600,
+        1366
+      ],
+      "image_url": "https://addons.mozilla.org/user-media/previews/full/410/410587.png?modified=1789800831",
+      "position": 1,
+      "thumbnail_size": [
+        469,
+        400
+      ],
+      "thumbnail_url": "https://addons.mozilla.org/user-media/previews/thumbs/410/410587.jpg?modified=1789800831"
+    },
+    {
+      "id": 410588,
+      "caption": {
+        "en-US": "Authentication profiles",
+        "es-ES": "Perfiles de autenticación",
+        "zh-CN": "身份验证配置"
+      },
+      "image_size": [
+        1600,
+        1091
+      ],
+      "image_url": "https://addons.mozilla.org/user-media/previews/full/410/410588.png?modified=1789800875",
+      "position": 2,
+      "thumbnail_size": [
+        533,
+        363
+      ],
+      "thumbnail_url": "https://addons.mozilla.org/user-media/previews/thumbs/410/410588.jpg?modified=1789800875"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "checkedAt": "2026-09-19T07:04:30.050Z",
+  "status": "prepared-locally",
+  "blocker": "Publisher dashboard navigation rejected by browser URL security policy.",
+  "locales": [
+    "en",
+    "es",
+    "zh_CN"
+  ]
+}

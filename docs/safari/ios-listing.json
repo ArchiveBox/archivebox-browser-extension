@@ -1,0 +1,20 @@
+{
+  "appId": "6769185501",
+  "version": "1.0",
+  "marketingUrl": "https://app.archivebox.io/",
+  "supportUrl": "https://github.com/ArchiveBox/ios-archivebox/issues",
+  "locales": {
+    "en-US": {
+      "description": "- Save links from Safari, Mail, Messages, and other apps with the ArchiveBox share sheet.\n- Browse your saved snapshots, search your archive, and organize pages with tags.\n- Save URLs and search your archive with Shortcuts or Siri.\n- Choose a persona for pages that require a login.\n- Connect to your own ArchiveBox server with its URL and API key. A reachable server is required to save new links and browse your collection.\n- Save pages directly from Safari with the included ArchiveBox extension.\n- Use the Safari extension in English, Spanish, or Simplified Chinese.\n- Free and open source, with no developer analytics or required cloud account.\n\n- App website: https://app.archivebox.io/\n- Extension website and setup: https://extension.archivebox.io/\n- App source code: https://github.com/ArchiveBox/ios-archivebox\n- Extension source code: https://github.com/ArchiveBox/archivebox-browser-extension\n- Help and issues: https://github.com/ArchiveBox/ios-archivebox/issues",
+      "keywords": "archive,web,bookmarks,save,offline,backup,self-hosted"
+    },
+    "es-ES": {
+      "description": "- Guarda enlaces desde Safari, Mail, Mensajes y otras apps con la hoja para compartir de ArchiveBox.\n- Explora tus páginas guardadas, busca en tu archivo y organiza las páginas con etiquetas.\n- Guarda URL y busca en tu archivo con Atajos o Siri.\n- Elige un perfil para las páginas que requieren iniciar sesión.\n- Conecta con tu propio servidor ArchiveBox mediante su URL y clave API. El servidor debe estar accesible para guardar nuevos enlaces y explorar tu colección.\n- Guarda páginas directamente desde Safari con la extensión ArchiveBox incluida.\n- Usa la extensión de Safari en inglés, español o chino simplificado.\n- Gratis y de código abierto, sin analítica del desarrollador ni cuenta en la nube obligatoria.\n\n- Sitio web de la app: https://app.archivebox.io/\n- Sitio web y configuración de la extensión: https://extension.archivebox.io/\n- Código fuente de la app: https://github.com/ArchiveBox/ios-archivebox\n- Código fuente de la extensión: https://github.com/ArchiveBox/archivebox-browser-extension\n- Ayuda y problemas: https://github.com/ArchiveBox/ios-archivebox/issues",
+      "keywords": "archivo,web,marcadores,guardar,sin conexión,copia de seguridad,autoalojado"
+    },
+    "zh-Hans": {
+      "description": "- 通过 ArchiveBox 分享菜单保存来自 Safari、邮件、信息及其他应用的链接。\n- 浏览已保存的网页快照，搜索归档，并用标签整理网页。\n- 使用快捷指令或 Siri 保存网址和搜索归档。\n- 为需要登录的网页选择身份配置。\n- 使用服务器网址和 API 密钥连接你自己的 ArchiveBox 服务器。保存新链接和浏览收藏需要服务器可访问。\n- 通过内置的 ArchiveBox 扩展直接从 Safari 保存网页。\n- Safari 扩展支持英语、西班牙语和简体中文。\n- 免费开源，无开发者分析追踪，无需注册云端账户。\n\n- 应用网站: https://app.archivebox.io/\n- 扩展网站与设置指南: https://extension.archivebox.io/\n- 应用源代码: https://github.com/ArchiveBox/ios-archivebox\n- 扩展源代码: https://github.com/ArchiveBox/archivebox-browser-extension\n- 帮助与问题反馈: https://github.com/ArchiveBox/ios-archivebox/issues",
+      "keywords": "归档,网页,书签,保存,离线,备份,自托管"
+    }
+  }
+}

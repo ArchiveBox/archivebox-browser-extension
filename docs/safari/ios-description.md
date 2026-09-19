@@ -1,0 +1,14 @@
+- Save links from Safari, Mail, Messages, and other apps with the ArchiveBox share sheet.
+- Browse your saved snapshots, search your archive, and organize pages with tags.
+- Save URLs and search your archive with Shortcuts or Siri.
+- Choose a persona for pages that require a login.
+- Connect to your own ArchiveBox server with its URL and API key. A reachable server is required to save new links and browse your collection.
+- Save pages directly from Safari with the included ArchiveBox extension.
+- Use the Safari extension in English, Spanish, or Simplified Chinese.
+- Free and open source, with no developer analytics or required cloud account.
+
+- App website: https://app.archivebox.io/
+- Extension website and setup: https://extension.archivebox.io/
+- App source code: https://github.com/ArchiveBox/ios-archivebox
+- Extension source code: https://github.com/ArchiveBox/archivebox-browser-extension
+- Help and issues: https://github.com/ArchiveBox/ios-archivebox/issues
