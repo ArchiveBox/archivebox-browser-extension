@@ -1,0 +1,86 @@
+README.md
+  h_923c208e183a7b 26-39
+docs/chrome/description.es.md
+  h_923c208e183a7b 1-19
+docs/chrome/description.md
+  h_923c208e183a7b 1-19
+docs/chrome/description.zh_CN.md
+  h_923c208e183a7b 1-19
+docs/chrome/listing.json
+  h_923c208e183a7b 1-61
+docs/chrome/submission-state.json
+  h_923c208e183a7b 1-10
+docs/edge/description.es.md
+  h_923c208e183a7b 1-19
+docs/edge/description.md
+  h_923c208e183a7b 1-19
+docs/edge/description.zh_CN.md
+  h_923c208e183a7b 1-19
+docs/edge/listing.json
+  h_923c208e183a7b 1-61
+docs/edge/submission-state.json
+  h_923c208e183a7b 1-16
+docs/firefox/description.es.md
+  h_923c208e183a7b 1-18
+docs/firefox/description.md
+  h_923c208e183a7b 1-18
+docs/firefox/description.zh_CN.md
+  h_923c208e183a7b 1-18
+docs/firefox/listing.json
+  h_923c208e183a7b 1-61
+docs/firefox/preview-upload-cookies.json
+  h_923c208e183a7b 1-9
+docs/firefox/preview-upload-popup.json
+  h_923c208e183a7b 1-3
+docs/firefox/preview-upload-saved-urls.json
+  h_923c208e183a7b 1-3
+docs/firefox/published-listing.json
+  h_923c208e183a7b 1-108
+docs/firefox/screenshots-submission.json
+  h_923c208e183a7b 1-59
+docs/firefox/submission-state.json
+  h_923c208e183a7b 1-19
+docs/firefox/submission.json
+  h_923c208e183a7b 1-22
+docs/safari/description.es.md
+  h_923c208e183a7b 1-17
+docs/safari/description.md
+  h_923c208e183a7b 1-17
+docs/safari/description.zh_CN.md
+  h_923c208e183a7b 1-17
+docs/safari/ios-description.es.md
+  h_923c208e183a7b 1-14
+docs/safari/ios-description.md
+  h_923c208e183a7b 1-14
+docs/safari/ios-description.zh_CN.md
+  h_923c208e183a7b 1-14
+docs/safari/ios-listing.json
+  h_923c208e183a7b 1-20
+docs/safari/listing.json
+  h_923c208e183a7b 1-51
+docs/safari/macos-submission.json
+  h_923c208e183a7b 1-20
+docs/safari/submission-state.json
+  h_923c208e183a7b 1-22
+docs/shared/description.es.md
+  h_923c208e183a7b 1-19
+docs/shared/description.md
+  h_923c208e183a7b 1-19
+docs/shared/description.zh_CN.md
+  h_923c208e183a7b 1-19
+docs/shared/listing.json
+  h_923c208e183a7b 1-29
+docs/shared/screenshots.json
+  h_923c208e183a7b 1-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8ef1d65379d05c0e630b43e60d623cf80dab3aac",
+  "prompts": {},
+  "humans": {
+    "h_923c208e183a7b": {
+      "author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
