@@ -38,7 +38,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Render current README and existing screenshot gallery
-        run: pnpm site:build --baseurl /archivebox-browser-extension/
+        run: pnpm site:build
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/site/_site

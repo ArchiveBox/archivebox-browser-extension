@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium, expect } from '@playwright/test';
 
 const root = fileURLToPath(new URL('../docs/site/_site/', import.meta.url));
-const prefix = '/archivebox-browser-extension/';
+const prefix = '/';
 const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png' };
 const server = createServer(async (request, response) => {
   try {

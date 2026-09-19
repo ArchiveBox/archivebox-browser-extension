@@ -15,12 +15,12 @@ This is a browser extension that lets you send individual browser tabs or all UR
 
 ## Screenshots
 
-[Browse all screens →](https://archivebox.github.io/archivebox-browser-extension/screenshots/)
+[Browse all screens →](https://extension.archivebox.io/screenshots/)
 
 <div class="homepage-screenshots">
-  <a href="https://archivebox.github.io/archivebox-browser-extension/screenshots/#chrome-web-store"><img src="https://archivebox.github.io/archivebox-browser-extension/screenshots/chrome-web-store-desktop.png" alt="ArchiveBox on the Chrome Web Store" loading="lazy"></a>
-  <a href="https://archivebox.github.io/archivebox-browser-extension/screenshots/#popup"><img src="https://archivebox.github.io/archivebox-browser-extension/screenshots/popup-desktop.png" alt="Save a page with its title and suggested tags" loading="lazy"></a>
-  <a href="https://archivebox.github.io/archivebox-browser-extension/screenshots/#saved-urls"><img src="https://archivebox.github.io/archivebox-browser-extension/screenshots/saved-urls-desktop.png" alt="ArchiveBox collection list" loading="lazy"></a>
+  <a href="https://extension.archivebox.io/screenshots/#chrome-web-store"><img src="https://extension.archivebox.io/screenshots/chrome-web-store-desktop.png" alt="ArchiveBox on the Chrome Web Store" loading="lazy"></a>
+  <a href="https://extension.archivebox.io/screenshots/#popup"><img src="https://extension.archivebox.io/screenshots/popup-desktop.png" alt="Save a page with its title and suggested tags" loading="lazy"></a>
+  <a href="https://extension.archivebox.io/screenshots/#saved-urls"><img src="https://extension.archivebox.io/screenshots/saved-urls-desktop.png" alt="ArchiveBox collection list" loading="lazy"></a>
 </div>
 
 #### Recent Changes
@@ -53,9 +53,9 @@ Local copies in OPFS are removed after 30 days by default; you can configure the
 1. Set up an [ArchiveBox](https://github.com/ArchiveBox/ArchiveBox#quickstart) server and make sure it's accessible to the machine you're browsing on
 2. In ArchiveBox 0.9.0, open **Admin → API → API Keys → Create an API Key**, create a key, and copy it.
 3. Open **Extension options → Configuration**, paste the key into **API Key**, and enter your ArchiveBox server URL (e.g. `https://archivebox.example.com`) in **Server URL**. Save the configuration and test the connection.
-    <img width="720" alt="Extension configuration" src="https://archivebox.github.io/archivebox-browser-extension/screenshots/configuration-desktop.png">
+    <img width="720" alt="Extension configuration" src="https://extension.archivebox.io/screenshots/configuration-desktop.png">
 4. ✅ *Test it out by right-clicking on any page and selecting `Save to ArchiveBox`, or by clicking the extension icon in the menubar.*  
-    <img width="560" alt="ArchiveBox popup" src="https://archivebox.github.io/archivebox-browser-extension/screenshots/popup-desktop.png">
+    <img width="560" alt="ArchiveBox popup" src="https://extension.archivebox.io/screenshots/popup-desktop.png">
 
 ---
 

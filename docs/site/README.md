@@ -9,7 +9,7 @@ pnpm install --frozen-lockfile
 pnpm exec playwright install chromium
 pnpm build
 pnpm screenshots
-pnpm site:build --baseurl /archivebox-browser-extension/
+pnpm site:build
 pnpm site:verify
 ```
 

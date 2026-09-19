@@ -35,7 +35,7 @@ jobs:
       - name: Capture real extension screens and public store listings
         run: pnpm screenshots
       - name: Render README and screenshot gallery
-        run: pnpm site:build --baseurl /archivebox-browser-extension/
+        run: pnpm site:build
       - name: Verify published paths, images, and responsive gallery
         run: pnpm site:verify
       - name: Preserve capture evidence
