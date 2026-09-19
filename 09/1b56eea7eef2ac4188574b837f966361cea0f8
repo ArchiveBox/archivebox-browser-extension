@@ -1,0 +1,32 @@
+.github/workflows/pages.yml
+  h_923c208e183a7b 41
+.github/workflows/screenshots.yml
+  h_923c208e183a7b 38
+README.md
+  h_923c208e183a7b 18,21-23,56,58
+docs/site/CNAME
+  h_923c208e183a7b 1
+docs/site/README.md
+  h_923c208e183a7b 12
+docs/site/build.mjs
+  h_923c208e183a7b 52,64-65,83
+docs/site/footer.html
+  h_923c208e183a7b 3
+docs/site/header.html
+  h_923c208e183a7b 4
+docs/site/restore-screenshots.py
+  h_923c208e183a7b 42-43
+scripts/verify-site.mjs
+  h_923c208e183a7b 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "091b56eea7eef2ac4188574b837f966361cea0f8",
+  "prompts": {},
+  "humans": {
+    "h_923c208e183a7b": {
+      "author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
