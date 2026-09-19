@@ -18,5 +18,6 @@
     "en-US": "https://extension.archivebox.io/",
     "es-ES": "https://extension.archivebox.io/",
     "zh-CN": "https://extension.archivebox.io/"
-  }
+  },
+  "slug": "archivebox-exporter"
 }

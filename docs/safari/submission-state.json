@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-09-19T07:04:30.050Z",
+  "checkedAt": "2026-09-19T08:24:39.713Z",
   "status": "prepare-for-submission",
   "appId": "6769185501",
   "locales": [
@@ -18,5 +18,7 @@
   ],
   "nativeLanguageCommit": "0730ffc894ba614ea35ce879011e4df159cd9b63",
   "nativeReleaseRun": "https://github.com/ArchiveBox/ios-archivebox/actions/runs/35428024006",
-  "nativeGallery": "No complete generated native gallery published at https://app.archivebox.io/screenshots/; existing native screenshots retained."
+  "nativeGallery": "No complete generated native gallery published at https://app.archivebox.io/screenshots/; existing native screenshots retained.",
+  "nativeReleaseVersion": "1.0.50",
+  "nativeReleaseStatus": "Builds uploaded; workflow timed out waiting one hour for Apple macOS processing."
 }

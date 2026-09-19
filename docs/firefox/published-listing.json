@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-09-19T07:03:51.916Z",
+  "checkedAt": "2026-09-19T08:24:50.555Z",
   "url": "https://addons.mozilla.org/en-US/firefox/addon/archivebox-exporter/",
   "version": "3.3.2",
   "name": {
@@ -30,23 +30,6 @@
     }
   },
   "previews": [
-    {
-      "id": 258559,
-      "caption": {
-        "en-US": "The extension settings, where you can add domains or regexes to automatically be archived."
-      },
-      "image_size": [
-        1280,
-        800
-      ],
-      "image_url": "https://addons.mozilla.org/user-media/previews/full/258/258559.png?modified=1625181770",
-      "position": 0,
-      "thumbnail_size": [
-        533,
-        333
-      ],
-      "thumbnail_url": "https://addons.mozilla.org/user-media/previews/thumbs/258/258559.jpg?modified=1625181770"
-    },
     {
       "id": 410586,
       "caption": {
@@ -103,6 +86,44 @@
         363
       ],
       "thumbnail_url": "https://addons.mozilla.org/user-media/previews/thumbs/410/410588.jpg?modified=1789800875"
+    },
+    {
+      "id": 410616,
+      "caption": {
+        "en-US": "Bulk import bookmarks",
+        "es-ES": "Importa marcadores en bloque",
+        "zh-CN": "批量导入书签"
+      },
+      "image_size": [
+        1600,
+        1004
+      ],
+      "image_url": "https://addons.mozilla.org/user-media/previews/full/410/410616.png?modified=1789806195",
+      "position": 3,
+      "thumbnail_size": [
+        533,
+        334
+      ],
+      "thumbnail_url": "https://addons.mozilla.org/user-media/previews/thumbs/410/410616.jpg?modified=1789806195"
+    },
+    {
+      "id": 410617,
+      "caption": {
+        "en-US": "Export saved URLs and captures",
+        "es-ES": "Exporta URL y capturas guardadas",
+        "zh-CN": "导出已保存的网址和网页副本"
+      },
+      "image_size": [
+        1600,
+        1345
+      ],
+      "image_url": "https://addons.mozilla.org/user-media/previews/full/410/410617.png?modified=1789806239",
+      "position": 4,
+      "thumbnail_size": [
+        476,
+        400
+      ],
+      "thumbnail_url": "https://addons.mozilla.org/user-media/previews/thumbs/410/410617.jpg?modified=1789806239"
     }
   ]
 }
