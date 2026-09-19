@@ -1,0 +1,26 @@
+docs/firefox/preview-upload-export-menu.json
+  h_923c208e183a7b 1-9
+docs/firefox/preview-upload-import-bookmarks.json
+  h_923c208e183a7b 1-9
+docs/firefox/published-listing.json
+  h_923c208e183a7b 2,89-126
+docs/firefox/screenshots-submission.json
+  h_923c208e183a7b 58-95
+docs/firefox/submission-state.json
+  h_923c208e183a7b 2,4,13-15,17
+docs/firefox/submission.json
+  h_923c208e183a7b 21-22
+docs/safari/submission-state.json
+  h_923c208e183a7b 2,21-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "422cedc4dc767b9eb614352137a82284a79b62a1",
+  "prompts": {},
+  "humans": {
+    "h_923c208e183a7b": {
+      "author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
