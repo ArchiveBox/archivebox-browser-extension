@@ -58,6 +58,19 @@ jobs:
         run: pnpm site:build
       # END REPOSITORY-SPECIFIC BUILD
 
+      - name: Verify website in Chromium
+        run: |
+          uv run --no-config --no-project --with playwright==1.63.0 playwright install --with-deps chromium
+          uv run --no-config --no-project --with playwright==1.63.0 python .github/pages/verify.py "$SITE_OUTPUT" --evidence "$RUNNER_TEMP/site-evidence"
+      - name: Save website verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-verification
+          path: ${{ runner.temp }}/site-evidence
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Upload website
         uses: actions/upload-pages-artifact@v3
         with:

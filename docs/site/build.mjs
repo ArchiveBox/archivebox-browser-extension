@@ -84,4 +84,5 @@ for (const file of ['CNAME', 'style.css', 'site.js']) await cp(path.join(site, f
 await writeFile(path.join(output, 'index.html'), page('ArchiveBox Browser Extension', markdown));
 await writeFile(path.join(output, 'screenshots/index.html'), page('Screenshots · ArchiveBox Browser Extension', gallery, true));
 await writeFile(path.join(output, '.nojekyll'), '');
+execFileSync('uv', ['run', '--no-project', 'python', path.join(root, '.github/pages/site.py'), 'render', output, '--baseurl', base], { cwd: root, stdio: 'inherit' });
 console.log(`Built README and ${manifest.screenshots.length} screenshot views at ${output} (${base})`);

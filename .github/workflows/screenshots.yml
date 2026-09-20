@@ -34,6 +34,7 @@ jobs:
       - run: pnpm build
       - name: Capture real extension screens and public store listings
         run: pnpm screenshots
+      - uses: astral-sh/setup-uv@v7
       - name: Render README and screenshot gallery
         run: pnpm site:build
       - name: Verify published paths, images, and responsive gallery
