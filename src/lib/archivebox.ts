@@ -469,7 +469,8 @@ export async function addFilesToSnapshotArchiveResult(
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const error = await response.json().catch(() => null) as { detail?: string } | null;
+    throw new Error(`HTTP ${response.status}: ${error?.detail || response.statusText}`);
   }
 }
 
@@ -533,7 +534,8 @@ export async function addFileToSnapshotArchiveResultChunked(
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const error = await response.json().catch(() => null) as { detail?: string } | null;
+      throw new Error(`HTTP ${response.status}: ${error?.detail || response.statusText}`);
     }
   }
 }
