@@ -78,7 +78,9 @@ test('imports Safari exports, separates Reading List, and preserves saved URL de
     await page.getByRole('button', { name: 'Bulk Import URLs', exact: true }).click();
     await page.getByText('Import a Safari export', { exact: true }).click();
     await page.getByLabel('Safari data to import').selectOption('all');
+    await page.getByLabel('Show new only').check();
     await fileInput.setInputFiles(archive);
+    await expect(page.getByText('Loaded 1 Safari URLs', { exact: true })).toBeVisible();
     await expect(rows).toHaveCount(0); // Show new only excludes the URL already saved.
     await page.getByLabel('Show new only').uncheck();
     await expect(rows).toHaveCount(1);
