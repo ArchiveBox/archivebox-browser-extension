@@ -28,10 +28,12 @@ def runs(repo, workflow, branch, successful=True, artifact_names=("site-screensh
     for name in artifact_names:
         rows = subprocess.check_output(
             [
-                "gh", "api",
+                "gh",
+                "api",
                 f"repos/{repo}/actions/artifacts?name={name}&per_page=100",
-                "--paginate", "--jq",
-                '.artifacts[] | select(.expired == false) | @json',
+                "--paginate",
+                "--jq",
+                ".artifacts[] | select(.expired == false) | @json",
             ],
             text=True,
         )
