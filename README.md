@@ -98,7 +98,7 @@ For a production-style local build, load `.output/chrome-mv3` into Chrome / Chro
 To verify local retention with real server responses and the real one-minute clock, start a disposable ArchiveBox server without archive workers (so submissions remain queued), build the extension, and run:
 
 ```bash
-ARCHIVEBOX_TEST_SERVER=http://127.0.0.1:18763 \
+ARCHIVEBOX_TEST_SERVER=http://127.0.0.1:5797 \
 ARCHIVEBOX_TEST_KEY_FILE=/path/to/disposable-server-api-key \
 node scripts/test-retention-live.mjs
 ```

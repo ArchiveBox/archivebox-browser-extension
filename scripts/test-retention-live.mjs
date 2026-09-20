@@ -1,5 +1,5 @@
 // Run against a disposable real ArchiveBox server (no mocked API or clock).
-// ARCHIVEBOX_TEST_SERVER=http://127.0.0.1:18763 ARCHIVEBOX_TEST_KEY_FILE=/path/to/key node scripts/test-retention-live.mjs
+// ARCHIVEBOX_TEST_SERVER=http://127.0.0.1:5797 ARCHIVEBOX_TEST_KEY_FILE=/path/to/key node scripts/test-retention-live.mjs
 import { chromium, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
