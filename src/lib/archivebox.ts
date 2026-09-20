@@ -395,9 +395,13 @@ export async function uploadSnapshotArchiveResultFiles(
       body.append('status', options.status);
     }
     for (const file of files) {
-      body.append('files', file.blob, file.outputPath);
+      const mimeType = file.mimeType || file.blob.type || 'application/octet-stream';
+      // Safari 26 can silently send an empty multipart body for disk-backed
+      // Files returned by OPFS. Slicing produces a Blob the network process
+      // can read without copying the capture into JavaScript memory.
+      body.append('files', file.blob.slice(0, file.blob.size, mimeType), file.outputPath);
       body.append('output_paths', file.outputPath);
-      body.append('mime_types', file.mimeType || file.blob.type || 'application/octet-stream');
+      body.append('mime_types', mimeType);
     }
     return body;
   }
@@ -455,9 +459,12 @@ export async function addFilesToSnapshotArchiveResult(
     body.append('status', options.status);
   }
   for (const file of files) {
-    body.append('files', file.blob, file.outputPath);
+    const mimeType = file.mimeType || file.blob.type || 'application/octet-stream';
+    // See the create path above: OPFS getFile() returns a disk-backed File
+    // that affected Safari releases serialize as a zero-length request.
+    body.append('files', file.blob.slice(0, file.blob.size, mimeType), file.outputPath);
     body.append('output_paths', file.outputPath);
-    body.append('mime_types', file.mimeType || file.blob.type || 'application/octet-stream');
+    body.append('mime_types', mimeType);
   }
 
   const response = await fetch(`${archiveboxServerUrl}/api/v1/core/archiveresult/${archiveResultId}`, {
