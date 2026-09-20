@@ -1,0 +1,36 @@
+.github/workflows/ci.yml
+  h_923c208e183a7b 40-45
+README.md
+  h_923c208e183a7b 33,42-48
+entrypoints/popup/style.css
+  h_923c208e183a7b 10-12,24-31
+src/lib/browserCapabilities.ts
+  h_923c208e183a7b 6
+src/lib/browserData.ts
+  h_923c208e183a7b 62-146
+src/lib/i18nMessages.ts
+  h_923c208e183a7b 3-18,360-375
+src/options/OptionsApp.tsx
+  h_923c208e183a7b 23-24,790-791,1539-1552,2387-2408,2410-2416,2453
+tests/fixtures/safari/Bookmarks.html
+  h_923c208e183a7b 1-9
+tests/fixtures/safari/History.json
+  h_923c208e183a7b 1-17
+tests/fixtures/safari/README.md
+  h_923c208e183a7b 1-5
+tests/fixtures/safari/ReadingList.html
+  h_923c208e183a7b 1-12
+tests/safari-import.test.ts
+  h_923c208e183a7b 1-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bc2f738f3cf45dff8289ebec1585ee166732a48d",
+  "prompts": {},
+  "humans": {
+    "h_923c208e183a7b": {
+      "author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
