@@ -1,8 +1,7 @@
 import { formatCookiesAsNetscape } from './cookies';
 import { t } from './i18n';
 import { hasServerHostPermission } from './archivebox';
-import { getConfig } from './storage';
-import type { Persona, StoredCookie } from './types';
+import type { Persona, StoredCookie, ServerConfiguration } from './types';
 
 type Serializable = string | number | boolean | null | Serializable[] | { [key: string]: Serializable };
 
@@ -26,8 +25,6 @@ function apiHeaders(apiKey: string): Record<string, string> {
     'Content-Type': 'application/json',
     ...(apiKey ? {
       Authorization: `Bearer ${apiKey}`,
-      'X-ArchiveBox-API-Key': apiKey,
-      'x-archivebox-api-key': apiKey,
     } : {}),
   };
 }
@@ -79,14 +76,13 @@ async function buildPersonaSyncPayload(persona: Persona) {
   };
 }
 
-export async function syncPersonaToArchiveBox(persona: Persona, expectedServerOrigin?: string): Promise<PersonaSyncResponse> {
-  const config = await getConfig();
-  const serverUrl = normalizeServerUrl(config.archivebox_server_url);
+export async function syncPersonaToArchiveBox(server: ServerConfiguration, persona: Persona, expectedServerOrigin?: string): Promise<PersonaSyncResponse> {
+  const serverUrl = normalizeServerUrl(server.server);
   if (expectedServerOrigin && serverUrl !== expectedServerOrigin) {
     throw new Error(t("ArchiveBox server changed; sync this profile to the new server manually."));
   }
   if (!serverUrl) throw new Error(t("Server not configured"));
-  if (!config.archivebox_api_key) throw new Error(t("API key required"));
+  if (!server.token) throw new Error(t("API key required"));
 
   if (!(await hasServerHostPermission(serverUrl))) {
     throw new Error(t("Allow access to your ArchiveBox server in extension settings before syncing."));
@@ -95,7 +91,7 @@ export async function syncPersonaToArchiveBox(persona: Persona, expectedServerOr
 
   const response = await fetch(`${serverUrl}/api/v1/personas/sync`, {
     method: 'POST',
-    headers: apiHeaders(config.archivebox_api_key),
+    headers: apiHeaders(server.token),
     credentials: 'include',
     mode: 'cors',
     body: JSON.stringify(payload),

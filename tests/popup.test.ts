@@ -83,6 +83,19 @@ type FixtureServer = {
   url: string;
 };
 
+const server_id = '00000000-0000-4000-8000-000000000001';
+function serverSettings(server: string, token = '') {
+  return {
+    server_registry: {
+      schema_version: 1,
+      servers: server ? [{ id: server_id, name: 'Test', server, token, persona: null }] : [],
+      active_server_id: server ? server_id : null,
+      default_server_ids: server ? [server_id] : [],
+    },
+    server_policies: { [server_id]: { upload_screenshots_to_server: true, upload_mhtml_to_server: true, upload_singlefile_to_server: true } },
+  };
+}
+
 const builtExtensionPath = path.resolve('.output/chrome-mv3');
 const testExtensionBasePath = path.resolve('tmp/chrome-mv3-playwright');
 const canaryPath = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary';
@@ -1059,8 +1072,7 @@ test('ArchiveBox server URLs are ignored before archive requests', async () => {
         favIconUrl: null,
         depth: 0,
       }],
-      archivebox_server_url: 'https://api.example.com',
-      archivebox_api_key: 'test-key',
+      ...serverSettings('https://api.example.com', 'test-key'),
     });
     await harness.storagePage.reload({ waitUntil: 'domcontentloaded' });
     await expect(harness.storagePage.locator('body')).not.toContainText('https://admin.example.com/admin/core/snapshot/');
@@ -1068,11 +1080,12 @@ test('ArchiveBox server URLs are ignored before archive requests', async () => {
     for (const url of ['https://example.com/docs/', 'https://admin.example.com/admin/']) {
       const response = await sendExtensionMessage<Record<string, unknown>>(harness, {
         type: 'archivebox_add',
+        server_id,
         body: {
           urls: [url],
           tags: [],
           depth: 0,
-          snapshotIds: ['019e77ba63c270009000000000000001'],
+          snapshot_ids: ['019e77ba63c270009000000000000001'],
           titles: ['ArchiveBox'],
         },
       });
@@ -1102,7 +1115,7 @@ test('saved URL bulk delete is local-first when server remove fails', async () =
           title: 'Remote delete failure',
           favIconUrl: null,
           depth: 0,
-          archiveboxCrawlId: 'crawl-id',
+          remote_copies: { [server_id]: { crawl_id: 'crawl-id', snapshot_id: 'remote-entry', submitted_to: 'https://api.example.com', status: 'complete' } },
         },
         {
           id: 'local-entry',
@@ -1114,10 +1127,9 @@ test('saved URL bulk delete is local-first when server remove fails', async () =
           depth: 0,
         },
       ],
-      archivebox_server_url: 'https://api.example.com',
-      archivebox_api_key: 'test-key',
+      ...serverSettings('https://api.example.com', 'test-key'),
     });
-    await harness.storagePage.route('https://api.example.com/api/v1/cli/remove', (route) => {
+    await harness.storagePage.route('https://api.example.com/api/v1/crawls/crawl/crawl-id', (route) => {
       route.fulfill({ status: 502, body: 'Bad Gateway' });
     });
     await harness.storagePage.reload({ waitUntil: 'domcontentloaded' });
@@ -1137,18 +1149,17 @@ test('saved URL bulk delete is local-first when server remove fails', async () =
 
 test('persona sync can update an already synced remote persona after detecting settings', async () => {
   const harness = await launchHarness();
-  const personaId = '019e77ba63c270009000000000000201';
+  const persona_id = '019e77ba63c270009000000000000201';
   const payloads: Array<Record<string, unknown>> = [];
 
   try {
     await setExtensionStorage(harness, {
-      archivebox_server_url: 'https://api.example.com',
-      archivebox_api_key: 'test-key',
+      ...serverSettings('https://api.example.com', 'test-key'),
       personas: [{
-        id: personaId,
+        id: persona_id,
         name: 'Persona update test',
         created: new Date('2026-01-04T00:00:00.000Z').toISOString(),
-        lastUsed: null,
+        last_used: null,
         cookies: {},
         settings: {
           userAgent: 'stale-user-agent',
@@ -1163,7 +1174,7 @@ test('persona sync can update an already synced remote persona after detecting s
           },
         },
       }],
-      activePersona: personaId,
+      active_persona: persona_id,
     });
     await harness.storagePage.route('https://ipapi.co/json/', (route) => {
       route.fulfill({
@@ -1213,7 +1224,7 @@ test('persona sync can update an already synced remote persona after detecting s
     const secondPayload = payloads[1];
     if (!secondPayload) throw new Error('Missing second persona sync payload');
     const secondSettings = secondPayload.settings as Record<string, unknown>;
-    expect(secondPayload.extension_persona_id).toBe(personaId);
+    expect(secondPayload.extension_persona_id).toBe(persona_id);
     expect(secondSettings.user_agent).toBe(detectedSettings.userAgent);
     expect(secondSettings.language).toBe(detectedSettings.language);
     expect(secondSettings.timezone).toBe(detectedSettings.timezone);
@@ -1227,18 +1238,18 @@ test('persona sync can update an already synced remote persona after detecting s
 
 test('saved URL sync uploads local OPFS artifacts', async () => {
   const harness = await launchHarness();
-  const snapshotId = '019e77ba63c270009000000000000002';
+  const snapshot_id = '019e77ba63c270009000000000000002';
   const serverSnapshotId = '019e77ba63c270009000000000000102';
   const snapshotUrl = 'https://upload-artifacts.example/';
-  const screenshotPath = `snapshots/20260103/upload-artifacts.example/${snapshotId}/chrome_extension_screenshot/screenshot.png`;
-  const mhtmlPath = `snapshots/20260103/upload-artifacts.example/${snapshotId}/chrome_mhtml/snapshot.mhtml`;
+  const screenshotPath = `snapshots/20260103/upload-artifacts.example/${snapshot_id}/chrome_extension_screenshot/screenshot.png`;
+  const mhtmlPath = `snapshots/20260103/upload-artifacts.example/${snapshot_id}/chrome_mhtml/snapshot.mhtml`;
   const archiveResultBodies: string[] = [];
   const patchedBodies: string[] = [];
 
   try {
     await setExtensionStorage(harness, {
       entries: [{
-        id: snapshotId,
+        id: snapshot_id,
         url: snapshotUrl,
         timestamp: new Date('2026-01-03T12:00:00.000Z').toISOString(),
         tags: ['local-artifact'],
@@ -1262,12 +1273,11 @@ test('saved URL sync uploads local OPFS artifacts', async () => {
           size: 12,
         },
       }],
-      archivebox_server_url: 'https://api.example.com',
-      archivebox_api_key: 'test-key',
+      ...serverSettings('https://api.example.com', 'test-key'),
     });
     await writeOpfsFile(harness, screenshotPath, 'png-bytes', 'image/png');
     await writeOpfsFile(harness, mhtmlPath, 'mhtml-bytes', 'multipart/related');
-    expect(await listOpfsFiles(harness, `snapshots/20260103/upload-artifacts.example/${snapshotId}`)).toEqual(expect.arrayContaining([
+    expect(await listOpfsFiles(harness, `snapshots/20260103/upload-artifacts.example/${snapshot_id}`)).toEqual(expect.arrayContaining([
       screenshotPath,
       mhtmlPath,
     ]));
@@ -1279,22 +1289,20 @@ test('saved URL sync uploads local OPFS artifacts', async () => {
         titles?: string[];
       };
       expect(body.depth).toBe(1);
-      expect(body.snapshot_ids).toEqual([snapshotId]);
-      expect(body.titles).toEqual(['Upload artifacts']);
+      expect(body.snapshot_ids).toBeUndefined();
+      expect(body.titles).toBeUndefined();
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          result: {
-            snapshot_ids: [snapshotId],
-            crawl_id: 'crawl-id',
-          },
+          success: true, errors: [],
+          result: { crawl_id: 'crawl-id', queued_urls: [snapshotUrl] },
         }),
       });
     });
     await harness.storagePage.route('https://api.example.com/api/v1/core/snapshots', (route) => {
       const body = route.request().postDataJSON() as { id?: string };
-      expect(body.id).toBe(snapshotId);
+      expect(body.id).toBeUndefined();
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: serverSnapshotId }) });
     });
     await harness.storagePage.route('https://api.example.com/api/v1/core/archiveresults', async (route) => {
@@ -1314,7 +1322,7 @@ test('saved URL sync uploads local OPFS artifacts', async () => {
     });
 
     await harness.storagePage.reload({ waitUntil: 'domcontentloaded' });
-    expect(await listOpfsFiles(harness, `snapshots/20260103/upload-artifacts.example/${snapshotId}`)).toEqual(expect.arrayContaining([
+    expect(await listOpfsFiles(harness, `snapshots/20260103/upload-artifacts.example/${snapshot_id}`)).toEqual(expect.arrayContaining([
       screenshotPath,
       mhtmlPath,
     ]));
@@ -1350,11 +1358,9 @@ test('an already-synced URL without a server shows its connection is unavailable
         title: 'Already synced fixture',
         favIconUrl: null,
         depth: 0,
-        archiveboxCrawlId: '019e77ba63c270009000000000000401',
-        archiveboxSnapshotId: '019e77ba63c270009000000000000301',
+        remote_copies: { [server_id]: { crawl_id: '019e77ba63c270009000000000000401', snapshot_id: '019e77ba63c270009000000000000301', submitted_to: server.url, status: 'complete' } },
       }],
-      archivebox_server_url: '',
-      archivebox_api_key: '',
+      ...serverSettings(''),
     });
 
     const popup = await openNativePopup(harness, page);
@@ -1367,7 +1373,7 @@ test('an already-synced URL without a server shows its connection is unavailable
     expect(popupText).not.toContain('Sync failed');
     popup.cdp.close();
 
-    await setExtensionStorage(harness, { archivebox_server_url: server.url.replace('127.0.0.1', 'localhost') });
+    await setExtensionStorage(harness, serverSettings(server.url.replace('127.0.0.1', 'localhost')));
     const reopened = await openNativePopup(harness, page);
     await waitForPopupText(harness, reopened, 'Previously submitted');
     expect(await popupElementsHtml(reopened, '.archivebox-overlay__pill--archived')).toHaveLength(0);
@@ -1395,8 +1401,7 @@ test('native action popup supports local save, tags, depth, captures, navigation
         favIconUrl: null,
         depth: 0,
       }],
-      archivebox_server_url: '',
-      archivebox_api_key: '',
+      ...serverSettings(''),
       archivebox_test_fast_capture: true,
     });
 
@@ -1475,9 +1480,9 @@ test('native action popup supports local save, tags, depth, captures, navigation
     expect(snapshot?.depth).toBe(2);
     expect(snapshot?.screenshot).toBeTruthy();
     expect(snapshot?.mhtml).toBeTruthy();
-    const snapshotId = String(snapshot?.id || '');
-    expect(snapshotId).toBeTruthy();
-    expect(snapshotId).toMatch(/^[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$/);
+    const snapshot_id = String(snapshot?.id || '');
+    expect(snapshot_id).toBeTruthy();
+    expect(snapshot_id).toMatch(/^[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$/);
 
     expect(entries.some((entry) => entry.url === testPageUrl)).toBe(true);
 
@@ -1505,7 +1510,7 @@ test('native action popup supports local save, tags, depth, captures, navigation
     const optionsFromLocalView = harness.context.waitForEvent('page');
     await clickPopupTitle(harness, popup, 'Show in Saved URLs');
     const localViewPage = await optionsFromLocalView;
-    await localViewPage.waitForURL((url) => url.searchParams.get('highlight') === snapshotId);
+    await localViewPage.waitForURL((url) => url.searchParams.get('highlight') === snapshot_id);
     await localViewPage.close();
     await waitForNoNativePopup(harness);
 
@@ -1534,8 +1539,7 @@ test('auto-archive captures MHTML + screenshots on page load without console err
     // genuine pageCapture.saveAsMHTML + captureVisibleTab paths the user hits.
     await setExtensionStorage(harness, {
       entries: [],
-      archivebox_server_url: '',
-      archivebox_api_key: '',
+      ...serverSettings(''),
       save_mhtml_locally: true,
       save_screenshots_locally: true,
       enable_auto_archive: true,
@@ -1603,8 +1607,7 @@ test('action popup saves MHTML + screenshots without console errors or closing t
   try {
     await setExtensionStorage(harness, {
       entries: [],
-      archivebox_server_url: '',
-      archivebox_api_key: '',
+      ...serverSettings(''),
       save_mhtml_locally: true,
       save_screenshots_locally: true,
     });
@@ -1653,8 +1656,7 @@ test('popup fits mobile viewports without horizontal overflow', async () => {
   try {
     await setExtensionStorage(harness, {
       entries: [],
-      archivebox_server_url: '',
-      archivebox_api_key: '',
+      ...serverSettings(''),
       save_mhtml_locally: false,
       save_screenshots_locally: false,
     });
@@ -1703,10 +1705,11 @@ test('HTTP 200 from a normal website cannot confirm an ArchiveBox submission', a
   const harness = await launchHarness();
   try {
     for (const key of ['', 'invalid-key']) {
-      await setExtensionStorage(harness, { archivebox_server_url: server.url, archivebox_api_key: key });
+      await setExtensionStorage(harness, serverSettings(server.url, key));
       const response = await harness.storagePage.evaluate(async () => {
         const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
-        return api.runtime.sendMessage({ type: 'archivebox_add', body: { urls: ['https://example.com/post-confirmation-check'], tags: [], depth: 0 } });
+        return api.runtime.sendMessage({ type: 'archivebox_add',
+        server_id, body: { urls: ['https://example.com/post-confirmation-check'], tags: [], depth: 0 } });
       });
       expect(response.ok).toBe(false);
       expect(response.errorMessage).toContain('did not confirm');

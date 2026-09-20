@@ -1,3 +1,4 @@
+import { activeServer, requireServer } from '@/src/lib/server_registry';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -18,8 +19,7 @@ import {
 } from 'lucide-react';
 import { strToU8, zipSync } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { addToArchiveBox, archiveBoxServerUrlMatches, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags, testApiKey, testServerUrl } from '@/src/lib/archivebox';
-import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
+import { getServerPersonas, submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotTags, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { defaultSingleFileExtensionId, defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture, supportsDirectBrowserImport } from '@/src/lib/browserCapabilities';
 import { loadBookmarkSnapshots, loadHistorySnapshots, loadSafariExportSnapshots, type SafariImportSource } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
@@ -54,6 +54,8 @@ import {
   getSnapshots,
   setActivePersona,
   setConfig,
+  updateServer,
+  removeServer,
   mutatePersonas,
   updatePersona,
   mutateSnapshots,
@@ -342,7 +344,7 @@ function SnapshotArchiveTitleLink({ snapshot }: { snapshot: Snapshot }) {
   );
 }
 
-function MhtmlViewer({ snapshotId }: { snapshotId: string }) {
+function MhtmlViewer({ snapshot_id }: { snapshot_id: string }) {
   const [state, setState] = useState<MhtmlViewerState>({ loading: true });
   const [frameLoadCount, setFrameLoadCount] = useState(0);
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -354,7 +356,7 @@ function MhtmlViewer({ snapshotId }: { snapshotId: string }) {
       setState({ loading: true });
       try {
         const snapshots = await getSnapshots();
-        const snapshot = snapshots.find((item) => item.id === snapshotId);
+        const snapshot = snapshots.find((item) => item.id === snapshot_id);
         if (!snapshot) throw new Error(t("Saved URL not found"));
         const blob = await readSnapshotMhtmlBlob(snapshot.mhtml);
         if (!blob) throw new Error(t("Local MHTML snapshot not found"));
@@ -408,7 +410,7 @@ function MhtmlViewer({ snapshotId }: { snapshotId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [snapshotId]);
+  }, [snapshot_id]);
 
   function exportMhtml() {
     if (!state.rawMhtml || !state.snapshot) return;
@@ -437,7 +439,7 @@ function MhtmlViewer({ snapshotId }: { snapshotId: string }) {
     };
   }, [frameLoadCount, state.rawMhtml, state.snapshot]);
 
-  const backUrl = extensionUrl(`/options.html?highlight=${encodeURIComponent(snapshotId)}`);
+  const backUrl = extensionUrl(`/options.html?highlight=${encodeURIComponent(snapshot_id)}`);
   const title = state.title || state.snapshot?.title || t("MHTML Snapshot");
 
   return (
@@ -481,7 +483,7 @@ function MhtmlViewer({ snapshotId }: { snapshotId: string }) {
   );
 }
 
-function SingleFileViewer({ snapshotId }: { snapshotId: string }) {
+function SingleFileViewer({ snapshot_id }: { snapshot_id: string }) {
   const [state, setState] = useState<HtmlViewerState>({ loading: true });
 
   useEffect(() => {
@@ -491,7 +493,7 @@ function SingleFileViewer({ snapshotId }: { snapshotId: string }) {
       setState({ loading: true });
       try {
         const snapshots = await getSnapshots();
-        const snapshot = snapshots.find((item) => item.id === snapshotId);
+        const snapshot = snapshots.find((item) => item.id === snapshot_id);
         if (!snapshot) throw new Error(t("Saved URL not found"));
         const blob = await readSnapshotSingleFileBlob(snapshot.singlefile);
         if (!blob) throw new Error(t("Local SingleFile HTML snapshot not found"));
@@ -520,7 +522,7 @@ function SingleFileViewer({ snapshotId }: { snapshotId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [snapshotId]);
+  }, [snapshot_id]);
 
   function exportSingleFile() {
     if (!state.blob || !state.snapshot) return;
@@ -540,7 +542,7 @@ function SingleFileViewer({ snapshotId }: { snapshotId: string }) {
     return () => window.removeEventListener('keydown', handleSaveShortcut, { capture: true });
   }, [state.blob, state.snapshot]);
 
-  const backUrl = extensionUrl(`/options.html?highlight=${encodeURIComponent(snapshotId)}`);
+  const backUrl = extensionUrl(`/options.html?highlight=${encodeURIComponent(snapshot_id)}`);
   const title = state.title || state.snapshot?.title || t("SingleFile HTML Snapshot");
   const singlefile = state.snapshot?.singlefile;
 
@@ -583,7 +585,7 @@ function SingleFileViewer({ snapshotId }: { snapshotId: string }) {
   );
 }
 
-function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
+function ScreenshotViewer({ snapshot_id }: { snapshot_id: string }) {
   const [state, setState] = useState<ScreenshotViewerState>({ loading: true });
 
   useEffect(() => {
@@ -594,7 +596,7 @@ function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
       setState({ loading: true });
       try {
         const snapshots = await getSnapshots();
-        const snapshot = snapshots.find((item) => item.id === snapshotId);
+        const snapshot = snapshots.find((item) => item.id === snapshot_id);
         if (!snapshot) throw new Error(t("Saved URL not found"));
         const blobs = await readSnapshotScreenshotBlobs(snapshot.screenshot);
         if (blobs.length === 0) throw new Error(t("Local screenshot not found"));
@@ -627,7 +629,7 @@ function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
       cancelled = true;
       objectUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [snapshotId]);
+  }, [snapshot_id]);
 
   function exportScreenshot() {
     if (!state.blobs?.length || !state.snapshot) return;
@@ -647,7 +649,7 @@ function ScreenshotViewer({ snapshotId }: { snapshotId: string }) {
     return () => window.removeEventListener('keydown', handleSaveShortcut, { capture: true });
   }, [state.blobs, state.snapshot]);
 
-  const backUrl = extensionUrl(`/options.html?highlight=${encodeURIComponent(snapshotId)}`);
+  const backUrl = extensionUrl(`/options.html?highlight=${encodeURIComponent(snapshot_id)}`);
   const title = state.title || state.snapshot?.title || t("Screenshot");
   const screenshot = state.snapshot?.screenshot;
   const screenshotObjectUrls = state.objectUrls || [];
@@ -748,15 +750,15 @@ export default function OptionsApp() {
   const params = new URLSearchParams(window.location.search);
   const screenshotSnapshotId = params.get('screenshot');
   if (screenshotSnapshotId) {
-    return <ScreenshotViewer snapshotId={screenshotSnapshotId} />;
+    return <ScreenshotViewer snapshot_id={screenshotSnapshotId} />;
   }
   const mhtmlSnapshotId = params.get('mhtml');
   if (mhtmlSnapshotId) {
-    return <MhtmlViewer snapshotId={mhtmlSnapshotId} />;
+    return <MhtmlViewer snapshot_id={mhtmlSnapshotId} />;
   }
   const singleFileSnapshotId = params.get('singlefile');
   if (singleFileSnapshotId) {
-    return <SingleFileViewer snapshotId={singleFileSnapshotId} />;
+    return <SingleFileViewer snapshot_id={singleFileSnapshotId} />;
   }
   return <OptionsMain />;
 }
@@ -781,7 +783,7 @@ function OptionsMain() {
   const [personaStatus, setPersonaStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [syncStatuses, setSyncStatuses] = useState<Record<string, Status>>({});
   const [personas, setPersonasState] = useState<Persona[]>([]);
-  const [activePersona, setActivePersonaState] = useState('');
+  const [active_persona, setActivePersonaState] = useState('');
   const [cookiesByDomain, setCookiesByDomain] = useState<Record<string, StoredCookie[]>>({});
   const [selectedCookieDomains, setSelectedCookieDomains] = useState<Set<string>>(new Set());
   const [cookieFilter, setCookieFilter] = useState('');
@@ -797,7 +799,7 @@ function OptionsMain() {
   const [editingTags, setEditingTags] = useState(false);
   const [modalTags, setModalTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
-  const [inlineTagEditor, setInlineTagEditor] = useState<{ snapshotId: string; value: string } | null>(null);
+  const [inlineTagEditor, setInlineTagEditor] = useState<{ snapshot_id: string; value: string } | null>(null);
   const [testUrl, setTestUrl] = useState('https://example.com');
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [savedUrlSortKey, setSavedUrlSortKey] = useState<SavedUrlSortKey>('date');
@@ -837,7 +839,7 @@ function OptionsMain() {
     }
     setCookieSyncStates(await getCookieSyncStates());
     setPersonasState(personaState.personas);
-    setActivePersonaState(personaState.activePersona);
+    setActivePersonaState(personaState.active_persona);
   }
 
   useEffect(() => {
@@ -859,12 +861,13 @@ function OptionsMain() {
         const ids = new Set(entries.map((entry) => entry.id));
         setSelectedSnapshots((current) => new Set([...current].filter((id) => ids.has(id))));
         setSyncStatuses((current) => Object.fromEntries(Object.entries(current).filter(([id]) => ids.has(id))));
-        setInlineTagEditor((current) => current && ids.has(current.snapshotId) ? current : null);
+        setInlineTagEditor((current) => current && ids.has(current.snapshot_id) ? current : null);
         if (!entries.length) { setModalTags([]); setEditingTags(false); }
       });
-      if (Object.keys(changes).some((key) => key.startsWith('cookieSync:'))) getCookieSyncStates().then(setCookieSyncStates);
+      if (Object.keys(changes).some((key) => key.startsWith('cookie_sync:'))) getCookieSyncStates().then(setCookieSyncStates);
       if (changes.personas) getPersonas().then((state) => setPersonasState(state.personas));
-      if (changes.activePersona) setActivePersonaState(String(changes.activePersona.newValue || ''));
+      if (changes.server_registry || changes.server_policies) getConfig().then(setConfigState);
+      if (changes.active_persona) setActivePersonaState(String(changes.active_persona.newValue || ''));
     }
     browser.storage.onChanged.addListener(refreshPersonas);
     window.addEventListener('popstate', restoreFilterFromUrl);
@@ -959,15 +962,47 @@ function OptionsMain() {
   }, [cookiesByDomain, cookieFilter]);
 
   const activePersonaStats = useMemo(() => {
-    const persona = personas.find((item) => item.id === activePersona);
+    const persona = personas.find((item) => item.id === active_persona);
     if (!persona) return t("No active profile selected");
     const domains = Object.keys(persona.cookies || {});
     const cookieCount = Object.values(persona.cookies || {}).reduce((sum, cookies) => sum + cookies.length, 0);
     return t("$1 domains / $2 cookies", domains.length, cookieCount);
-  }, [activePersona, personas]);
+  }, [active_persona, personas]);
 
-  const archiveboxServerUrlIsValid = isHttpUrl(config.archivebox_server_url);
-  const archiveboxServerBaseUrl = serverUrlBase(config.archivebox_server_url);
+  const server = activeServer(config);
+  const [serverDraft, setServerDraft] = useState<string | null>(null);
+  const [tokenDraft, setTokenDraft] = useState<string | null>(null);
+  const server_id = server?.id || '';
+  const [server_personas, setServerPersonas] = useState<Array<{ id: string; name: string }>>([]);
+  const [persona_error, setPersonaError] = useState('');
+  useEffect(() => {
+    let current = true;
+    setServerPersonas([]);
+    setPersonaError('');
+    if (server?.token) getServerPersonas(server).then(
+      (items) => { if (current) setServerPersonas(items); },
+      (error) => { if (current) setPersonaError(error instanceof Error ? error.message : String(error)); },
+    );
+    return () => { current = false; };
+  }, [server?.id, server?.server, server?.token]);
+  function destination() { return requireServer(config, server_id); }
+  async function saveServer(patch: Parameters<typeof updateServer>[1]) {
+    const id = server?.id ?? null;
+    if (id && patch.policy) setConfigState((current) => ({
+      ...current,
+      server_policies: { ...current.server_policies, [id]: { ...destination().policy, ...patch.policy } },
+    }));
+    try {
+      if (patch.server?.trim() === '' && id) await removeServer(id);
+      else await updateServer(id, patch);
+      setConfigState(await getConfig());
+    } catch (error) {
+      setConfigState(await getConfig());
+      setServerStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  const archiveboxServerUrlIsValid = isHttpUrl((server?.server || ''));
+  const archiveboxServerBaseUrl = serverUrlBase((server?.server || ''));
 
   function updateSavedUrlFilter(value: string) {
     setFilterText(value);
@@ -1130,24 +1165,24 @@ function OptionsMain() {
     });
   }
 
-  async function updateSnapshotTags(snapshotId: string, tags: string[], message: string) {
-    const existingSnapshot = snapshots.find((snapshot) => snapshot.id === snapshotId);
-    if (existingSnapshot?.archiveboxCrawlId) {
+  async function updateSnapshotTags(snapshot_id: string, tags: string[], message: string) {
+    const existingSnapshot = snapshots.find((snapshot) => snapshot.id === snapshot_id);
+    if (existingSnapshot?.remote_copies?.[server_id]?.snapshot_id) {
       try {
-        await syncArchiveBoxSnapshotTags(existingSnapshot.archiveboxSnapshotId || existingSnapshot.id, existingSnapshot.tags, tags);
+        await syncArchiveBoxSnapshotTags(destination(), existingSnapshot.remote_copies![server_id]!.snapshot_id!, existingSnapshot.tags, tags);
       } catch (error) {
         setSavedUrlStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
         return;
       }
     }
     await persistSnapshots((snapshots) => snapshots.map((snapshot) => (
-      snapshot.id === snapshotId ? { ...snapshot, tags } : snapshot
+      snapshot.id === snapshot_id ? { ...snapshot, tags } : snapshot
     )));
     setSavedUrlStatus({ kind: 'success', text: message });
   }
 
   async function addInlineTag(snapshot: Snapshot, selectedTag?: string) {
-    const tag = selectedTag || (inlineTagEditor?.snapshotId === snapshot.id ? inlineTagEditor.value.trim() : '');
+    const tag = selectedTag || (inlineTagEditor?.snapshot_id === snapshot.id ? inlineTagEditor.value.trim() : '');
     if (!tag) {
       setInlineTagEditor(null);
       return;
@@ -1207,8 +1242,10 @@ function OptionsMain() {
     }
     setApiStatus({ kind: 'idle', text: t("Testing ArchiveBox API key...") });
     try {
-      const userId = await testApiKey(archiveboxServerBaseUrl, config.archivebox_api_key);
+      const userId = await testApiKey(archiveboxServerBaseUrl, (server?.token || ''));
       setApiStatus({ kind: 'success', text: t("API key is valid: user_id = $1", userId || '') });
+      setServerPersonas(await getServerPersonas(destination()));
+      setPersonaError('');
     } catch (error) {
       setApiStatus({ kind: 'error', text: (error as Error).message || t("API key test failed") });
     }
@@ -1220,7 +1257,7 @@ function OptionsMain() {
       setTestStatus({ kind: 'error', text: t("Please enter a URL to test") });
       return;
     }
-    if (archiveBoxServerUrlMatches(config.archivebox_server_url, url)) {
+    if (archiveBoxServerUrlMatches((server?.server || ''), url)) {
       setTestStatus({ kind: 'warning', text: t("ArchiveBox server URLs are ignored.") });
       return;
     }
@@ -1256,7 +1293,7 @@ function OptionsMain() {
       }
       await requestServerHostPermission(archiveboxServerBaseUrl);
       setTestStatus({ kind: 'idle', text: t("Submitting test URL...") });
-      await addToArchiveBox([url], ['test']);
+      await addToArchiveBox(destination(), [url], ['test']);
       setTestStatus({ kind: 'success', text: t("URL was submitted to ArchiveBox") });
       setTestUrl('');
     } catch (error) {
@@ -1418,7 +1455,7 @@ function OptionsMain() {
       selectedCookieDomains.forEach((domain) => {
         cookies[domain] = cookiesByDomain[domain] || [];
       });
-      return { ...persona, cookies, lastUsed: new Date().toISOString() };
+      return { ...persona, cookies, last_used: new Date().toISOString() };
     }));
     setPersonasState(nextPersonas);
     setSelectedCookieDomains(new Set());
@@ -1464,7 +1501,7 @@ function OptionsMain() {
     if (!confirm(t("Delete this profile? This cannot be undone."))) return;
     const nextPersonas = await mutatePersonas((items) => items.filter((persona) => persona.id !== id));
     setPersonasState(nextPersonas);
-    if (activePersona === id) {
+    if (active_persona === id) {
       const nextActive = nextPersonas[0]?.id || '';
       setActivePersonaState(nextActive);
       await setActivePersona(nextActive);
@@ -1475,6 +1512,7 @@ function OptionsMain() {
   async function chooseActivePersona(id: string) {
     setActivePersonaState(id);
     await setActivePersona(id);
+    if (server) await saveServer({ persona: personas.find((item) => item.id === id)?.name ?? null, policy: { local_persona_id: id } });
   }
 
   async function detectPersonaSettings(persona: Persona) {
@@ -1501,15 +1539,14 @@ function OptionsMain() {
     setPersonaStatus({ kind: 'idle', text: t("Syncing $1 to ArchiveBox...", personaToSync.name) });
     try {
       await requestServerHostPermission(archiveboxServerBaseUrl);
-      const response = await syncPersonaManually(personaToSync.id);
-      const serverPersonaId = response.persona?.id;
-      const serverPersonaUrl = serverPersonaId
-        ? `${archiveboxServerBaseUrl}/admin/personas/persona/${serverPersonaId}/change/`
-        : personaToSync.serverPersonaUrl;
+      const response = await syncPersonaManually(destination(), personaToSync.id);
+      const persona_id = response.persona?.id;
+      const persona_url = persona_id
+        ? `${archiveboxServerBaseUrl}/admin/personas/persona/${persona_id}/change/`
+        : personaToSync.remote_personas?.[server_id]?.url;
       await savePersona(personaToSync, {
-        lastUsed: new Date().toISOString(),
-        serverPersonaId,
-        serverPersonaUrl,
+        last_used: new Date().toISOString(),
+        remote_personas: { ...personaToSync.remote_personas, ...(persona_id && persona_url ? { [server_id]: { id: persona_id, url: persona_url } } : {}) },
       });
       setPersonaStatus({
         kind: 'success',
@@ -1655,8 +1692,8 @@ function OptionsMain() {
       setSavedUrlStatus({ kind: 'warning', text: t("No snapshots selected") });
       return;
     }
-    const archiveableSelected = selected.filter((snapshot) => !archiveBoxServerUrlMatches(config.archivebox_server_url, snapshot.url));
-    const ignoredSelected = selected.filter((snapshot) => archiveBoxServerUrlMatches(config.archivebox_server_url, snapshot.url));
+    const archiveableSelected = selected.filter((snapshot) => !archiveBoxServerUrlMatches((server?.server || ''), snapshot.url));
+    const ignoredSelected = selected.filter((snapshot) => archiveBoxServerUrlMatches((server?.server || ''), snapshot.url));
     if (ignoredSelected.length) {
       setSyncStatuses((current) => ({
         ...current,
@@ -1688,54 +1725,7 @@ function OptionsMain() {
         [snapshot.id]: { kind: 'warning', text: t("Syncing...") },
       }));
       try {
-        const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id], [snapshot.title]);
-        const archiveboxSnapshotIdRaw = archivebox?.snapshot_ids?.[0] || '';
-        const archiveboxSnapshotId = archiveboxSnapshotIdRaw ? compactUuid(archiveboxSnapshotIdRaw) : '';
-        const archiveboxCrawlId = archivebox?.crawl_id;
-        let serverSnapshotId = archiveboxSnapshotId || snapshot.archiveboxSnapshotId || snapshot.id;
-        let snapshotForUpload = snapshot;
-        if (archiveboxSnapshotId && archiveboxSnapshotId !== snapshot.id) {
-          throw new Error(t("ArchiveBox returned a different snapshot ID than the extension sent."));
-        }
-        if (archiveboxCrawlId) {
-          const nextSnapshots = await persistSnapshots((snapshots) => snapshots.map((item) => item.id === snapshot.id
-            ? { ...item, archiveboxCrawlId, archiveboxSnapshotId: serverSnapshotId }
-            : item));
-          const syncedSnapshot = nextSnapshots.find((item) => item.id === snapshot.id);
-          if (syncedSnapshot) {
-            snapshotForUpload = syncedSnapshot;
-            if (config.archivebox_api_key) {
-              const metadata = await syncArchiveBoxSnapshotMetadata(syncedSnapshot);
-              const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
-              serverSnapshotId = metadataSnapshotId || serverSnapshotId;
-              if (metadataSnapshotId && metadataSnapshotId !== syncedSnapshot.archiveboxSnapshotId) {
-                const metadataSnapshots = await persistSnapshots((snapshots) => snapshots.map((item) => item.id === snapshot.id
-                  ? { ...item, archiveboxSnapshotId: metadataSnapshotId }
-                  : item));
-                snapshotForUpload = metadataSnapshots.find((item) => item.id === snapshot.id) || {
-                  ...syncedSnapshot,
-                  archiveboxSnapshotId: metadataSnapshotId,
-                };
-              }
-            }
-          }
-        } else if (archivebox && config.archivebox_api_key) {
-          const metadata = await syncArchiveBoxSnapshotMetadata(snapshot);
-          const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
-          serverSnapshotId = metadataSnapshotId || serverSnapshotId;
-          if (metadataSnapshotId && metadataSnapshotId !== snapshot.archiveboxSnapshotId) {
-            const metadataSnapshots = await persistSnapshots((snapshots) => snapshots.map((item) => item.id === snapshot.id
-              ? { ...item, archiveboxSnapshotId: metadataSnapshotId }
-              : item));
-            snapshotForUpload = metadataSnapshots.find((item) => item.id === snapshot.id) || {
-              ...snapshot,
-              archiveboxSnapshotId: metadataSnapshotId,
-            };
-          }
-        }
-        if (archivebox && config.archivebox_api_key) {
-          await uploadSnapshotCaptureArtifactsToArchiveBox(snapshotForUpload, serverSnapshotId);
-        }
+        await submitSnapshot(destination(), snapshot);
         setSyncStatuses((current) => ({
           ...current,
           [snapshot.id]: { kind: 'success', text: t("Synced") },
@@ -1779,9 +1769,9 @@ function OptionsMain() {
 
   async function saveTagChanges() {
     for (const snapshot of snapshots.filter((item) => selectedSnapshots.has(item.id))) {
-      if (!snapshot.archiveboxCrawlId) continue;
+      if (!snapshot.remote_copies?.[server_id]?.snapshot_id) continue;
       try {
-        await syncArchiveBoxSnapshotTags(snapshot.archiveboxSnapshotId || snapshot.id, snapshot.tags, modalTags);
+        await syncArchiveBoxSnapshotTags(destination(), snapshot.remote_copies![server_id]!.snapshot_id!, snapshot.tags, modalTags);
       } catch (error) {
         setSavedUrlStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
         return;
@@ -1805,9 +1795,9 @@ function OptionsMain() {
 
     const serverErrors: string[] = [];
     for (const snapshot of snapshotsToDelete) {
-      if (!snapshot.archiveboxCrawlId) continue;
+      if (!snapshot.remote_copies?.[server_id]?.snapshot_id) continue;
       try {
-        await removeFromArchiveBox(snapshot.url);
+        await removeFromArchiveBox(destination(), snapshot);
       } catch (error) {
         serverErrors.push(error instanceof Error ? error.message : String(error));
       }
@@ -1981,7 +1971,7 @@ function OptionsMain() {
                 <tbody>
                   {visibleSnapshots.map((snapshot) => {
                     const syncStatus = syncStatuses[snapshot.id];
-                    const inlineTagSuggestions = inlineTagEditor?.snapshotId === snapshot.id
+                    const inlineTagSuggestions = inlineTagEditor?.snapshot_id === snapshot.id
                       ? matchingTagSuggestions(tags, inlineTagEditor.value, snapshot.tags)
                       : [];
                     return (
@@ -2012,7 +2002,7 @@ function OptionsMain() {
                             </div>
                           </div>
                           <div className="saved-url-links">
-                            {config.archivebox_server_url && <a href={`${config.archivebox_server_url}/archive/${snapshot.url}`} target="_blank" rel="noopener noreferrer">{t("ArchiveBox")}</a>}
+                            {(server?.server || '') && <a href={`${(server?.server || '')}/archive/${snapshot.url}`} target="_blank" rel="noopener noreferrer">{t("ArchiveBox")}</a>}
                             <a href={`https://web.archive.org/web/${snapshot.url}`} target="_blank" rel="noopener noreferrer">{t("Archive.org ↗")}</a>
                           </div>
                         </td>
@@ -2021,7 +2011,7 @@ function OptionsMain() {
                             {snapshot.tags.map((tag) => (
                               <TagChip key={tag} label={tag} onRemove={() => removeSnapshotTag(snapshot, tag)} removeTitle={t("Remove tag $1", tag)} />
                             ))}
-                            {inlineTagEditor?.snapshotId === snapshot.id ? (
+                            {inlineTagEditor?.snapshot_id === snapshot.id ? (
                               <TagInputChip
                                 value={inlineTagEditor.value}
                                 autoFocus
@@ -2032,11 +2022,11 @@ function OptionsMain() {
                                 onBlur={() => {
                                   if (!inlineTagEditor.value.trim()) setInlineTagEditor(null);
                                 }}
-                                onChange={(value) => setInlineTagEditor({ snapshotId: snapshot.id, value })}
+                                onChange={(value) => setInlineTagEditor({ snapshot_id: snapshot.id, value })}
                               />
                             ) : (
                               <TagChip label="+" variant="add" onClick={() => {
-                                setInlineTagEditor({ snapshotId: snapshot.id, value: '' });
+                                setInlineTagEditor({ snapshot_id: snapshot.id, value: '' });
                               }} title={t("Add tag")} />
                             )}
                           </TagList>
@@ -2080,10 +2070,10 @@ function OptionsMain() {
             </select>
           </Field>
           {import.meta.env.BROWSER === 'safari' && (
-            <p className="help-text">Configure a server and key here, or leave the server blank to use the ArchiveBox app connection automatically. Browser personas are selected separately.</p>
+            <p className="help-text">The extension uses the ArchiveBox app server registry until you save a connection here. Cookie sync permissions are configured separately for each server.</p>
           )}
           <Field label={t("ArchiveBox Server URL")}>
-            <input value={config.archivebox_server_url} onChange={(event) => saveConfig({ archivebox_server_url: event.currentTarget.value })} placeholder={t("http://localhost:5797 or https://archivebox.example.com")} />
+            <input value={serverDraft ?? server?.server ?? ''} onChange={(event) => setServerDraft(event.currentTarget.value)} onBlur={async () => { if (serverDraft !== null) { await saveServer({ server: serverDraft }); setServerDraft(null); } }} placeholder={t("http://localhost:5797 or https://archivebox.example.com")} />
             <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin`, '_blank')}>{t("Admin")}</button>
             <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin/login/`, '_blank')}>{t("Login")}</button>
             <button disabled={!archiveboxServerUrlIsValid} onClick={testServer}>{t("Test")}</button>
@@ -2093,14 +2083,21 @@ function OptionsMain() {
             {t("The base URL of your self-hosted ArchiveBox server. Local HTTP servers such as")} <code>http://localhost:5797</code> {t("are supported, as are HTTPS deployments.")}
           </p>
           <Field label={t("API Key")}>
-            <input value={config.archivebox_api_key} onChange={(event) => saveConfig({ archivebox_api_key: event.currentTarget.value.trim() })} placeholder="... abcexamplekey1234 ..." />
+            <input value={tokenDraft ?? server?.token ?? ''} onChange={(event) => setTokenDraft(event.currentTarget.value)} onBlur={async () => { if (tokenDraft !== null) { await saveServer({ token: tokenDraft.trim() }); setTokenDraft(null); } }} placeholder="... abcexamplekey1234 ..." />
             <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin/api/apitoken/add/`, '_blank')}>{t("Generate")}</button>
             <button disabled={!archiveboxServerUrlIsValid} onClick={testApiKeyValue}>{t("Test")}</button>
             <StatusBadge status={apiStatus} />
           </Field>
-          <div className="notice">
-            {t("API keys are supported by ArchiveBox v0.8.5 and newer. For older servers, leave this blank and stay logged into the ArchiveBox admin UI in this browser. Public unauthenticated adding is possible server-side, but it is a security risk.")}
-          </div>
+          <Field label={t("Default Persona")}>
+            <select aria-label="Default Persona" value={server?.persona ?? 'Default'} disabled={!server?.token}
+              onChange={(event) => saveServer({ persona: event.currentTarget.value === 'Default' ? null : event.currentTarget.value })}>
+              {[...new Set(['Default', ...(server?.persona ? [server.persona] : []), ...server_personas.map((item) => item.name)])].map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </Field>
+          {persona_error && <p className="status error">{persona_error}</p>}
+          <p className="help-text">The selected server persona is used for popup and automatic submissions. Cookie uploads require separate consent for this server.</p>
           <div className="doc-links">
             <a href="https://github.com/ArchiveBox/archivebox-browser-extension#setup" target="_blank" rel="noopener noreferrer">{t("Extension setup guide")}</a>
             <a href="https://github.com/ArchiveBox/ArchiveBox/wiki/Configuration#public_index--public_snapshots--public_add_view" target="_blank" rel="noopener noreferrer">{t("ArchiveBox server config")}</a>
@@ -2121,8 +2118,8 @@ function OptionsMain() {
               <input
                 type="checkbox"
                 aria-label={t("Upload screenshots to server")}
-                checked={config.upload_screenshots_to_server}
-                onChange={(event) => saveConfig({ upload_screenshots_to_server: event.currentTarget.checked })}
+                checked={Boolean(server?.policy.upload_screenshots_to_server)}
+                onChange={(event) => saveServer({ policy: { upload_screenshots_to_server: event.currentTarget.checked } })}
               />
               {t("Upload to server")}
             </label>
@@ -2141,9 +2138,9 @@ function OptionsMain() {
               <input
                 type="checkbox"
                 aria-label={t("Upload MHTML snapshots to server")}
-                checked={supportsMhtmlCapture && config.upload_mhtml_to_server}
+                checked={supportsMhtmlCapture && Boolean(server?.policy.upload_mhtml_to_server)}
                 disabled={!supportsMhtmlCapture}
-                onChange={(event) => saveConfig({ upload_mhtml_to_server: event.currentTarget.checked })}
+                onChange={(event) => saveServer({ policy: { upload_mhtml_to_server: event.currentTarget.checked } })}
               />
               {t("Upload to server")}
             </label>
@@ -2243,7 +2240,7 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
             {t("Use dedicated archiving accounts where possible so archives do not embed personal browsing data or normal-account cookies.")}
           </div>
           <div className="toolbar">
-            <select value={activePersona} onChange={(event) => chooseActivePersona(event.currentTarget.value)}>
+            <select value={active_persona} onChange={(event) => chooseActivePersona(event.currentTarget.value)}>
               <option value="">{t("Select a profile...")}</option>
               {personas.map((persona) => <option key={persona.id} value={persona.id}>{persona.name}</option>)}
             </select>
@@ -2253,9 +2250,9 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
           <StatusBadge status={personaStatus} />
           <div className="persona-list">
             {personas.map((persona) => (
-              <article className={persona.id === activePersona ? 'persona active' : 'persona'} key={persona.id}>
+              <article className={persona.id === active_persona ? 'persona active' : 'persona'} key={persona.id}>
                 <input value={persona.name} onChange={(event) => savePersona(persona, { name: event.currentTarget.value })} />
-                <p>{t("$1 domains · Last used $2", Object.keys(persona.cookies || {}).length, persona.lastUsed ? new Date(persona.lastUsed).toLocaleString() : t("never"))}</p>
+                <p>{t("$1 domains · Last used $2", Object.keys(persona.cookies || {}).length, persona.last_used ? new Date(persona.last_used).toLocaleString() : t("never"))}</p>
                 <div className="settings-grid">
                   {([
                     ['userAgent', t("User Agent")],
@@ -2284,18 +2281,18 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
                     <button key={domain} onClick={() => removePersonaDomain(persona, domain)}>{domain} ×</button>
                   ))}
                 </div>
-                {cookieSyncStates[persona.id] && cookieSyncStates[persona.id]?.serverOrigin !== archiveboxServerBaseUrl ? (
+                {cookieSyncStates[`${server_id}:${persona.id}`] && cookieSyncStates[`${server_id}:${persona.id}`]?.server_origin !== archiveboxServerBaseUrl ? (
                   <p role="status" className="status warning">{t("Cookie sync paused: sync this profile to the new server manually.")}</p>
-                ) : cookieSyncStates[persona.id]?.pending && (
-                  <p role="status" className={cookieSyncStates[persona.id]?.error ? 'status error' : 'status'}>
-                    {cookieSyncStates[persona.id]?.error
-                      ? t("Cookie sync failed; retrying automatically: $1", cookieSyncStates[persona.id]?.error || '')
+                ) : cookieSyncStates[`${server_id}:${persona.id}`]?.pending && (
+                  <p role="status" className={cookieSyncStates[`${server_id}:${persona.id}`]?.error ? 'status error' : 'status'}>
+                    {cookieSyncStates[`${server_id}:${persona.id}`]?.error
+                      ? t("Cookie sync failed; retrying automatically: $1", cookieSyncStates[`${server_id}:${persona.id}`]?.error || '')
                       : t("Cookie sync pending")}
                   </p>
                 )}
                 <div className="row-actions">
-                  {persona.serverPersonaUrl ? (
-                    <a className="persona-sync-link persona-sync-link--synced" href={persona.serverPersonaUrl} target="_blank" rel="noopener noreferrer" title={t("Open ArchiveBox persona")}>
+                  {persona.remote_personas?.[server_id]?.url ? (
+                    <a className="persona-sync-link persona-sync-link--synced" href={persona.remote_personas?.[server_id]?.url} target="_blank" rel="noopener noreferrer" title={t("Open ArchiveBox persona")}>
                       <CheckCircle2 size={15} aria-hidden="true" />
                       <span>{t("Synced")}</span>
                       <ExternalLink size={13} aria-hidden="true" />

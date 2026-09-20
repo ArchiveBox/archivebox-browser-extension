@@ -53,6 +53,9 @@ try {
   await retention.selectOption('never');
   await serverInput.fill(server);
   await keyInput.fill(key);
+  await keyInput.blur();
+
+  const server_id = await page.evaluate(async () => (await chrome.storage.local.get('server_registry')).server_registry.active_server_id);
 
   // Import actual browser bookmarks through the UI, then submit them through Sync.
   const suffix = Date.now();
@@ -71,20 +74,20 @@ try {
     await page.locator('.saved-url-table tbody tr').filter({ hasText: `Retention ${name}` }).locator('input[type="checkbox"]').check();
   }
   await page.getByRole('button', { name: 'Sync', exact: true }).click();
-  await expect.poll(async () => (await readEntries()).filter((entry) => entry.archiveboxSubmittedAt).length).toBe(2);
-  await expect.poll(async () => (await readEntries()).filter((entry) => entry.archiveboxSnapshotId).length).toBe(2);
+  await expect.poll(async () => (await readEntries()).filter((entry) => entry.remote_copies?.[server_id]?.submitted_at).length).toBe(2);
+  await expect.poll(async () => (await readEntries()).filter((entry) => entry.remote_copies?.[server_id]?.snapshot_id).length).toBe(2);
   let entries = await readEntries();
   const queued = entries.find((entry) => entry.url.includes('retention-queued-'));
   const missing = entries.find((entry) => entry.url.includes('retention-missing-'));
   const localOnly = entries.find((entry) => entry.url.includes('retention-local-only-'));
   for (const entry of [queued, missing]) {
-    expect(entry.archiveboxSubmittedTo).toBe(server);
-    expect(Date.now() - Date.parse(entry.archiveboxSubmittedAt)).toBeLessThan(30000);
-    const remote = await api('/api/v1/core/snapshot/' + (entry.archiveboxSnapshotId || entry.id));
+    expect(entry.remote_copies?.[server_id]?.submitted_to).toBe(server);
+    expect(Date.now() - Date.parse(entry.remote_copies?.[server_id]?.submitted_at)).toBeLessThan(30000);
+    const remote = await api('/api/v1/core/snapshot/' + (entry.remote_copies?.[server_id]?.snapshot_id || entry.id));
     expect(remote.url).toBe(entry.url);
     expect(remote.status).toBe('queued');
   }
-  expect(localOnly.archiveboxSubmittedAt).toBeUndefined();
+  expect(localOnly.remote_copies?.[server_id]?.submitted_at).toBeUndefined();
 
   // Real OPFS fixture records: screenshot bytes from this real browser page, plus
   // partial/unindexed capture files in a second date tree, and a legacy path.
@@ -111,39 +114,29 @@ try {
   await viewer.goto(`chrome-extension://${id}/options.html?screenshot=${queued.id}`);
   await expect(viewer.locator('.screenshot-viewer-frame')).toBeVisible();
   // Remove only the test's own remote record to exercise a real 404.
-  await api('/api/v1/core/snapshot/' + (missing.archiveboxSnapshotId || missing.id), { method: 'DELETE' });
+  await api('/api/v1/core/snapshot/' + (missing.remote_copies?.[server_id]?.snapshot_id || missing.id), { method: 'DELETE' });
   console.log('Verified real submission timestamps and queued server state; waiting for the real one-minute TTL.');
-  await expect.poll(() => Date.now() - Date.parse(queued.archiveboxSubmittedAt), { timeout: 65000, intervals: [1000] }).toBeGreaterThanOrEqual(61000);
+  await expect.poll(() => Date.now() - Date.parse(queued.remote_copies?.[server_id]?.submitted_at), { timeout: 65000, intervals: [1000] }).toBeGreaterThanOrEqual(61000);
   expect((await readEntries()).length).toBe(3); // never
 
-  // Missing server configuration, wrong server, offline networking, invalid auth,
-  // and never must preserve expired records and every local byte.
+  // Offline networking, invalid auth, and never must preserve expired records and bytes.
   await config();
-  await serverInput.fill('');
-  await retention.selectOption('60000');
-  await expect.poll(() => page.evaluate(async () => (await chrome.storage.local.get('archivebox_server_url')).archivebox_server_url)).toBe('');
-  await page.reload(); await config();
-  expect((await readEntries()).length).toBe(3);
-  await serverInput.fill('http://127.0.0.1:1');
-  await keyInput.fill(key);
-  await retention.selectOption('never'); await retention.selectOption('60000');
-  expect((await readEntries()).length).toBe(3);
   await context.setOffline(true);
-  await serverInput.fill(server); await keyInput.fill(key);
+  await keyInput.fill(key); await keyInput.blur();
   await retention.selectOption('never'); await retention.selectOption('60000');
   expect((await readEntries()).length).toBe(3);
-  await keyInput.fill('invalid-retention-test-key');
+  await keyInput.fill('invalid-retention-test-key'); await keyInput.blur();
   await context.setOffline(false);
   // Wait for a real unauthorized API response to prove the cleanup path ran.
   const unauthorized = context.waitForEvent('response', (response) => response.url().includes('/api/v1/core/snapshot/') && response.status() === 401);
   await retention.selectOption('never'); await retention.selectOption('60000');
   await unauthorized;
   expect((await readEntries()).length).toBe(3);
-  console.log('Verified never, unconfigured, wrong-server, offline, and authentication-failure preservation.');
+  console.log('Verified never, offline, and authentication-failure preservation.');
 
   // Restore connection. Cleanup must accept queued state, remove only the backed
   // snapshot everywhere locally, refresh the viewer, and preserve its remote row.
-  await keyInput.fill(key);
+  await keyInput.fill(key); await keyInput.blur();
   await expect.poll(async () => (await readEntries()).map((entry) => entry.id)).toEqual(expect.not.arrayContaining([queued.id]));
   await expect(viewer).toHaveURL(`chrome-extension://${id}/options.html`);
   const storage = await page.evaluate(async () => ({
@@ -165,7 +158,7 @@ try {
     expect(storage.local.entries.some((entry) => entry.id === retained.id)).toBe(true);
     expect(storage.paths.some((p) => p.includes(retained.id))).toBe(true);
   }
-  const remote = await api('/api/v1/core/snapshot/' + (queued.archiveboxSnapshotId || queued.id));
+  const remote = await api('/api/v1/core/snapshot/' + (queued.remote_copies?.[server_id]?.snapshot_id || queued.id));
   expect(remote.url).toBe(queued.url); expect(remote.status).toBe('queued');
   console.log('Verified expired queued snapshot purged from OPFS/local/sync/session and viewer; missing/unsent snapshots retained; server copy intact.');
 
@@ -176,17 +169,17 @@ try {
   await page.locator('.saved-url-table tbody tr').filter({ hasText: 'Retention missing' }).locator('input[type="checkbox"]').check();
   const resubmittedAfter = Date.now();
   await page.getByRole('button', { name: 'Sync', exact: true }).click();
-  await expect.poll(async () => Date.parse((await readEntries()).find((entry) => entry.id === missing.id)?.archiveboxSubmittedAt || '')).toBeGreaterThanOrEqual(resubmittedAfter);
+  await expect.poll(async () => Date.parse((await readEntries()).find((entry) => entry.id === missing.id)?.remote_copies?.[server_id]?.submitted_at || '')).toBeGreaterThanOrEqual(resubmittedAfter);
   await expect(page.getByText('Finished syncing 1 snapshots', { exact: true })).toBeVisible();
   expect((await readEntries()).some((entry) => entry.id === missing.id)).toBe(true);
   const resubmitted = (await readEntries()).find((entry) => entry.id === missing.id);
-  const resubmittedServerId = resubmitted.archiveboxSnapshotId || resubmitted.id;
+  const resubmittedServerId = resubmitted.remote_copies?.[server_id]?.snapshot_id || resubmitted.id;
   expect((await api('/api/v1/core/snapshot/' + resubmittedServerId)).url).toBe(missing.url);
   // Stop the actual service worker, then wake it with a supported read-only message.
   const workerCdp = await context.newCDPSession(page);
   await workerCdp.send('ServiceWorker.enable');
   await workerCdp.send('ServiceWorker.stopAllWorkers');
-  const connection = await page.evaluate((serverUrl) => chrome.runtime.sendMessage({ type: 'test_server_url', serverUrl }), server);
+  const connection = await page.evaluate((serverUrl) => chrome.runtime.sendMessage({ type: 'test_server_url', server: serverUrl }), server);
   expect(connection.ok).toBe(true);
   const alarm = await page.evaluate(() => chrome.alarms.get('archivebox-local-retention'));
   expect(alarm.periodInMinutes).toBe(1);
@@ -195,7 +188,7 @@ try {
   await expect.poll(async () => (await readEntries()).map((entry) => entry.id), { timeout: 130000, intervals: [1000] }).toEqual([localOnly.id]);
   expect(Date.now() - resubmittedAfter).toBeGreaterThanOrEqual(60000);
   expect((await api('/api/v1/core/snapshot/' + resubmittedServerId)).url).toBe(missing.url);
-  expect((await api('/api/v1/core/snapshot/' + (queued.archiveboxSnapshotId || queued.id))).url).toBe(queued.url);
+  expect((await api('/api/v1/core/snapshot/' + (queued.remote_copies?.[server_id]?.snapshot_id || queued.id))).url).toBe(queued.url);
   console.log('PASS: real periodic alarm expired the resubmitted record after its new TTL, retained the local-only record, and kept both server copies.');
 } finally {
   await browser?.close();

@@ -1,13 +1,13 @@
+import { defaultServers, requireServer } from '@/src/lib/server_registry';
 import { configureLocalRetention, withSnapshotArtifacts } from '@/src/lib/retention';
 import { configureCookieSync } from '@/src/lib/cookieSync';
-import { addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, syncArchiveBoxSnapshotMetadata, supportsArchiveBoxApi, testApiKey, testServerUrl } from '@/src/lib/archivebox';
-import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
+import { submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, supportsArchiveBoxApi, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { appendSnapshotScreenshotParts, writeSnapshotMhtmlBytes, writeSnapshotScreenshot, writeSnapshotScreenshotParts, writeSnapshotSingleFileHtml } from '@/src/lib/screenshotStorage';
 import { createSnapshot } from '@/src/lib/snapshots';
 import { getArchiveBoxServerUrl, getConfig, getSnapshots, mutateSnapshots } from '@/src/lib/storage';
-import type { ArchiveBoxAddResult, RuntimeMessage, RuntimeResponse, Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotSingleFile } from '@/src/lib/types';
+import type { RuntimeMessage, RuntimeResponse, Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotSingleFile } from '@/src/lib/types';
 import { compactUuid } from '@/src/lib/uuid';
 
 type PageMetrics = {
@@ -307,14 +307,14 @@ function screenshotProgressTotal(metrics: PageMetrics | ScrollResult, captured: 
 }
 
 function sendScreenshotProgress(
-  snapshotId: string,
+  snapshot_id: string,
   captured: number,
   total: number,
   phase: 'visible' | 'scrolling' | 'done' | 'canceled',
 ): void {
   browser.runtime.sendMessage<RuntimeMessage>({
     type: 'screenshot_capture_progress',
-    snapshotId,
+    snapshot_id,
     captured,
     total: Math.max(captured, total),
     phase,
@@ -373,21 +373,21 @@ async function measureScreenshotPage(tab: Browser.tabs.Tab): Promise<PageMetrics
   return result.result;
 }
 
-async function attachScreenshotToSnapshot(snapshotId: string, screenshot: SnapshotScreenshot): Promise<void> {
+async function attachScreenshotToSnapshot(snapshot_id: string, screenshot: SnapshotScreenshot): Promise<void> {
   await mutateSnapshots((snapshots) => snapshots.map((snapshot) => (
-    snapshot.id === snapshotId ? { ...snapshot, screenshot } : snapshot
+    snapshot.id === snapshot_id ? { ...snapshot, screenshot } : snapshot
   )));
 }
 
-async function attachMhtmlToSnapshot(snapshotId: string, mhtml: SnapshotMhtml): Promise<void> {
+async function attachMhtmlToSnapshot(snapshot_id: string, mhtml: SnapshotMhtml): Promise<void> {
   await mutateSnapshots((snapshots) => snapshots.map((snapshot) => (
-    snapshot.id === snapshotId ? { ...snapshot, mhtml } : snapshot
+    snapshot.id === snapshot_id ? { ...snapshot, mhtml } : snapshot
   )));
 }
 
-async function attachSingleFileToSnapshot(snapshotId: string, singlefile: SnapshotSingleFile): Promise<void> {
+async function attachSingleFileToSnapshot(snapshot_id: string, singlefile: SnapshotSingleFile): Promise<void> {
   await mutateSnapshots((snapshots) => snapshots.map((snapshot) => (
-    snapshot.id === snapshotId ? { ...snapshot, singlefile } : snapshot
+    snapshot.id === snapshot_id ? { ...snapshot, singlefile } : snapshot
   )));
 }
 
@@ -802,9 +802,10 @@ async function ensureSnapshotForTab(tab: Browser.tabs.Tab): Promise<{
 async function shouldAutoArchive(url: string): Promise<boolean> {
   try {
     if (!isArchiveablePageUrl(url)) return false;
-    const { archivebox_server_url, enable_auto_archive, match_urls, exclude_urls } = await getConfig();
+    const config = await getConfig();
+    const { enable_auto_archive, match_urls, exclude_urls } = config;
     if (!enable_auto_archive || !match_urls.trim()) return false;
-    if (archiveBoxServerUrlMatches(archivebox_server_url, url)) return false;
+    if (config.servers.some((server) => server.server && archiveBoxServerUrlMatches(server.server, url))) return false;
 
     if (!new RegExp(match_urls).test(url)) return false;
     if (exclude_urls.trim() && new RegExp(exclude_urls).test(url)) return false;
@@ -816,60 +817,18 @@ async function shouldAutoArchive(url: string): Promise<boolean> {
   }
 }
 
-async function markSnapshotSynced(snapshotId: string, archivebox: ArchiveBoxAddResult | null): Promise<void> {
-  const returnedSnapshotIdRaw = archivebox?.snapshot_ids?.[0] || '';
-  const returnedSnapshotId = returnedSnapshotIdRaw ? compactUuid(returnedSnapshotIdRaw) : '';
-  if (returnedSnapshotId && returnedSnapshotId !== snapshotId) {
-    throw new Error(t("ArchiveBox returned a different snapshot ID than the extension sent."));
-  }
-  if (!archivebox?.crawl_id) return;
-
-  let serverSnapshotId = returnedSnapshotId || snapshotId;
-  const nextSnapshots = await mutateSnapshots((snapshots) => snapshots.map((snapshot) => snapshot.id === snapshotId
-    ? { ...snapshot, archiveboxCrawlId: archivebox.crawl_id, archiveboxSnapshotId: serverSnapshotId }
-    : snapshot));
-  const snapshot = nextSnapshots.find((item) => item.id === snapshotId);
-  if (snapshot) {
-    const metadata = await syncArchiveBoxSnapshotMetadata(snapshot);
-    const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
-    if (metadataSnapshotId && metadataSnapshotId !== serverSnapshotId) {
-      serverSnapshotId = metadataSnapshotId;
-      await mutateSnapshots((snapshots) => snapshots.map((item) => item.id === snapshotId
-        ? { ...item, archiveboxSnapshotId: serverSnapshotId }
-        : item));
-    }
-  }
+async function getSnapshotById(snapshot_id: string): Promise<Snapshot | null> {
+  return (await getSnapshots()).find((snapshot) => snapshot.id === snapshot_id) || null;
 }
 
-async function getSnapshotById(snapshotId: string): Promise<Snapshot | null> {
-  const snapshots = await getSnapshots();
-  return snapshots.find((snapshot) => snapshot.id === snapshotId) || null;
-}
-
-async function uploadSyncedSnapshotArtifacts(snapshotId: string): Promise<void> {
-  const snapshot = await getSnapshotById(snapshotId);
-  if (!snapshot) return;
-  await uploadSnapshotCaptureArtifactsToArchiveBox(snapshot);
-}
-
-// Saves a snapshot to the configured ArchiveBox server, logging a single line
-// about whether it worked. When no server is configured the snapshot just stays
-// saved locally; that is a normal state, not an error worth crashing or logging
-// loudly, so we never throw out of here.
 async function syncSnapshotToServer(snapshot: Snapshot): Promise<boolean> {
-  const serverUrl = await getArchiveBoxServerUrl();
-  if (!serverUrl) {
-    console.info(`ArchiveBox: saved ${snapshot.url} locally (no ArchiveBox server configured)`);
-    return false;
-  }
+  const server = defaultServers(await getConfig())[0];
+  if (!server) return false;
   try {
-    const archivebox = await addToArchiveBox([snapshot.url], snapshot.tags, snapshot.depth ?? 0, false, false, [snapshot.id], [snapshot.title]);
-    await markSnapshotSynced(snapshot.id, archivebox);
-    if (archivebox) await uploadSyncedSnapshotArtifacts(snapshot.id);
-    console.info(`ArchiveBox: saved ${snapshot.url} to ArchiveBox server`);
+    await submitSnapshot(server, snapshot);
     return true;
   } catch (error) {
-    console.warn(`ArchiveBox: could not save ${snapshot.url} to ArchiveBox server: ${errorMessage(error)}`);
+    console.warn(`ArchiveBox: submission to ${server.id} failed: ${errorMessage(error)}`);
     return false;
   }
 }
@@ -987,12 +946,21 @@ export default defineBackground(() => {
   ): Promise<RuntimeResponse> | RuntimeResponse => {
     switch (message.type) {
       case 'archivebox_add':
-        return addToArchiveBox(message.body.urls, message.body.tags, message.body.depth ?? 0, false, false, message.body.snapshotIds || [], message.body.titles || [])
-          .then((archivebox) => ({ ok: true, archivebox }))
+        return getConfig().then(async (config) => {
+          const server = requireServer(config, message.server_id);
+          const snapshot = (await getSnapshots()).find((item) => item.id === message.body.snapshot_ids?.[0] && item.url === message.body.urls[0]);
+          if (snapshot && message.body.urls.length === 1) return submitSnapshot(server, { ...snapshot, tags: message.body.tags, depth: message.body.depth ?? 0 });
+          return addToArchiveBox(server, message.body.urls, message.body.tags, message.body.depth ?? 0, false, false, message.body.snapshot_ids || []);
+        })
+          .then((receipt) => ({ ok: true, receipt }))
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));
 
       case 'archivebox_remove':
-        return removeFromArchiveBox(message.url)
+        return getConfig().then(async (config) => {
+          const snapshot = await getSnapshotById(message.snapshot_id);
+          if (!snapshot) throw new Error('Saved URL not found.');
+          return removeFromArchiveBox(requireServer(config, message.server_id), snapshot);
+        })
           .then(() => ({ ok: true }))
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));
 
@@ -1000,19 +968,19 @@ export default defineBackground(() => {
         return getSnapshots()
           .then(async (snapshots) => {
             const tab = await getMessageTab(message.tabId);
-            const snapshot = snapshots.find((item) => item.id === message.snapshotId);
+            const snapshot = snapshots.find((item) => item.id === message.snapshot_id);
             if (!snapshot) throw new Error(t("Saved snapshot not found."));
             return captureAndAttachSnapshotScreenshot(tab, snapshot, message.fullPage ?? true);
           })
           .then((screenshot) => {
-            const screenshotCanceled = completedCanceledScreenshotCaptures.delete(message.snapshotId);
+            const screenshotCanceled = completedCanceledScreenshotCaptures.delete(message.snapshot_id);
             return { ok: true, screenshot, screenshotCanceled };
           })
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));
       }
 
       case 'cancel_snapshot_screenshot':
-        canceledScreenshotCaptures.add(message.snapshotId);
+        canceledScreenshotCaptures.add(message.snapshot_id);
         return { ok: true };
 
       case 'measure_screenshot_page': {
@@ -1029,7 +997,7 @@ export default defineBackground(() => {
         return getSnapshots()
           .then(async (snapshots) => {
             const tab = await getMessageTab(message.tabId);
-            const snapshot = snapshots.find((item) => item.id === message.snapshotId);
+            const snapshot = snapshots.find((item) => item.id === message.snapshot_id);
             if (!snapshot) throw new Error(t("Saved snapshot not found."));
             return captureAndAttachSnapshotMhtml(tab, snapshot);
           })
@@ -1041,7 +1009,7 @@ export default defineBackground(() => {
         return getSnapshots()
           .then(async (snapshots) => {
             const tab = await getMessageTab(message.tabId);
-            const snapshot = snapshots.find((item) => item.id === message.snapshotId);
+            const snapshot = snapshots.find((item) => item.id === message.snapshot_id);
             if (!snapshot) throw new Error(t("Saved snapshot not found."));
             return captureAndAttachSnapshotSingleFile(tab, snapshot);
           })
@@ -1050,12 +1018,12 @@ export default defineBackground(() => {
       }
 
       case 'test_server_url':
-        return testServerUrl(message.serverUrl)
+        return testServerUrl(message.server)
           .then(() => ({ ok: true }))
           .catch((error: Error) => ({ ok: false, error: error.message }));
 
       case 'test_api_key':
-        return testApiKey(message.serverUrl, message.apiKey)
+        return testApiKey(message.server, message.token)
           .then((user_id) => ({ ok: true, user_id }))
           .catch((error: Error) => ({ ok: false, error: error.message }));
 
@@ -1074,11 +1042,12 @@ export default defineBackground(() => {
       }
 
       case 'open_archivebox_snapshot':
-        return getArchiveBoxServerUrl()
-          .then(async (serverUrl) => {
+        return getConfig()
+          .then(async (config) => {
+            const serverUrl = requireServer(config, message.server_id).server;
             if (!serverUrl) throw new Error(t("Server not configured"));
-            const legacy = !(await supportsArchiveBoxApi(serverUrl));
-            return browser.tabs.create({ url: archiveBoxSnapshotUrl(serverUrl, message.url, legacy) });
+            const modernApi = await supportsArchiveBoxApi(serverUrl).catch(() => true);
+            return browser.tabs.create({ url: archiveBoxSnapshotUrl(serverUrl, message.url, !modernApi) });
           })
           .then(() => ({ ok: true }))
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));

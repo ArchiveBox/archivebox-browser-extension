@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "servers": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "name": "Home",
+      "server": "https://home.example",
+      "token": "home-test-key",
+      "persona": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000002",
+      "name": "Work",
+      "server": "https://work.example",
+      "token": "work-test-key",
+      "persona": "Work"
+    }
+  ],
+  "active_server_id": "00000000-0000-4000-8000-000000000002",
+  "default_server_ids": [
+    "00000000-0000-4000-8000-000000000001"
+  ]
+}

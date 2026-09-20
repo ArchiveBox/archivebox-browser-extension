@@ -1,5 +1,38 @@
 export type ArchiveDepth = 0 | 1 | 2 | 3 | 4;
 
+export type ServerConfiguration = {
+  id: string;
+  name: string;
+  server: string;
+  token: string;
+  persona: string | null;
+};
+
+// Browser-only policy is stored separately, keyed by the same server ID.
+export type ServerPolicy = {
+  local_persona_id?: string;
+  upload_screenshots_to_server: boolean;
+  upload_mhtml_to_server: boolean;
+  upload_singlefile_to_server: boolean;
+};
+export type ServerDestination = ServerConfiguration & { policy: ServerPolicy };
+
+export type ServerRegistry = {
+  schema_version: 1;
+  servers: ServerConfiguration[];
+  active_server_id: string | null;
+  default_server_ids: string[];
+};
+
+export type RemoteCopy = {
+  crawl_id?: string;
+  snapshot_id?: string;
+  submitted_at?: string;
+  submitted_to: string;
+  status: 'accepted' | 'complete';
+  persona?: string | null;
+};
+
 export type Snapshot = {
   id: string;
   url: string;
@@ -8,10 +41,8 @@ export type Snapshot = {
   title: string;
   favIconUrl?: string | null;
   depth?: ArchiveDepth;
-  archiveboxSubmittedAt?: string;
-  archiveboxSubmittedTo?: string;
-  archiveboxCrawlId?: string;
-  archiveboxSnapshotId?: string;
+  remote_copies?: Record<string, RemoteCopy>;
+  unassigned_remote_copy?: RemoteCopy;
   screenshot?: SnapshotScreenshot;
   mhtml?: SnapshotMhtml;
   singlefile?: SnapshotSingleFile;
@@ -87,16 +118,14 @@ export type Persona = {
   id: string;
   name: string;
   created: string;
-  lastUsed: string | null;
-  serverPersonaId?: string;
-  serverPersonaUrl?: string;
+  last_used: string | null;
+  remote_personas?: Record<string, { id: string; url: string }>;
   cookies: Record<string, StoredCookie[]>;
   settings: PersonaSettings;
 };
 
-export type ConfigState = {
-  archivebox_server_url: string;
-  archivebox_api_key: string;
+export type ConfigState = ServerRegistry & {
+  server_policies: Record<string, ServerPolicy>;
   ui_language: 'auto' | 'en' | 'es' | 'zh_CN';
   match_urls: string;
   exclude_urls: string;
@@ -104,8 +133,6 @@ export type ConfigState = {
   enable_auto_archive: boolean;
   save_screenshots_locally: boolean;
   save_mhtml_locally: boolean;
-  upload_screenshots_to_server: boolean;
-  upload_mhtml_to_server: boolean;
   save_singlefile_locally: boolean;
   singlefile_extension_id: string;
   tab_manager_plus_extension_id: string;
@@ -113,29 +140,31 @@ export type ConfigState = {
 
 export type ArchiveboxAddMessage = {
   type: 'archivebox_add';
+  server_id: string;
   body: {
     urls: string[];
     tags: string[];
     depth?: ArchiveDepth;
-    snapshotIds?: string[];
+    snapshot_ids?: string[];
     titles?: string[];
   };
 };
 
 export type ArchiveboxRemoveMessage = {
   type: 'archivebox_remove';
-  url: string;
+  server_id: string;
+  snapshot_id: string;
 };
 
 export type TestServerMessage = {
   type: 'test_server_url';
-  serverUrl: string;
+  server: string;
 };
 
 export type TestApiKeyMessage = {
   type: 'test_api_key';
-  serverUrl: string;
-  apiKey: string;
+  server: string;
+  token: string;
 };
 
 export type OpenOptionsMessage = {
@@ -146,12 +175,13 @@ export type OpenOptionsMessage = {
 
 export type OpenArchiveBoxSnapshotMessage = {
   type: 'open_archivebox_snapshot';
+  server_id: string;
   url: string;
 };
 
 export type CaptureSnapshotScreenshotMessage = {
   type: 'capture_snapshot_screenshot';
-  snapshotId: string;
+  snapshot_id: string;
   tabId: number;
   windowId: number;
   fullPage?: boolean;
@@ -159,12 +189,12 @@ export type CaptureSnapshotScreenshotMessage = {
 
 export type CancelSnapshotScreenshotMessage = {
   type: 'cancel_snapshot_screenshot';
-  snapshotId: string;
+  snapshot_id: string;
 };
 
 export type ScreenshotCaptureProgressMessage = {
   type: 'screenshot_capture_progress';
-  snapshotId: string;
+  snapshot_id: string;
   captured: number;
   total: number;
   phase: 'visible' | 'scrolling' | 'done' | 'canceled';
@@ -177,14 +207,14 @@ export type MeasureScreenshotPageMessage = {
 
 export type CaptureSnapshotMhtmlMessage = {
   type: 'capture_snapshot_mhtml';
-  snapshotId: string;
+  snapshot_id: string;
   tabId: number;
   windowId: number;
 };
 
 export type CaptureSnapshotSingleFileMessage = {
   type: 'capture_snapshot_singlefile';
-  snapshotId: string;
+  snapshot_id: string;
   tabId: number;
   windowId: number;
 };
@@ -224,7 +254,7 @@ export type RuntimeMessage =
 
 export type RuntimeResponse = {
   ok: boolean;
-  archivebox?: ArchiveBoxAddResult | null;
+  receipt?: ArchiveSubmissionReceipt | null;
   error?: string;
   errorMessage?: string;
   user_id?: string | number;
@@ -235,9 +265,21 @@ export type RuntimeResponse = {
   singlefile?: SnapshotSingleFile;
 };
 
-export type ArchiveBoxAddResult = {
-  crawl_id?: string;
-  num_snapshots?: number;
-  queued_urls?: string[];
-  snapshot_ids?: string[];
+export type SubmissionReceipt = {
+  server_id: string;
+  crawl_id: string;
+  queued_urls: string[];
+  legacy?: false;
 };
+
+// Published legacy /add/ deployments confirm success in HTML and may not
+// expose a server-owned crawl ID. Keep that state explicit instead of
+// fabricating an ID or treating it as a modern receipt.
+export type LegacySubmissionReceipt = {
+  server_id: string;
+  crawl_id: string | null;
+  queued_urls: string[];
+  legacy: true;
+};
+
+export type ArchiveSubmissionReceipt = SubmissionReceipt | LegacySubmissionReceipt;

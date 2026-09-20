@@ -1,3 +1,4 @@
+import type { ServerRegistry } from '../src/lib/types';
 import { chromium, expect, test, type Browser, type Page } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -77,9 +78,11 @@ test('local retention defaults to 30 days and persists every choice', async ({},
       ] });
     });
     await page.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com').fill('http://127.0.0.1:18764');
+    await page.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com').blur();
     await expect.poll(() => page.evaluate(async () => {
       const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
-      return (await api.storage.local.get('archivebox_server_url')).archivebox_server_url;
+      const { server_registry } = await api.storage.local.get('server_registry');
+      return (server_registry as ServerRegistry).servers[0]?.server;
     })).toBe('http://127.0.0.1:18764');
     await page.reload();
     await expect(page.locator('.saved-url-table tbody tr')).toHaveCount(1);
@@ -96,12 +99,17 @@ test('local retention defaults to 30 days and persists every choice', async ({},
       expect.objectContaining({ id: 'unsent-visible', tags: ['retained'] }),
     ]));
   } finally {
-    await browserInstance?.close();
     if (processHandle.exitCode === null && processHandle.signalCode === null) {
-      const exited = new Promise((resolve) => processHandle.once('exit', resolve));
-      processHandle.kill();
+      const exited = new Promise<void>((resolve) => processHandle.once('exit', () => resolve()));
+      if (browserInstance?.isConnected()) {
+        // CDP disconnect alone leaves Chromium's children writing the profile.
+        // Ask the browser to shut down gracefully before deleting its files.
+        const shutdown = await browserInstance.newBrowserCDPSession();
+        await shutdown.send('Browser.close');
+      } else processHandle.kill('SIGTERM');
       await exited;
     }
+    await browserInstance?.close();
     await rm(profile, { recursive: true, force: true });
   }
 });

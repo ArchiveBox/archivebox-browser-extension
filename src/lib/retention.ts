@@ -1,46 +1,49 @@
 import { hasServerHostPermission, snapshotExistsOnServer } from './archivebox';
 import { deleteSnapshotOpfs } from './screenshotStorage';
 import { getConfig, getSnapshots, mutateSnapshots } from './storage';
-import type { ConfigState, Snapshot } from './types';
+import type { ConfigState, Snapshot, ServerConfiguration } from './types';
 
 const alarmName = 'archivebox-local-retention';
 
-function isExpired(snapshot: Snapshot, config: ConfigState): boolean {
-  if (config.local_retention_ms === 'never' || !config.archivebox_server_url) return false;
-  const submitted = Date.parse(snapshot.archiveboxSubmittedAt || '');
+function isExpired(snapshot: Snapshot, config: ConfigState, server: ServerConfiguration): boolean {
+  if (config.local_retention_ms === 'never' || snapshot.remote_copies?.[server.id]?.status !== 'complete') return false;
+  const submitted = Date.parse(snapshot.remote_copies?.[server.id]?.submitted_at || '');
   return Number.isFinite(submitted)
-    && snapshot.archiveboxSubmittedTo === new URL(config.archivebox_server_url).origin
+    && snapshot.remote_copies?.[server.id]?.submitted_to === new URL(server.server).toString().replace(/\/$/, '')
     && Date.now() - submitted >= config.local_retention_ms;
 }
 
 // Shared with capture and upload operations across popup/options/background contexts.
-export async function withSnapshotArtifacts<T>(snapshotId: string, task: () => Promise<T>): Promise<T> {
-  return navigator.locks.request(`archivebox-artifacts:${snapshotId}`, task);
+export async function withSnapshotArtifacts<T>(snapshot_id: string, task: () => Promise<T>): Promise<T> {
+  return navigator.locks.request(`archivebox-artifacts:${snapshot_id}`, task);
 }
 
 export async function cleanupExpiredSnapshots(): Promise<void> {
   await navigator.locks.request(alarmName, { ifAvailable: true }, async (lock) => {
     if (!lock) return;
     const config = await getConfig();
-    if (!config.archivebox_server_url || config.local_retention_ms === 'never') return;
-    if (!(await hasServerHostPermission(config.archivebox_server_url))) return;
+    if (config.local_retention_ms === 'never') return;
     for (const candidate of await getSnapshots()) {
-      if (!isExpired(candidate, config)) continue;
-      await navigator.locks.request('archivebox-submissions', { ifAvailable: true }, async (submissionLock) => {
+      if (candidate.unassigned_remote_copy) continue;
+      const ids = Object.keys(candidate.remote_copies || {});
+      const servers = ids.map((id) => config.servers.find((server) => server.id === id));
+      if (!ids.length || servers.some((server) => !server || !isExpired(candidate, config, server))) continue;
+      const destinations = servers as ServerConfiguration[];
+      if (!(await Promise.all(destinations.map((server) => hasServerHostPermission(server.server)))).every(Boolean)) continue;
+      await navigator.locks.request(`archivebox-delivery:${candidate.id}`, { ifAvailable: true }, async (submissionLock) => {
         if (!submissionLock) return;
         // Never interrupt a capture or upload. A later alarm will try again.
         await navigator.locks.request(`archivebox-artifacts:${candidate.id}`, { ifAvailable: true }, async (artifactLock) => {
           if (!artifactLock) return;
           // Only an authenticated, fresh, exact ID+URL match proves this local copy
           // is still backed by the configured server. No mutation is sent remotely.
-          if (!(await snapshotExistsOnServer(candidate, config))) return;
+          if (!(await Promise.all(destinations.map((server) => snapshotExistsOnServer(candidate, server)))).every(Boolean)) return;
           await mutateSnapshots(async (entries) => {
             const currentConfig = await getConfig();
-            if (currentConfig.archivebox_server_url !== config.archivebox_server_url
-              || currentConfig.archivebox_api_key !== config.archivebox_api_key) return entries;
+            if (JSON.stringify(currentConfig.servers) !== JSON.stringify(config.servers)) return entries;
             const snapshot = entries.find((item) => item.id === candidate.id);
             if (!snapshot || JSON.stringify(snapshot) !== JSON.stringify(candidate)
-              || !isExpired(snapshot, currentConfig)) return entries;
+              || !destinations.every((server) => isExpired(snapshot, currentConfig, server))) return entries;
             // Remove bytes first. Failures leave the record available for retry.
             await deleteSnapshotOpfs(snapshot);
             for (const area of [browser.storage.sync, browser.storage.session]) {
@@ -75,7 +78,7 @@ export function configureLocalRetention(): void {
   browser.runtime.onStartup.addListener(() => { void schedule(); });
   browser.runtime.onInstalled.addListener(() => { void schedule(); });
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && ['local_retention_ms', 'archivebox_server_url', 'archivebox_api_key'].some((key) => key in changes)) {
+    if (area === 'local' && ['local_retention_ms', 'server_registry'].some((key) => key in changes)) {
       void run();
     }
   });

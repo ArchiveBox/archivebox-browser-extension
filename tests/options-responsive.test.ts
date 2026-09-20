@@ -142,12 +142,17 @@ test('options sections and saved URL actions fit mobile and desktop viewports', 
       }
     }
   } finally {
-    await browserInstance?.close();
     if (processHandle.exitCode === null && processHandle.signalCode === null) {
       const exited = new Promise<void>((resolve) => processHandle.once('exit', () => resolve()));
-      processHandle.kill('SIGTERM');
+      if (browserInstance?.isConnected()) {
+        // CDP disconnect alone leaves Chromium's children writing the profile.
+        // Ask the browser to shut down gracefully before deleting its files.
+        const shutdown = await browserInstance.newBrowserCDPSession();
+        await shutdown.send('Browser.close');
+      } else processHandle.kill('SIGTERM');
       await exited;
     }
+    await browserInstance?.close();
     await rm(profile, { recursive: true, force: true });
   }
 });

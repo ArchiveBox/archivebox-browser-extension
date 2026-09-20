@@ -10,8 +10,8 @@ import {
 import {
   readSnapshotOpfsFiles,
 } from './screenshotStorage';
-import type { Snapshot } from './types';
-import { getConfig, getSnapshots } from './storage';
+import type { Snapshot, ServerDestination } from './types';
+import { getSnapshots, mutateSnapshots } from './storage';
 
 const extensionArtifactSource = 'archivebox-browser-extension';
 const snapshotSyncLocks = new Map<string, Promise<{ opfs: boolean }>>();
@@ -19,15 +19,15 @@ const emptySyncResult = { opfs: false };
 
 type SnapshotArtifactGroup = {
   plugin: string;
-  outputStr: string;
-  outputJson: Record<string, unknown>;
+  output_str: string;
+  output_json: Record<string, unknown>;
   files: ArchiveResultUploadFile[];
 };
 
 type OpfsFile = {
   path: string;
   directory: string;
-  outputPath: string;
+  output_path: string;
   blob: Blob;
 };
 
@@ -42,7 +42,7 @@ function getOpfsFilesForSnapshot(snapshot: Snapshot, files: Array<{ path: string
     return [{
       path: file.path,
       directory,
-      outputPath: outputSegments.join('/'),
+      output_path: outputSegments.join('/'),
       blob: file.blob,
     }];
   });
@@ -51,7 +51,7 @@ function getOpfsFilesForSnapshot(snapshot: Snapshot, files: Array<{ path: string
 function opfsFileToUpload(file: OpfsFile): ArchiveResultUploadFile {
   return {
     blob: file.blob,
-    outputPath: file.outputPath,
+    output_path: file.output_path,
     mimeType: file.blob.type || 'application/octet-stream',
   };
 }
@@ -73,8 +73,8 @@ function buildSnapshotArtifactGroups(snapshot: Snapshot, opfsFiles: OpfsFile[]):
     if (!files.length) return [];
     return [{
       plugin: directory,
-      outputStr: files[0]?.outputPath || '',
-      outputJson: {
+      output_str: files[0]?.output_path || '',
+      output_json: {
         source: extensionArtifactSource,
         snapshot_title: snapshot.title,
         snapshot_url: snapshot.url,
@@ -88,18 +88,18 @@ function buildSnapshotArtifactGroups(snapshot: Snapshot, opfsFiles: OpfsFile[]):
   });
 }
 
-async function uploadSnapshotArtifactGroup(snapshot: Snapshot, group: SnapshotArtifactGroup, archiveboxSnapshotId: string): Promise<boolean> {
+async function uploadSnapshotArtifactGroup(server: ServerDestination, snapshot: Snapshot, group: SnapshotArtifactGroup, snapshot_id: string): Promise<boolean> {
   if (!group.files.length) return false;
 
-  const archiveResult = await uploadSnapshotArchiveResultFiles(archiveboxSnapshotId, group.plugin, [], {
-    outputStr: group.outputStr,
-    outputJson: group.outputJson,
+  const archiveResult = await uploadSnapshotArchiveResultFiles(server, snapshot_id, group.plugin, [], {
+    output_str: group.output_str,
+    output_json: group.output_json,
     status: 'started',
   });
-  if (!archiveResult.id) return false;
+  if (!archiveResult.id) throw new Error('Server did not confirm the artifact upload.');
 
   const filesToUpload = group.files.filter((file) => (
-    !outputFileAlreadyUploaded(file, archiveResult.output_files?.[file.outputPath])
+    !outputFileAlreadyUploaded(file, archiveResult.output_files?.[file.output_path])
   ));
   if (!filesToUpload.length) return false;
 
@@ -107,17 +107,17 @@ async function uploadSnapshotArtifactGroup(snapshot: Snapshot, group: SnapshotAr
   const chunkedFiles = filesToUpload.filter((file) => file.blob.size > archiveResultUploadChunkSize);
 
   if (directFiles.length) {
-    await addFilesToSnapshotArchiveResult(archiveResult.id, directFiles, {
-      outputStr: group.outputStr,
-      outputJson: group.outputJson,
+    await addFilesToSnapshotArchiveResult(server, archiveResult.id, directFiles, {
+      output_str: group.output_str,
+      output_json: group.output_json,
       status: chunkedFiles.length ? 'started' : 'succeeded',
     });
   }
 
   for (const [index, file] of chunkedFiles.entries()) {
-    await addFileToSnapshotArchiveResultChunked(archiveResult.id, file, {
-      outputStr: group.outputStr,
-      outputJson: group.outputJson,
+    await addFileToSnapshotArchiveResultChunked(server, archiveResult.id, file, {
+      output_str: group.output_str,
+      output_json: group.output_json,
       finalStatus: index + 1 === chunkedFiles.length ? 'succeeded' : 'started',
     });
   }
@@ -125,37 +125,49 @@ async function uploadSnapshotArtifactGroup(snapshot: Snapshot, group: SnapshotAr
   return true;
 }
 
-export async function uploadSnapshotCaptureArtifactsToArchiveBox(snapshot: Snapshot, archiveboxSnapshotId = snapshot.archiveboxSnapshotId || snapshot.id): Promise<{
+export async function uploadSnapshotCaptureArtifactsToArchiveBox(server: ServerDestination, snapshot: Snapshot, snapshot_id = snapshot.remote_copies?.[server.id]?.snapshot_id): Promise<{
   opfs: boolean;
 }> {
-  const previousSync = snapshotSyncLocks.get(snapshot.id) || Promise.resolve(emptySyncResult);
+  const previousSync = snapshotSyncLocks.get(`${server.id}:${snapshot.id}`) || Promise.resolve(emptySyncResult);
   const sync = previousSync
     .catch(() => emptySyncResult)
     .then(() => withSnapshotArtifacts(snapshot.id, async () => {
       const current = (await getSnapshots()).find((item) => item.id === snapshot.id);
-      return current ? uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked({ ...current, archiveboxSnapshotId }) : emptySyncResult;
+      if (!current || !snapshot_id) return emptySyncResult;
+      const copy = current.remote_copies?.[server.id];
+      const setStatus = async (status: 'accepted' | 'complete') => {
+        await mutateSnapshots((entries) => entries.map((item) => {
+          const latest = item.remote_copies?.[server.id];
+          if (item.id !== current.id || !latest || latest.snapshot_id !== snapshot_id || latest.crawl_id !== copy?.crawl_id) return item;
+          return { ...item, remote_copies: { ...item.remote_copies, [server.id]: { ...latest, status } } };
+        }));
+      };
+      await setStatus('accepted');
+      const result = await uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked(server, current, snapshot_id);
+      await setStatus('complete');
+      return result;
     }))
     .finally(() => {
-      if (snapshotSyncLocks.get(snapshot.id) === sync) {
-        snapshotSyncLocks.delete(snapshot.id);
+      if (snapshotSyncLocks.get(`${server.id}:${snapshot.id}`) === sync) {
+        snapshotSyncLocks.delete(`${server.id}:${snapshot.id}`);
       }
     });
-  snapshotSyncLocks.set(snapshot.id, sync);
+  snapshotSyncLocks.set(`${server.id}:${snapshot.id}`, sync);
   return sync;
 }
 
-async function uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked(snapshot: Snapshot): Promise<{
+async function uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked(server: ServerDestination, snapshot: Snapshot, snapshot_id?: string): Promise<{
   opfs: boolean;
 }> {
   let uploadedAny = false;
-  const config = await getConfig();
+  if (!snapshot_id) return emptySyncResult;
   const opfsFiles = getOpfsFilesForSnapshot(snapshot, await readSnapshotOpfsFiles(snapshot));
-  const archiveboxSnapshotId = snapshot.archiveboxSnapshotId || snapshot.id;
 
   for (const group of buildSnapshotArtifactGroups(snapshot, opfsFiles)) {
-    if (group.plugin === 'chrome_extension_screenshot' && !config.upload_screenshots_to_server) continue;
-    if (group.plugin === 'chrome_mhtml' && !config.upload_mhtml_to_server) continue;
-    const groupUploaded = await uploadSnapshotArtifactGroup(snapshot, group, archiveboxSnapshotId);
+    if (group.plugin === 'chrome_extension_screenshot' && !server.policy.upload_screenshots_to_server) continue;
+    if (group.plugin === 'chrome_mhtml' && !server.policy.upload_mhtml_to_server) continue;
+    if (group.plugin === 'chrome_extension_singlefile' && !server.policy.upload_singlefile_to_server) continue;
+    const groupUploaded = await uploadSnapshotArtifactGroup(server, snapshot, group, snapshot_id);
     uploadedAny = uploadedAny || groupUploaded;
   }
 

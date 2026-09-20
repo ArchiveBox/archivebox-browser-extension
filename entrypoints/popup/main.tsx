@@ -1,7 +1,8 @@
+import { defaultServers } from '@/src/lib/server_registry';
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { archiveBoxServerUrlMatches, hasServerHostPermission, supportsArchiveBoxApi, isArchiveablePageUrl, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
+import { archiveBoxServerUrlMatches, hasServerHostPermission, isArchiveablePageUrl, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { mhtmlUnsupportedMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
@@ -9,7 +10,7 @@ import { assertLocalCaptureStorageAvailable } from '@/src/lib/screenshotStorage'
 import { createSnapshot } from '@/src/lib/snapshots';
 import { getConfig, getSnapshots, mutateSnapshots } from '@/src/lib/storage';
 import { matchingTagSuggestions } from '@/src/lib/tags';
-import type { ArchiveDepth, RuntimeMessage, RuntimeResponse, Snapshot } from '@/src/lib/types';
+import type { ArchiveDepth, RuntimeMessage, RuntimeResponse, Snapshot, ServerDestination } from '@/src/lib/types';
 import { compactUuid } from '@/src/lib/uuid';
 import './style.css';
 
@@ -19,7 +20,7 @@ type ScreenshotCaptureState = {
   phase: 'idle' | 'visible' | 'capturing' | 'canceling';
   captured: number;
   total: number;
-  snapshotId?: string;
+  snapshot_id?: string;
 };
 type ActivePage = {
   favIconUrl?: string | null;
@@ -43,10 +44,11 @@ function crawlDepthOptions(): Array<{
 }
 
 async function getActivePage(): Promise<ActivePage> {
-  const { archivebox_server_url } = await getConfig();
+  const registry = await getConfig();
+  const archivebox_server_url = defaultServers(registry)[0]?.server || '';
   const extensionOrigin = browser.runtime.getURL('');
   const isOwnExtensionPage = (url = '') => url.startsWith(extensionOrigin);
-  const isArchiveablePage = (url = '') => isArchiveablePageUrl(url) && !archiveBoxServerUrlMatches(archivebox_server_url, url);
+  const isArchiveablePage = (url = '') => isArchiveablePageUrl(url) && !registry.servers.some((server) => server.server && archiveBoxServerUrlMatches(server.server, url));
   const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
   const tab = activeTab?.url && !isOwnExtensionPage(activeTab.url) && isArchiveablePage(activeTab.url)
     ? activeTab
@@ -112,6 +114,12 @@ function ArchiveBoxOverlay() {
   const [remoteStatus, setRemoteStatus] = useState<RemoteArchiveStatus>('not_archived');
   const [remoteDetail, setRemoteDetail] = useState('');
   const [crawlMenuOpen, setCrawlMenuOpen] = useState(false);
+  const [server, setServer] = useState<ServerDestination | null>(null);
+  const server_id = server?.id || '';
+  function destination(): ServerDestination {
+    if (!server) throw new Error(t("Server not configured"));
+    return server;
+  }
   const [faviconFailed, setFaviconFailed] = useState(false);
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [screenshotCapture, setScreenshotCapture] = useState<ScreenshotCaptureState>({
@@ -124,7 +132,7 @@ function ArchiveBoxOverlay() {
     const listener = (message: RuntimeMessage) => {
       if (message.type !== 'screenshot_capture_progress') return undefined;
       setScreenshotCapture((current) => {
-        if (current.snapshotId && current.snapshotId !== message.snapshotId) return current;
+        if (current.snapshot_id && current.snapshot_id !== message.snapshot_id) return current;
         const nextPhase = message.phase === 'scrolling'
           ? 'capturing'
           : message.phase === 'visible'
@@ -132,7 +140,7 @@ function ArchiveBoxOverlay() {
             : current.phase;
         return {
           phase: nextPhase,
-          snapshotId: message.snapshotId,
+          snapshot_id: message.snapshot_id,
           captured: message.captured,
           total: message.total,
         };
@@ -144,19 +152,21 @@ function ArchiveBoxOverlay() {
   }, []);
 
   async function refresh() {
-    const { archivebox_server_url } = await getConfig();
+    const configured = defaultServers(await getConfig())[0] || null;
+    setServer(configured);
+    const archivebox_server_url = configured?.server || '';
     const nextActivePage = activePage || await getActivePage();
     setActivePage(nextActivePage);
     const { currentSnapshot, snapshots } = await getCurrentSnapshot(nextActivePage);
     setSnapshot({ ...currentSnapshot });
     setDepth(currentSnapshot.depth ?? 0);
     setLocalStatus('saved');
-    setRemoteStatus(!archivebox_server_url ? 'unavailable' : currentSnapshot.archiveboxCrawlId ? 'previously_submitted' : 'not_archived');
+    setRemoteStatus(!archivebox_server_url ? 'unavailable' : currentSnapshot.remote_copies?.[configured?.id || ''] ? 'previously_submitted' : 'not_archived');
     setRemoteDetail(archivebox_server_url ? '' : t("Server not configured"));
     if (!archivebox_server_url) {
       setOk(false);
       setStatus(t("Saved locally. Server connection unavailable."));
-    } else if (currentSnapshot.archiveboxCrawlId) {
+    } else if (currentSnapshot.remote_copies?.[configured?.id || '']) {
       setOk(null);
       setStatus(t("Previously submitted. Server status has not been checked in this session."));
     }
@@ -164,7 +174,7 @@ function ArchiveBoxOverlay() {
   }
 
   async function ensureConfiguredServerPermission(requestPermission: boolean): Promise<void> {
-    const configuredServerUrl = (await getConfig()).archivebox_server_url;
+    const configuredServerUrl = destination().server;
     if (!configuredServerUrl) throw new Error(t("Server not configured"));
     if (requestPermission) {
       await requestServerHostPermission(configuredServerUrl);
@@ -176,40 +186,38 @@ function ArchiveBoxOverlay() {
     }
   }
 
-  async function ensureServerSnapshotId(snapshotId: string, latestSnapshot: Snapshot): Promise<Snapshot> {
-    if (latestSnapshot.archiveboxSnapshotId) return latestSnapshot;
-
-    const metadata = await syncArchiveBoxSnapshotMetadata(latestSnapshot);
-    const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
-    if (!metadataSnapshotId) return latestSnapshot;
-
-    const nextSnapshots = await mutateSnapshots((snapshots) => snapshots.map((item) => item.id === snapshotId
-      ? { ...item, archiveboxSnapshotId: metadataSnapshotId }
-      : item));
-    setSnapshot((current) => current?.id === snapshotId
-      ? { ...current, archiveboxSnapshotId: metadataSnapshotId }
-      : current);
-    return nextSnapshots.find((item) => item.id === snapshotId) || latestSnapshot;
+  async function ensureServerSnapshotId(snapshot_id: string, latestSnapshot: Snapshot): Promise<Snapshot> {
+    const connection = destination();
+    if (latestSnapshot.remote_copies?.[connection.id]?.snapshot_id) return latestSnapshot;
+    const metadata = await syncArchiveBoxSnapshotMetadata(connection, latestSnapshot);
+    if (!metadata.id) return latestSnapshot;
+    const entries = await mutateSnapshots((snapshots) => snapshots.map((item) => item.id === snapshot_id && item.remote_copies?.[connection.id]?.crawl_id === latestSnapshot.remote_copies?.[connection.id]?.crawl_id ? {
+      ...item, remote_copies: { ...item.remote_copies, [connection.id]: {
+        status: 'accepted', ...item.remote_copies?.[connection.id], submitted_to: new URL(connection.server).origin, snapshot_id: metadata.id,
+      } },
+    } : item));
+    const updated = entries.find((item) => item.id === snapshot_id) || latestSnapshot;
+    setSnapshot(updated);
+    return updated;
   }
 
   async function uploadCapturedArtifactIfArchived(
-    snapshotId: string,
+    snapshot_id: string,
     kind: 'screenshot' | 'mhtml' | 'singlefile',
     artifactLabel: string,
   ): Promise<void> {
-    const config = await getConfig();
-    if (!config.archivebox_server_url || !(await supportsArchiveBoxApi(config.archivebox_server_url))) return;
-    if (kind === 'screenshot' && !config.upload_screenshots_to_server) return;
-    if (kind === 'mhtml' && !config.upload_mhtml_to_server) return;
+    const connection = destination();
+    if (kind === 'screenshot' && !connection.policy.upload_screenshots_to_server) return;
+    if (kind === 'mhtml' && !connection.policy.upload_mhtml_to_server) return;
     const snapshots = await getSnapshots();
-    let latestSnapshot = snapshots.find((item) => item.id === snapshotId);
-    if (!latestSnapshot || (remoteStatus !== 'archived' && !latestSnapshot.archiveboxCrawlId)) return;
+    let latestSnapshot = snapshots.find((item) => item.id === snapshot_id);
+    if (!latestSnapshot || (remoteStatus !== 'archived' && !latestSnapshot.remote_copies?.[server_id]?.crawl_id)) return;
 
     try {
       setOk(null);
       setStatus(t("Uploading $1 to ArchiveBox Server...", artifactLabel));
-      latestSnapshot = await ensureServerSnapshotId(snapshotId, latestSnapshot);
-      await uploadSnapshotCaptureArtifactsToArchiveBox(latestSnapshot);
+      latestSnapshot = await ensureServerSnapshotId(snapshot_id, latestSnapshot);
+      await uploadSnapshotCaptureArtifactsToArchiveBox(destination(), latestSnapshot);
       setOk(true);
       setRemoteDetail('');
       setStatus(t("Saved local $1 and uploaded to ArchiveBox Server", artifactLabel));
@@ -218,22 +226,6 @@ function ArchiveBoxOverlay() {
       setOk(false);
       setRemoteDetail('');
       setStatus(t("Saved local $1. Failed to upload artifact: $2", artifactLabel, errorMessage));
-    }
-  }
-
-  async function uploadCurrentArtifactsIfArchived(snapshotId: string): Promise<void> {
-    const snapshots = await getSnapshots();
-    let latestSnapshot = snapshots.find((item) => item.id === snapshotId);
-    if (!latestSnapshot) return;
-
-    try {
-      latestSnapshot = await ensureServerSnapshotId(snapshotId, latestSnapshot);
-      await uploadSnapshotCaptureArtifactsToArchiveBox(latestSnapshot);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      setOk(false);
-      setRemoteDetail('');
-      setStatus(t("Saved URL. Failed to upload local artifacts: $1", errorMessage));
     }
   }
 
@@ -247,9 +239,9 @@ function ArchiveBoxOverlay() {
     await mutateSnapshots((items) => items.map((item) => item.id === currentSnapshot.id ? { ...item, tags, depth } : item));
     setSnapshot({ ...currentSnapshot });
     setLocalStatus('saved');
-    if (currentSnapshot.archiveboxCrawlId) {
+    if (currentSnapshot.remote_copies?.[server_id]?.snapshot_id) {
       try {
-        await syncArchiveBoxSnapshotTags(currentSnapshot.archiveboxSnapshotId || currentSnapshot.id, previousTags, tags);
+        await syncArchiveBoxSnapshotTags(destination(), currentSnapshot.remote_copies![server_id]!.snapshot_id!, previousTags, tags);
         setOk(true);
         setRemoteDetail('');
         setStatus(t("Updated tags on ArchiveBox Server"));
@@ -300,63 +292,25 @@ function ArchiveBoxOverlay() {
     }
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'archivebox_add',
+      server_id: destination().id,
       body: {
         urls: [url],
         tags,
         depth: archiveDepth,
-        snapshotIds: localSnapshotId ? [localSnapshotId] : [],
+        snapshot_ids: localSnapshotId ? [localSnapshotId] : [],
         titles: snapshot?.title ? [snapshot.title] : [],
       },
     });
     if (response.ok) {
-      const archiveboxSnapshotIdRaw = response.archivebox?.snapshot_ids?.[0] || '';
-      const archiveboxSnapshotId = archiveboxSnapshotIdRaw ? compactUuid(archiveboxSnapshotIdRaw) : '';
-      const archiveboxCrawlId = response.archivebox?.crawl_id;
-      if (localSnapshotId && archiveboxSnapshotId && archiveboxSnapshotId !== localSnapshotId) {
-        const errorMessage = t("ArchiveBox returned a different snapshot ID than the extension sent.");
-        setOk(false);
-        setRemoteStatus('sync_failed');
-        setRemoteDetail(errorMessage);
-        setStatus(t("Saved locally. Failed to archive on server: $1", errorMessage));
-        return;
-      }
-      if (localSnapshotId && archiveboxCrawlId) {
-        const nextSnapshots = await mutateSnapshots((snapshots) => snapshots.map((item) => item.id === localSnapshotId
-          ? {
-              ...item,
-              archiveboxCrawlId,
-              ...(archiveboxSnapshotId ? { archiveboxSnapshotId } : {}),
-            }
-          : item));
-        setSnapshot((current) => current?.id === localSnapshotId
-          ? {
-              ...current,
-              archiveboxCrawlId,
-              ...(archiveboxSnapshotId ? { archiveboxSnapshotId } : {}),
-            }
-          : current);
-        const syncedSnapshot = nextSnapshots.find((item) => item.id === localSnapshotId);
-        if (syncedSnapshot) {
-          const metadata = await syncArchiveBoxSnapshotMetadata(syncedSnapshot);
-          const metadataSnapshotId = metadata.id ? compactUuid(metadata.id) : '';
-          if (metadataSnapshotId) {
-            await mutateSnapshots((snapshots) => snapshots.map((item) => item.id === localSnapshotId
-              ? { ...item, archiveboxSnapshotId: metadataSnapshotId }
-              : item));
-            setSnapshot((current) => current?.id === localSnapshotId
-              ? { ...current, archiveboxSnapshotId: metadataSnapshotId }
-              : current);
-          }
-        }
+      if (localSnapshotId) {
+        const updated = (await getSnapshots()).find((item) => item.id === localSnapshotId);
+        if (updated) setSnapshot(updated);
       }
       setOk(true);
       setRemoteDetail('');
       setRemoteStatus('archived');
       setStatus(t("Submitted to ArchiveBox Server at depth $1", archiveDepth));
       console.info(`ArchiveBox: saved ${url} to ArchiveBox server`);
-      if (localSnapshotId && response.archivebox) {
-        await uploadCurrentArtifactsIfArchived(localSnapshotId);
-      }
     } else {
       const errorMessage = response.errorMessage || response.error || t("Unknown error");
       setOk(false);
@@ -386,10 +340,10 @@ function ArchiveBoxOverlay() {
   }, []);
 
   useEffect(() => {
-    if (snapshot && !snapshot.archiveboxCrawlId) {
+    if (snapshot && server && !snapshot.remote_copies?.[server.id]) {
       sendToArchiveBox(snapshot.url, snapshot.tags, snapshot.depth ?? 0, snapshot.id);
     }
-  }, [snapshot?.id]);
+  }, [snapshot?.id, server?.id]);
 
   useEffect(() => {
     setFaviconFailed(false);
@@ -467,7 +421,8 @@ function ArchiveBoxOverlay() {
     }
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'archivebox_remove',
-      url: snapshot.url,
+      server_id: destination().id,
+      snapshot_id: snapshot.id,
     });
     if (response.ok) {
       setOk(null);
@@ -498,6 +453,7 @@ function ArchiveBoxOverlay() {
     }
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'open_archivebox_snapshot',
+      server_id: destination().id,
       url: snapshot.url,
     });
     if (!response.ok) {
@@ -572,8 +528,8 @@ function ArchiveBoxOverlay() {
   }
 
   async function cancelScreenshotCapture() {
-    const snapshotId = screenshotCapture.snapshotId || snapshot?.id;
-    if (!snapshotId) return;
+    const snapshot_id = screenshotCapture.snapshot_id || snapshot?.id;
+    if (!snapshot_id) return;
     setScreenshotCapture((current) => ({
       ...current,
       phase: 'canceling',
@@ -581,7 +537,7 @@ function ArchiveBoxOverlay() {
     setStatus(t("Canceling screenshot capture..."));
     await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'cancel_snapshot_screenshot',
-      snapshotId,
+      snapshot_id,
     }).catch(() => undefined);
   }
 
@@ -659,7 +615,7 @@ function ArchiveBoxOverlay() {
       window.removeEventListener('touchmove', handleTouchMove, { capture: true });
       window.removeEventListener('keydown', handleKey, { capture: true });
     };
-  }, [screenshotCapture.phase, screenshotCapture.snapshotId, snapshot?.id]);
+  }, [screenshotCapture.phase, screenshotCapture.snapshot_id, snapshot?.id]);
 
   async function captureLocalArtifact(kind: 'screenshot' | 'mhtml' | 'singlefile') {
     if (kind === 'screenshot' && (screenshotCapture.phase === 'capturing' || screenshotCapture.phase === 'canceling')) {
@@ -698,13 +654,13 @@ function ArchiveBoxOverlay() {
       setOk(null);
       setScreenshotCapture({
         phase: 'visible',
-        snapshotId: currentSnapshot.id,
+        snapshot_id: currentSnapshot.id,
         captured: 0,
         total: 1,
       });
       const visibleResponse = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
         type: 'capture_snapshot_screenshot',
-        snapshotId: currentSnapshot.id,
+        snapshot_id: currentSnapshot.id,
         tabId: nextActivePage.tabId,
         windowId: nextActivePage.windowId,
         fullPage: false,
@@ -726,7 +682,7 @@ function ArchiveBoxOverlay() {
       setStatus(t("Saved local $1", visibleLabel));
       setScreenshotCapture({
         phase: 'visible',
-        snapshotId: currentSnapshot.id,
+        snapshot_id: currentSnapshot.id,
         captured: 1,
         total: 1,
       });
@@ -755,13 +711,13 @@ function ArchiveBoxOverlay() {
       setOk(null);
       setScreenshotCapture({
         phase: 'capturing',
-        snapshotId: currentSnapshot.id,
+        snapshot_id: currentSnapshot.id,
         captured: 1,
         total: 2,
       });
       const fullPageResponse = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
         type: 'capture_snapshot_screenshot',
-        snapshotId: currentSnapshot.id,
+        snapshot_id: currentSnapshot.id,
         tabId: nextActivePage.tabId,
         windowId: nextActivePage.windowId,
         fullPage: true,
@@ -795,7 +751,7 @@ function ArchiveBoxOverlay() {
       type: kind === 'mhtml'
           ? 'capture_snapshot_mhtml'
           : 'capture_snapshot_singlefile',
-      snapshotId: currentSnapshot.id,
+      snapshot_id: currentSnapshot.id,
       tabId: nextActivePage.tabId,
       windowId: nextActivePage.windowId,
     });

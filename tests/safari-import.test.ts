@@ -1,6 +1,5 @@
 import { chromium, expect, test, type Browser } from '@playwright/test';
 import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 import { existsSync } from 'node:fs';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -116,12 +115,17 @@ test('imports Safari exports, separates Reading List, and preserves saved URL de
     await expect(page.getByRole('button', { name: 'Crawl', exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('popup-touch.png') });
   } finally {
-    await browserInstance?.close();
-    if (processHandle.exitCode === null) {
-      const exited = once(processHandle, 'exit');
-      processHandle.kill('SIGTERM');
+    if (processHandle.exitCode === null && processHandle.signalCode === null) {
+      const exited = new Promise<void>((resolve) => processHandle.once('exit', () => resolve()));
+      if (browserInstance?.isConnected()) {
+        // CDP disconnect alone leaves Chromium's children writing the profile.
+        // Ask the browser to shut down gracefully before deleting its files.
+        const shutdown = await browserInstance.newBrowserCDPSession();
+        await shutdown.send('Browser.close');
+      } else processHandle.kill('SIGTERM');
       await exited;
     }
+    await browserInstance?.close();
     await rm(profile, { recursive: true, force: true });
   }
 });
