@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { chromium, expect } from '@playwright/test';
 
 const root = fileURLToPath(new URL('../docs/site/_site/', import.meta.url));
-const prefix = '/';
+const baseIndex = process.argv.indexOf('--baseurl');
+const prefix = `/${(baseIndex < 0 ? '' : process.argv[baseIndex + 1] ?? '').replace(/^\/+|\/+$/g, '')}`.replace(/\/$/, '') + '/';
 const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png' };
 const server = createServer(async (request, response) => {
   try {
@@ -67,10 +68,15 @@ try {
         await expect(page.locator('#screenshots')).toBeVisible();
         const previews = page.locator(`main img[src^="${prefix}"]`);
         assert(await previews.count() > 0, 'README needs a generated screenshot preview');
-        for (const image of await previews.all()) {
-          await image.scrollIntoViewIfNeeded();
-          await expect.poll(() => image.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
-        }
+        // Offscreen marquee cards stay lazy; decode their real URLs directly.
+        await previews.evaluateAll(async (images) => {
+          for (const source of new Set(images.map((image) => image.src))) {
+            const image = new Image();
+            image.src = source;
+            await image.decode();
+            if (!image.naturalWidth) throw new Error(`Broken screenshot: ${source}`);
+          }
+        });
       }
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({ path: path.join(evidence, `${route ? 'gallery' : 'home'}-${width}.png`) });
