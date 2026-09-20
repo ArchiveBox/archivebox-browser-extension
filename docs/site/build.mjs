@@ -62,7 +62,10 @@ function rewrite(url, image = false) {
 const markdown = marked.parse(readme, { renderer, gfm: true }).replace(/\b(href|src)=(['"])(.*?)\2/g, (_, attribute, quote, url) => `${attribute}=${quote}${escape(rewrite(url, attribute === 'src'))}${quote}`);
 function page(title, body, gallery = false) {
   const canonical = 'https://extension.archivebox.io/' + (gallery ? 'screenshots/' : '');
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#9b2854"><title>${escape(title)}</title><link rel="canonical" href="${canonical}"><meta property="og:type" content="website"><meta property="og:url" content="${canonical}"><meta property="og:title" content="${escape(title)}"><meta property="og:image" content="https://extension.archivebox.io/icon.png"><link rel="icon" href="${base}icon.png"><link rel="stylesheet" href="${base}style.css?v=${siteRevision}"></head><body><a class="skip-link" href="#content">Skip to content</a>${siteHeader}<div class="page-layout"><main id="content" class="${gallery ? 'gallery' : 'markdown-body'}">${body}</main></div>${footerTemplate.replaceAll('__BASE__', base).replaceAll('__REVISION__', siteRevision)}<script src="${base}site.js?v=${siteRevision}" defer></script></body></html>`;
+  const description = gallery
+    ? 'Explore ArchiveBox Browser Extension screenshots: save links, organize your collection, and connect your own server.'
+    : 'Save links and browser tabs to your own ArchiveBox server. Keep a lasting copy of the web from Chrome, Firefox, Edge, and Safari.';
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#9b2854"><title>${escape(title)}</title><meta name="description" content="${escape(description)}"><link rel="canonical" href="${canonical}"><meta property="og:type" content="website"><meta property="og:url" content="${canonical}"><meta property="og:title" content="${escape(title)}"><meta property="og:image" content="https://extension.archivebox.io/assets/social-card.png"><meta property="og:image:alt" content="ArchiveBox — preserve the web"><link rel="icon" href="${base}icon.png"><link rel="stylesheet" href="${base}style.css?v=${siteRevision}"></head><body><a class="skip-link" href="#content">Skip to content</a>${siteHeader}<div class="page-layout"><main id="content" class="${gallery ? 'gallery' : 'markdown-body'}">${body}</main></div>${footerTemplate.replaceAll('__BASE__', base).replaceAll('__REVISION__', siteRevision)}<script src="${base}site.js?v=${siteRevision}" defer></script></body></html>`;
 }
 const gallery = `<h1>Screenshots</h1><p class="provenance">Version ${escape(manifest.version)} · <a href="${repo}/commit/${manifest.revision}">${manifest.revision.slice(0, 12)}</a> · <time datetime="${escape(manifest.generatedAt)}">${escape(manifest.generatedAt)}</time></p><div class="profile-switch" role="group" aria-label="Screenshot viewport">${profiles.map((profile) => `<button type="button" data-profile="${profile}" aria-pressed="${profile === 'desktop'}">${profile[0].toUpperCase() + profile.slice(1)}</button>`).join('')}</div>${manifest.screenshots.map((capture) => `<article class="capture" id="${escape(capture.id)}"><h2>${escape(capture.title)}</h2><p class="capture-meta"><code>${escape(capture.url)}</code> · <a href="${capture.source ? `${repo}/blob/${manifest.revision}/${escape(capture.source)}` : escape(capture.url)}">${capture.source ? 'View source' : 'View page'}</a></p>${capture.images.map((image) => `<figure data-viewport="${image.name}"><a class="screenshot-frame" href="${base}screenshots/${escape(image.file)}?v=${manifest.revision}"><img src="${base}screenshots/${escape(image.file)}?v=${manifest.revision}" alt="${escape(capture.title)} — ${image.name}" width="${image.imageWidth}" height="${image.imageHeight}" loading="lazy"></a><figcaption>${image.name} · ${image.width} × ${image.height} viewport · <a href="${base}screenshots/${escape(image.file)}?v=${manifest.revision}">Full image</a></figcaption></figure>`).join('')}</article>`).join('')}`;
 await rm(output, { recursive: true, force: true });
@@ -74,6 +77,7 @@ for (const capture of manifest.screenshots) for (const image of capture.images) 
   await cp(path.join(site, 'screenshots', image.file), path.join(output, 'screenshots', image.file));
 }
 await cp(path.join(root, 'public/icon/128.png'), path.join(output, 'icon.png'));
+await cp(path.join(site, 'assets'), path.join(output, 'assets'), { recursive: true });
 for (const asset of assets) {
   const resolved = path.resolve(root, asset);
   if (!resolved.startsWith(root)) throw new Error(`Asset outside repository: ${asset}`);
@@ -81,7 +85,7 @@ for (const asset of assets) {
   await cp(resolved, path.join(output, asset));
 }
 for (const file of ['CNAME', 'style.css', 'site.js']) await cp(path.join(site, file), path.join(output, file));
-await writeFile(path.join(output, 'index.html'), page('ArchiveBox Browser Extension', markdown));
+await writeFile(path.join(output, 'index.html'), page('ArchiveBox Browser Extension', markdown.replace(/<div class="homepage-screenshots">[\s\S]*?<\/div>/, '<!-- ARCHIVEBOX:MARQUEE -->')));
 await writeFile(path.join(output, 'screenshots/index.html'), page('Screenshots · ArchiveBox Browser Extension', gallery, true));
 await writeFile(path.join(output, '.nojekyll'), '');
 execFileSync('uv', ['run', '--no-project', 'python', path.join(root, '.github/pages/site.py'), 'render', output, '--baseurl', base], { cwd: root, stdio: 'inherit' });

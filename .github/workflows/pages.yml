@@ -43,7 +43,7 @@ jobs:
       # BEGIN REPOSITORY-SPECIFIC BUILD
       - uses: astral-sh/setup-uv@v7
       - name: Restore latest complete screenshots
-        run: uv run --no-project python docs/site/restore-screenshots.py extension docs/site/screenshots
+        run: uv run --no-project python docs/site/restore-screenshots.py docs/site/screenshots
         env:
           GH_TOKEN: ${{ github.token }}
       - uses: pnpm/action-setup@v4
