@@ -1,0 +1,14 @@
+scripts/verify-site.mjs
+  h_923c208e183a7b 10-11,71-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "504305c4d8e44bd72dfaedbc0c0acf5b60d858d0",
+  "prompts": {},
+  "humans": {
+    "h_923c208e183a7b": {
+      "author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
