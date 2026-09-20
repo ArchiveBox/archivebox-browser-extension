@@ -1,0 +1,14 @@
+src/lib/archivebox.ts
+  h_923c208e183a7b 398-402,404,462-465,467
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "cb639c2c51ebeecf023416e084f2d98810e58a1a",
+  "prompts": {},
+  "humans": {
+    "h_923c208e183a7b": {
+      "author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
