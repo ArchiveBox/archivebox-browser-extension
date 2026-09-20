@@ -7,7 +7,9 @@
 
 html,
 body {
-  width: min(560px, 100vw);
+  /* Desktop popovers measure this width to create their viewport. Using vw
+     here makes Safari size the document against its initial tiny viewport. */
+  width: 560px;
   min-height: 0;
   margin: 0;
   background: #9f4e4e;
@@ -17,6 +19,14 @@ body {
 
 #root {
   width: 100%;
+}
+
+/* Touch browsers present the popup in an already-sized sheet (iPhone/iPad). */
+@media (pointer: coarse) {
+  html,
+  body {
+    width: min(560px, 100vw);
+  }
 }
 
 .archivebox-overlay {

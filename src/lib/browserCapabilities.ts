@@ -3,6 +3,7 @@ import { t } from './i18n';
 const browserTarget = import.meta.env.BROWSER;
 
 export const extensionBrowserName = browserTarget || t("unknown browser");
+export const supportsDirectBrowserImport = browserTarget !== 'safari';
 
 export const supportsMhtmlCapture = browserTarget === 'chrome' || browserTarget === 'edge';
 

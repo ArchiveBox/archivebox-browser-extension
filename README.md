@@ -30,6 +30,7 @@ This is a browser extension that lets you send individual browser tabs or all UR
 - 🏷️ Search, sort, tag, and manage your saved URLs in one place.
 - ⚙️ Automatically archive pages that match your chosen URL patterns, with allowlists and denylists.
 - 📥 Review and bulk import URLs from browser history or bookmarks on Chrome, Edge, and Firefox.
+- 🧭 Import Safari bookmarks, Reading List, and history from Safari's exported ZIP, HTML, or JSON files.
 - 🖼️ Keep local screenshots, including full-page captures when permission is granted.
 - 📄 Save local MHTML copies of pages. (Chrome and Edge.)
 - 📑 Save HTML copies with the optional SingleFile extension installed and connected.
@@ -37,6 +38,13 @@ This is a browser extension that lets you send individual browser tabs or all UR
 - 👤 Choose cookies and browser settings to sync to an ArchiveBox authentication profile for sites that require a login.
 - 🧹 Choose how long to keep local copies, including cleanup after successful submission to your server.
 - 🌐 Use the extension in English, Spanish, or Simplified Chinese.
+
+## Importing from Safari
+
+Safari does not expose bulk bookmarks or history through its WebExtension APIs.
+Use Apple's [browsing data export](https://developer.apple.com/documentation/safariservices/importing-data-exported-from-safari): on Mac choose **File → Export Browsing Data to File**; on iPhone/iPad choose **Settings → Apps → Safari → Export**. Select bookmarks, Reading List, and history as available.
+
+In **Extension options → Bulk Import URLs**, choose which Safari data to import and the history date range, then select the exported ZIP (or extracted HTML/JSON files). Review the URLs, select the ones to keep, and click **Import Selected**. Existing saved URLs are marked as duplicates. History retains its original visit time. Files are parsed locally, passwords/payment cards are ignored, and imports enter the same saved URL list used by the other import sources. Use the existing Sync actions to submit them to your server.
 
 ## Local Captures
 

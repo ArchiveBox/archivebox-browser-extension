@@ -20,8 +20,8 @@ import { strToU8, zipSync } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { addToArchiveBox, archiveBoxServerUrlMatches, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
-import { defaultSingleFileExtensionId, defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
-import { loadBookmarkSnapshots, loadHistorySnapshots } from '@/src/lib/browserData';
+import { defaultSingleFileExtensionId, defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture, supportsDirectBrowserImport } from '@/src/lib/browserCapabilities';
+import { loadBookmarkSnapshots, loadHistorySnapshots, loadSafariExportSnapshots, type SafariImportSource } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
 import {
   archiveboxExportBaseName,
@@ -787,6 +787,8 @@ function OptionsMain() {
   const [cookieFilter, setCookieFilter] = useState('');
   const [cookieProfileMenuOpen, setCookieProfileMenuOpen] = useState(false);
   const [importItems, setImportItems] = useState<ImportItem[]>([]);
+  const [safariImportSource, setSafariImportSource] = useState<SafariImportSource>('all');
+  const [importLoading, setImportLoading] = useState(false);
   const [importFilter, setImportFilter] = useState('');
   const [showNewOnly, setShowNewOnly] = useState(false);
   const [importStartDate, setImportStartDate] = useState(dateInputValue(yesterday));
@@ -1534,6 +1536,20 @@ function OptionsMain() {
     setPersonasState((await getPersonas()).personas);
   }
 
+  async function loadSafariFiles(files: File[]) {
+    if (!files.length) return;
+    setImportLoading(true);
+    setImportItems([]);
+    setImportStatus({ kind: 'idle', text: t('Reading Safari export…') });
+    try {
+      const items = await loadSafariExportSnapshots(files, safariImportSource, importStartDate, importEndDate, new Set(snapshots.map(snapshot => snapshot.url)));
+      setImportItems(items);
+      setImportStatus({ kind: 'success', text: t('Loaded $1 Safari URLs', items.length) });
+    } catch (error) {
+      setImportStatus({ kind: 'error', text: (error as Error).message });
+    } finally { setImportLoading(false); }
+  }
+
   async function loadHistory() {
     if (!browser.runtime.getManifest().optional_permissions?.includes('history')) {
       setImportStatus({ kind: 'warning', text: t("History import is not supported in this browser.") });
@@ -1615,7 +1631,6 @@ function OptionsMain() {
     const imported = selected.map(({ selected: _selected, isNew: _isNew, ...snapshot }) => ({
       ...snapshot,
       id: uuidv7(),
-      timestamp: new Date().toISOString(),
       tags: [...new Set([...snapshot.tags, ...tagsToAdd])],
     }));
     await persistSnapshots((snapshots) => [...snapshots, ...imported]);
@@ -2369,12 +2384,36 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
       {tab === 'import' && (
         <section className="panel">
           <SectionHeader title={t("Bulk Import URLs")} detail={t("Import URLs from browser history or bookmarks into the saved URL list.")} />
+          <details open={!supportsDirectBrowserImport}>
+            <summary>{t('Import a Safari export')}</summary>
+            <p>{t('Safari requires a file export to import existing bookmarks, Reading List, or history. On Mac, choose File → Export Browsing Data to File. On iPhone or iPad, open Settings → Apps → Safari → Export. Select Bookmarks, Reading List, and History as available.')}</p>
+            <p>{t('Choose the data and history dates below, then select the exported ZIP, bookmark HTML, or history JSON files. Files are read locally; only URLs you select are imported. Passwords and payment cards are ignored.')}</p>
+            <div className="toolbar">
+              <label>{t('Safari data to import')}
+                <select value={safariImportSource} disabled={importLoading} onChange={event => setSafariImportSource(event.currentTarget.value as SafariImportSource)}>
+                  <option value="all">{t('Bookmarks, Reading List, and History')}</option>
+                  <option value="bookmarks">{t('Bookmarks')}</option>
+                  <option value="readingList">{t('Reading List')}</option>
+                  <option value="history">{t('History')}</option>
+                </select>
+              </label>
+              <label>{t('Import Safari Export')}
+                <input type="file" accept=".zip,.html,.htm,.json" multiple disabled={importLoading} onChange={event => {
+                  const files = Array.from(event.currentTarget.files || []);
+                  event.currentTarget.value = '';
+                  void loadSafariFiles(files);
+                }} />
+              </label>
+            </div>
+          </details>
           <div className="toolbar">
-            <button onClick={loadHistory}>{t("Import from Browser History")}</button>
-            <button onClick={loadBookmarks}>{t("Import from Browser Bookmarks")}</button>
-            <button onClick={loadTabManagerPlus}>{t("Import from Tab Manager Plus")}</button>
-            <input type="date" value={importStartDate} onChange={(event) => setImportStartDate(event.currentTarget.value)} />
-            <input type="date" value={importEndDate} onChange={(event) => setImportEndDate(event.currentTarget.value)} />
+            {supportsDirectBrowserImport && <>
+              <button disabled={importLoading} onClick={loadHistory}>{t("Import from Browser History")}</button>
+              <button disabled={importLoading} onClick={loadBookmarks}>{t("Import from Browser Bookmarks")}</button>
+              <button disabled={importLoading} onClick={loadTabManagerPlus}>{t("Import from Tab Manager Plus")}</button>
+            </>}
+            <input type="date" aria-label={t('History start date')} disabled={importLoading} value={importStartDate} onChange={(event) => setImportStartDate(event.currentTarget.value)} />
+            <input type="date" aria-label={t('History end date')} disabled={importLoading} value={importEndDate} onChange={(event) => setImportEndDate(event.currentTarget.value)} />
             <label className="search-field">
               <Search size={14} aria-hidden="true" />
               <input value={importFilter} onChange={(event) => setImportFilter(event.currentTarget.value)} placeholder={t("Filter URLs and titles")} />
@@ -2411,7 +2450,7 @@ archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
               ))}
             </tbody>
           </table>
-          {importItems.length === 0 && <EmptyState title={t("No import source loaded")} detail={t("Choose browser history or bookmarks to review URLs before importing.")} />}
+          {importItems.length === 0 && <EmptyState title={t("No import source loaded")} detail={supportsDirectBrowserImport ? t("Choose browser history or bookmarks to review URLs before importing.") : t('Choose a Safari export file to review URLs before importing.')} />}
         </section>
       )}
 

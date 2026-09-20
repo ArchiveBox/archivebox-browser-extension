@@ -1,0 +1,17 @@
+{
+  "metadata": {
+    "browser_name": "Safari",
+    "browser_version": "27.0",
+    "data_type": "history",
+    "export_time_usec": 1789894152910003,
+    "schema_version": 1
+  },
+  "history": [
+    {
+      "url": "https://example.com/?archivebox-safari-import=20260920",
+      "time_usec": 1789894045387182,
+      "visit_count": 1,
+      "title": "Example Domain"
+    }
+  ]
+}

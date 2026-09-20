@@ -37,3 +37,9 @@ jobs:
       - run: pnpm compile
       - name: Build production store bundle
         run: pnpm exec wxt zip -b ${{ matrix.browser }} --mv3
+      - name: Install browser for import and layout regression tests
+        if: matrix.browser == 'chrome'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Test real extension import and layout flows
+        if: matrix.browser == 'chrome'
+        run: pnpm exec playwright test tests/safari-import.test.ts tests/options-responsive.test.ts
