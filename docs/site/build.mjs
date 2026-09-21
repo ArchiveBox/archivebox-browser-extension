@@ -109,5 +109,6 @@ for (const language of languages) {
   await writeFile(path.join(target, 'index.html'), source.replaceAll('__BASE__', base));
 }
 const sitemapUrls = ['', ...languages.map((language) => `${language}/`), 'screenshots/'];
+await writeFile(path.join(output, 'robots.txt'), 'User-agent: *\nAllow: /\n\nSitemap: https://extension.archivebox.io/sitemap.xml\n');
 await writeFile(path.join(output, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${sitemapUrls.map((route) => `<url><loc>https://extension.archivebox.io/${route}</loc></url>`).join('')}</urlset>\n`);
 console.log(`Built README and ${manifest.screenshots.length} screenshot views at ${output} (${base})`);
