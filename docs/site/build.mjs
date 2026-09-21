@@ -19,12 +19,12 @@ if (!manifest.version || !/^[a-f0-9]{40}$/.test(manifest.revision) || !Number.is
 const profiles = ['desktop', 'tablet', 'mobile'];
 const ids = new Set();
 for (const capture of manifest.screenshots) {
-  if (!capture.id || ids.has(capture.id) || !capture.title || !capture.url || (!capture.source && !/^https:\/\//.test(capture.url))) throw new Error('Screenshot entries need unique IDs, titles, URLs, and source paths');
+  if (!/^[a-z][a-z0-9-]*$/.test(capture.id) || ids.has(capture.id) || !capture.title || !capture.url || (!capture.source && !/^https:\/\//.test(capture.url))) throw new Error('Screenshot entries need unique IDs, titles, URLs, and source paths');
   ids.add(capture.id);
   if (capture.images?.length !== profiles.length) throw new Error(`Incomplete screenshot profiles: ${capture.id}`);
   for (const profile of profiles) {
     const image = capture.images.find((entry) => entry.name === profile);
-    if (!image || !Number.isInteger(image.width) || !Number.isInteger(image.height) || image.width <= 0 || image.height <= 0 || !/^[\w./-]+\.png$/.test(image.file) || image.file.split('/').includes('..')) throw new Error(`Invalid screenshot: ${capture.id}/${profile}`);
+    if (!image || !Number.isInteger(image.width) || !Number.isInteger(image.height) || image.width <= 0 || image.height <= 0 || image.file !== `${capture.id}-${profile}.png`) throw new Error(`Invalid screenshot: ${capture.id}/${profile}`);
     if (!Number.isInteger(image.imageWidth) || !Number.isInteger(image.imageHeight) || image.imageWidth <= 0 || image.imageHeight <= 0) throw new Error(`Missing image dimensions: ${image.file}`);
     if (!(await stat(path.join(site, 'screenshots', image.file))).isFile()) throw new Error(`Missing screenshot: ${image.file}`);
   }
