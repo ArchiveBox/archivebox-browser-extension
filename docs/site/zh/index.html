@@ -85,7 +85,7 @@
 <h2 id="importing-from-safari">从 Safari 导入</h2>
 <p>Safari 不通过 WebExtension API 暴露批量书签或历史记录。
 使用 Apple 的 <a href="https://developer.apple.com/documentation/safariservices/importing-data-exported-from-safari">浏览数据导出</a>：在 Mac 上选择 <strong>文件 → 将浏览数据导出为文件</strong>；在 iPhone/iPad 上选择 <strong>Settings → 应用 → Safari → Export</strong>。选择书签、阅读列表和历史记录（如果可用）。</p>
-<p>In <strong>扩展选项 → 批量导入 URL</strong>，选择要导入的 Safari 数据和历史记录日期范围，然后选择导出的 ZIP（或解压后的 HTML/JSON 文件）。检查 URL，选择要保留的项目，然后点击 <strong>导入所选内容</strong>。已有的已保存 URL 会标记为重复项。历史记录保留原始访问时间。文件在本地解析，密码和支付卡会被忽略，导入内容会进入与其他导入源相同的已保存 URL 列表。使用现有的同步操作将其提交到服务器。</p>
+<p>在 <strong>扩展选项 → 批量导入 URL</strong>，选择要导入的 Safari 数据和历史记录日期范围，然后选择导出的 ZIP（或解压后的 HTML/JSON 文件）。检查 URL，选择要保留的项目，然后点击 <strong>导入所选内容</strong>。已有的已保存 URL 会标记为重复项。历史记录保留原始访问时间。文件在本地解析，密码和支付卡会被忽略，导入内容会进入与其他导入源相同的已保存 URL 列表。使用现有的同步操作将其提交到服务器。</p>
 <h2 id="local-captures">本地捕获</h2>
 <p>在选项页面启用本地捕获保存后，扩展会在显示弹窗前将捕获产物存储在浏览器扩展本地 OPFS 中：</p>
 <ul>
@@ -97,13 +97,13 @@
 <ol>
 <li>设置一个 <a href="https://github.com/ArchiveBox/ArchiveBox#quickstart">ArchiveBox</a> 并确保浏览机器可以访问它</li>
 <li>在 ArchiveBox 0.9.0 中打开 <strong>管理员 → API → API 密钥 → 创建 API 密钥</strong>，创建密钥并复制它。</li>
-<li>打开 <strong>扩展选项 → 配置</strong>，将密钥粘贴到 <strong>API Key</strong>，然后输入你的 ArchiveBox 服务器 URL（例如 <code>https://archivebox.example.com</code>），在 <strong>服务器 URL</strong>。保存配置并测试连接。 <img alt="Extension configuration" src="__BASE__screenshots/configuration-desktop.png?v=091b56eea7eef2ac4188574b837f966361cea0f8" width="720"/></li>
+<li>打开 <strong>扩展选项 → 配置</strong>，将密钥粘贴到 <strong>API 密钥</strong>，然后输入你的 ArchiveBox 服务器 URL（例如 <code>https://archivebox.example.com</code>），在 <strong>服务器 URL</strong>。保存配置并测试连接。 <img alt="Extension configuration" src="__BASE__screenshots/configuration-desktop.png?v=091b56eea7eef2ac4188574b837f966361cea0f8" width="720"/></li>
 <li>✅ <em>右键点击任意页面并选择来测试 <code>Save to ArchiveBox</code>，或点击菜单栏中的扩展图标。</em> <img alt="ArchiveBox popup" src="__BASE__screenshots/popup-desktop.png?v=091b56eea7eef2ac4188574b837f966361cea0f8" width="560"/></li>
 </ol>
 <hr/>
 <h2 id="development">开发</h2>
 <p><em>✨ 最初由以下人员贡献 <a href="https://github.com/tjhorner">TJ Horner (@tjhorner)</a>，现由以下人员维护： <a href="https://github.com/benmuth">@benmuth</a> 以及 <a href="https://github.com/ArchiveBox">ArchiveBox</a> 团队。</em></p>
-<p>如果你希望为此扩展贡献代码（或只为自己构建），需要下载并安装 <a href="https://nodejs.org/en/">Node.js</a> and <a href="https://pnpm.io/">pnpm</a>.</p>
+<p>如果你希望为此扩展贡献代码（或只为自己构建），需要下载并安装 <a href="https://nodejs.org/en/">Node.js</a> 和 <a href="https://pnpm.io/">pnpm</a>.</p>
 <pre><code class="language-bash">git clone https://github.com/ArchiveBox/archivebox-browser-extension
 cd archivebox-browser-extension/
 
@@ -131,9 +131,9 @@ node scripts/test-retention-live.mjs
 <ul>
 <li>2026-05 扩展 v3.2.1 添加 ArchiveBox 0.9 persona 同步和服务器主机权限修复</li>
 <li>2026-05 扩展 v3.2.0 迁移到 WXT、React、TypeScript、Manifest v3、本地截图捕获、Chrome / Edge MHTML 捕获和 SingleFile HTML 捕获</li>
-<li>2025-03 全新 Manifest v3 <a href="https://github.com/ArchiveBox/archivebox-browser-extension/releases/tag/v2.1.3">Extension v2.1.3</a> 发布</li>
+<li>2025-03 全新 Manifest v3 <a href="https://github.com/ArchiveBox/archivebox-browser-extension/releases/tag/v2.1.3">扩展 v2.1.3</a> 发布</li>
 <li>2024-11 开发 <a href="https://github.com/ArchiveBox/archivebox-browser-extension/pull/31">开始</a> 在具有更高级 UI 和标签选项的 v2 扩展上</li>
-<li>2024-01 扩展仓库从 <code>tjhorner/archivebox-exporter</code> to <code>Archivebox/archivebox-browser-extension</code></li>
+<li>2024-01 扩展仓库从 <code>tjhorner/archivebox-exporter</code> 到 <code>Archivebox/archivebox-browser-extension</code></li>
 <li>2021-09 ArchiveBox v0.6.2 正式支持扩展，不再需要运行 <code>:dev</code> 分支</li>
 <li>2021-07 初始扩展 <a href="https://github.com/ArchiveBox/ArchiveBox/issues/577#issuecomment-872915877">发布</a> 在 Chrome 和 Mozilla 网店中</li>
 <li>2021-06 <a href="https://github.com/tjhorner">@tjhorner</a> <a href="https://github.com/ArchiveBox/ArchiveBox/issues/577">创建</a> 最初的 <code>archivebox-exporter</code> 扩展</li>

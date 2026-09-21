@@ -85,7 +85,7 @@
 <h2 id="importing-from-safari">Импорт из Safari</h2>
 <p>Safari не предоставляет массовые закладки или историю через свои API WebExtension.
 Используйте <a href="https://developer.apple.com/documentation/safariservices/importing-data-exported-from-safari">экспорт данных браузера</a>: на Mac выберите <strong>Файл → Экспорт данных браузера в файл</strong>; на iPhone/iPad выберите <strong>Settings → Приложения → Safari → Export</strong>. Выберите закладки, список для чтения и историю, если они доступны.</p>
-<p>In <strong>Параметры расширения → Массовый импорт URL</strong>, выберите данные Safari для импорта и диапазон дат истории, затем выберите экспортированный ZIP (или распакованные HTML/JSON-файлы). Проверьте URL, выберите нужные и нажмите <strong>Импортировать выбранное</strong>. Уже сохранённые URL помечаются как дубликаты. История сохраняет исходное время посещения. Файлы разбираются локально, пароли и платёжные карты игнорируются, а импорт попадает в тот же список сохранённых URL, что и другие источники импорта. Используйте существующие действия синхронизации, чтобы отправить их на сервер.</p>
+<p>В <strong>Параметры расширения → Массовый импорт URL</strong>, выберите данные Safari для импорта и диапазон дат истории, затем выберите экспортированный ZIP (или распакованные HTML/JSON-файлы). Проверьте URL, выберите нужные и нажмите <strong>Импортировать выбранное</strong>. Уже сохранённые URL помечаются как дубликаты. История сохраняет исходное время посещения. Файлы разбираются локально, пароли и платёжные карты игнорируются, а импорт попадает в тот же список сохранённых URL, что и другие источники импорта. Используйте существующие действия синхронизации, чтобы отправить их на сервер.</p>
 <h2 id="local-captures">Локальные копии</h2>
 <p>Когда на странице параметров включено сохранение локальных захватов, расширение сохраняет артефакты захвата в локальном OPFS расширения браузера до показа всплывающего окна:</p>
 <ul>
@@ -97,13 +97,13 @@
 <ol>
 <li>Настройте <a href="https://github.com/ArchiveBox/ArchiveBox#quickstart">ArchiveBox</a> на сервере и убедитесь, что машина, с которой вы просматриваете страницы, может получить к нему доступ</li>
 <li>В ArchiveBox 0.9.0 откройте <strong>Администратор → API → Ключи API → Создать ключ API</strong>, создайте ключ и скопируйте его.</li>
-<li>Откройте <strong>Параметры расширения → Конфигурация</strong>, вставьте ключ в <strong>API Key</strong>, затем введите URL сервера ArchiveBox (например, <code>https://archivebox.example.com</code>) в <strong>URL сервера</strong>. Сохраните конфигурацию и проверьте соединение. <img alt="Extension configuration" src="__BASE__screenshots/configuration-desktop.png?v=091b56eea7eef2ac4188574b837f966361cea0f8" width="720"/></li>
+<li>Откройте <strong>Параметры расширения → Конфигурация</strong>, вставьте ключ в <strong>Ключ API</strong>, затем введите URL сервера ArchiveBox (например, <code>https://archivebox.example.com</code>) в <strong>URL сервера</strong>. Сохраните конфигурацию и проверьте соединение. <img alt="Extension configuration" src="__BASE__screenshots/configuration-desktop.png?v=091b56eea7eef2ac4188574b837f966361cea0f8" width="720"/></li>
 <li>✅ <em>Проверьте, щёлкнув правой кнопкой любую страницу и выбрав <code>Save to ArchiveBox</code> или нажав значок расширения в строке меню.</em> <img alt="ArchiveBox popup" src="__BASE__screenshots/popup-desktop.png?v=091b56eea7eef2ac4188574b837f966361cea0f8" width="560"/></li>
 </ol>
 <hr/>
 <h2 id="development">Разработка</h2>
 <p><em>✨ Изначально внесено участником <a href="https://github.com/tjhorner">TJ Horner (@tjhorner)</a>, теперь поддерживается <a href="https://github.com/benmuth">@benmuth</a> и <a href="https://github.com/ArchiveBox">ArchiveBox</a> команда.</em></p>
-<p>Если вы хотите внести вклад в это расширение (или просто собрать его для себя), необходимо скачать и установить <a href="https://nodejs.org/en/">Node.js</a> and <a href="https://pnpm.io/">pnpm</a>.</p>
+<p>Если вы хотите внести вклад в это расширение (или просто собрать его для себя), необходимо скачать и установить <a href="https://nodejs.org/en/">Node.js</a> и <a href="https://pnpm.io/">pnpm</a>.</p>
 <pre><code class="language-bash">git clone https://github.com/ArchiveBox/archivebox-browser-extension
 cd archivebox-browser-extension/
 
@@ -131,9 +131,9 @@ node scripts/test-retention-live.mjs
 <ul>
 <li>2026-05 В расширении v3.2.1 добавлены синхронизация persona ArchiveBox 0.9 и исправления разрешений хоста сервера</li>
 <li>2026-05 Расширение v3.2.0 перенесено на WXT, React, TypeScript, Manifest v3, локальный захват снимков, захват MHTML в Chrome / Edge и захват HTML через SingleFile</li>
-<li>2025-03 Новый Manifest v3 <a href="https://github.com/ArchiveBox/archivebox-browser-extension/releases/tag/v2.1.3">Extension v2.1.3</a> Выпущено</li>
+<li>2025-03 Новый Manifest v3 <a href="https://github.com/ArchiveBox/archivebox-browser-extension/releases/tag/v2.1.3">Расширение v2.1.3</a> Выпущено</li>
 <li>2024-11 Разработка <a href="https://github.com/ArchiveBox/archivebox-browser-extension/pull/31">началась</a> в расширении v2 с более продвинутым интерфейсом и возможностями тегирования</li>
-<li>2024-01 Репозиторий расширения перенесён из <code>tjhorner/archivebox-exporter</code> to <code>Archivebox/archivebox-browser-extension</code></li>
+<li>2024-01 Репозиторий расширения перенесён из <code>tjhorner/archivebox-exporter</code> в <code>Archivebox/archivebox-browser-extension</code></li>
 <li>2021-09 Расширение официально поддержано ArchiveBox v0.6.2, запуск больше не требуется <code>:dev</code> ветка</li>
 <li>2021-07 Первое расширение <a href="https://github.com/ArchiveBox/ArchiveBox/issues/577#issuecomment-872915877">опубликовано</a> в интернет-магазинах Chrome и Mozilla</li>
 <li>2021-06 <a href="https://github.com/tjhorner">@tjhorner</a> <a href="https://github.com/ArchiveBox/ArchiveBox/issues/577">Создано</a> первое <code>archivebox-exporter</code> расширение</li>

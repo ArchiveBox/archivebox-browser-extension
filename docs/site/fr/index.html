@@ -85,7 +85,7 @@
 <h2 id="importing-from-safari">Importer depuis Safari</h2>
 <p>Safari ne fournit pas d’accès en masse aux favoris ou à l’historique via ses API WebExtension.
 Utilisez l’option Apple <a href="https://developer.apple.com/documentation/safariservices/importing-data-exported-from-safari">exportation des données de navigation</a>: sur Mac, choisissez <strong>Fichier → Exporter les données de navigation vers un fichier</strong>; sur iPhone/iPad, choisissez <strong>Settings → Applications → Safari → Export</strong>. Sélectionnez les favoris, la liste de lecture et l’historique disponibles.</p>
-<p>In <strong>Options de l’extension → Importer des URL en masse</strong>, choisissez les données Safari à importer et la période de l’historique, puis sélectionnez le ZIP exporté (ou les fichiers HTML/JSON extraits). Vérifiez les URL, sélectionnez celles à conserver et cliquez sur <strong>Importer la sélection</strong>. Les URL déjà enregistrées sont signalées comme doublons. L’historique conserve l’heure de visite d’origine. Les fichiers sont analysés localement, les mots de passe et les cartes de paiement sont ignorés, et les importations rejoignent la même liste d’URL enregistrées que les autres sources d’importation. Utilisez les actions de synchronisation existantes pour les envoyer au serveur.</p>
+<p>Dans <strong>Options de l’extension → Importer des URL en masse</strong>, choisissez les données Safari à importer et la période de l’historique, puis sélectionnez le ZIP exporté (ou les fichiers HTML/JSON extraits). Vérifiez les URL, sélectionnez celles à conserver et cliquez sur <strong>Importer la sélection</strong>. Les URL déjà enregistrées sont signalées comme doublons. L’historique conserve l’heure de visite d’origine. Les fichiers sont analysés localement, les mots de passe et les cartes de paiement sont ignorés, et les importations rejoignent la même liste d’URL enregistrées que les autres sources d’importation. Utilisez les actions de synchronisation existantes pour les envoyer au serveur.</p>
 <h2 id="local-captures">Captures locales</h2>
 <p>Lorsque l’enregistrement local des captures est activé dans les options, l’extension stocke les fichiers capturés dans le stockage OPFS local à l’extension avant d’afficher la fenêtre contextuelle :</p>
 <ul>
@@ -97,13 +97,13 @@ Utilisez l’option Apple <a href="https://developer.apple.com/documentation/saf
 <ol>
 <li>Configurez un <a href="https://github.com/ArchiveBox/ArchiveBox#quickstart">ArchiveBox</a> et vérifiez qu’il est accessible depuis l’appareil sur lequel vous naviguez</li>
 <li>Dans ArchiveBox 0.9.0, ouvrez <strong>Administration → API → Clés API → Créer une clé API</strong>, créez une clé et copiez-la.</li>
-<li>Ouvrez <strong>Options de l’extension → Configuration</strong>, collez la clé dans <strong>API Key</strong>, puis saisissez l’URL de votre serveur ArchiveBox (par exemple <code>https://archivebox.example.com</code>) dans <strong>URL du serveur</strong>. Enregistrez la configuration et testez la connexion. <img alt="Extension configuration" src="__BASE__screenshots/configuration-desktop.png?v=091b56eea7eef2ac4188574b837f966361cea0f8" width="720"/></li>
+<li>Ouvrez <strong>Options de l’extension → Configuration</strong>, collez la clé dans <strong>Clé API</strong>, puis saisissez l’URL de votre serveur ArchiveBox (par exemple <code>https://archivebox.example.com</code>) dans <strong>URL du serveur</strong>. Enregistrez la configuration et testez la connexion. <img alt="Extension configuration" src="__BASE__screenshots/configuration-desktop.png?v=091b56eea7eef2ac4188574b837f966361cea0f8" width="720"/></li>
 <li>✅ <em>Essayez-la en faisant un clic droit sur une page et en sélectionnant <code>Save to ArchiveBox</code>, ou en cliquant sur l’icône de l’extension dans la barre des menus.</em> <img alt="ArchiveBox popup" src="__BASE__screenshots/popup-desktop.png?v=091b56eea7eef2ac4188574b837f966361cea0f8" width="560"/></li>
 </ol>
 <hr/>
 <h2 id="development">Développement</h2>
 <p><em>✨ Contribution originale de <a href="https://github.com/tjhorner">TJ Horner (@tjhorner)</a>, désormais maintenue par <a href="https://github.com/benmuth">@benmuth</a> et le <a href="https://github.com/ArchiveBox">ArchiveBox</a> équipe.</em></p>
-<p>Pour contribuer à cette extension (ou simplement la compiler pour vous-même), vous devrez télécharger et installer <a href="https://nodejs.org/en/">Node.js</a> and <a href="https://pnpm.io/">pnpm</a>.</p>
+<p>Pour contribuer à cette extension (ou simplement la compiler pour vous-même), vous devrez télécharger et installer <a href="https://nodejs.org/en/">Node.js</a> et <a href="https://pnpm.io/">pnpm</a>.</p>
 <pre><code class="language-bash">git clone https://github.com/ArchiveBox/archivebox-browser-extension
 cd archivebox-browser-extension/
 
@@ -133,7 +133,7 @@ node scripts/test-retention-live.mjs
 <li>2026-05 L’extension v3.2.0 a migré vers WXT, React, TypeScript et Manifest v3, avec des captures d’écran locales, des captures MHTML dans Chrome / Edge et des captures HTML avec SingleFile</li>
 <li>2025-03 Nouveau Manifest v3 <a href="https://github.com/ArchiveBox/archivebox-browser-extension/releases/tag/v2.1.3">Extension v2.1.3</a> Publiée</li>
 <li>2024-11 Développement <a href="https://github.com/ArchiveBox/archivebox-browser-extension/pull/31">a commencé</a> de l’extension v2, avec une interface et des options d’étiquetage plus avancées</li>
-<li>2024-01 Le dépôt de l’extension a été déplacé depuis <code>tjhorner/archivebox-exporter</code> to <code>Archivebox/archivebox-browser-extension</code></li>
+<li>2024-01 Le dépôt de l’extension a été déplacé depuis <code>tjhorner/archivebox-exporter</code> vers <code>Archivebox/archivebox-browser-extension</code></li>
 <li>2021-09 L’extension est officiellement prise en charge par ArchiveBox v0.6.2 ; il n’est plus nécessaire d’exécuter <code>:dev</code> branche</li>
 <li>2021-07 Extension initiale <a href="https://github.com/ArchiveBox/ArchiveBox/issues/577#issuecomment-872915877">publiée</a> sur les boutiques d’extensions Chrome et Mozilla</li>
 <li>2021-06 <a href="https://github.com/tjhorner">@tjhorner</a> <a href="https://github.com/ArchiveBox/ArchiveBox/issues/577">Créée</a> l’initiale <code>archivebox-exporter</code> extension</li>

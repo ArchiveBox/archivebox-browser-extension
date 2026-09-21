@@ -85,7 +85,7 @@
 <h2 id="importing-from-safari">الاستيراد من Safari</h2>
 <p>لا يتيح Safari الإشارات المرجعية بالجملة أو السجل عبر واجهات WebExtension API.
 استخدم <a href="https://developer.apple.com/documentation/safariservices/importing-data-exported-from-safari">تصدير بيانات التصفح</a>: على Mac اختر <strong>ملف ← تصدير بيانات التصفح إلى ملف</strong>؛ على iPhone/iPad اختر <strong>Settings → التطبيقات → Safari → Export</strong>. حدد الإشارات المرجعية وقائمة القراءة والسجل حسب التوفر.</p>
-<p>In <strong>خيارات الإضافة ← استيراد عناوين URL بالجملة</strong>, اختر بيانات Safari المراد استيرادها ونطاق تاريخ السجل، ثم حدد ملف ZIP المُصدّر (أو ملفات HTML/JSON المستخرجة). راجع عناوين URL، وحدد ما تريد الاحتفاظ به، وانقر <strong>استيراد المحدد</strong>. تُعلّم عناوين URL المحفوظة مسبقاً كمكررات. يحتفظ السجل بوقت الزيارة الأصلي. تُحلل الملفات محلياً، وتُتجاهل كلمات المرور وبطاقات الدفع، وتدخل الاستيرادات إلى قائمة عناوين URL المحفوظة نفسها التي تستخدمها مصادر الاستيراد الأخرى. استخدم إجراءات المزامنة الحالية لإرسالها إلى خادمك.</p>
+<p>في <strong>خيارات الإضافة ← استيراد عناوين URL بالجملة</strong>, اختر بيانات Safari المراد استيرادها ونطاق تاريخ السجل، ثم حدد ملف ZIP المُصدّر (أو ملفات HTML/JSON المستخرجة). راجع عناوين URL، وحدد ما تريد الاحتفاظ به، وانقر <strong>استيراد المحدد</strong>. تُعلّم عناوين URL المحفوظة مسبقاً كمكررات. يحتفظ السجل بوقت الزيارة الأصلي. تُحلل الملفات محلياً، وتُتجاهل كلمات المرور وبطاقات الدفع، وتدخل الاستيرادات إلى قائمة عناوين URL المحفوظة نفسها التي تستخدمها مصادر الاستيراد الأخرى. استخدم إجراءات المزامنة الحالية لإرسالها إلى خادمك.</p>
 <h2 id="local-captures">النسخ المحلية</h2>
 <p>عند تفعيل حفظ الالتقاط المحلي في صفحة الخيارات، تخزن الإضافة آثار الالتقاط في تخزين OPFS المحلي للإضافة قبل ظهور النافذة المنبثقة:</p>
 <ul>
@@ -97,13 +97,13 @@
 <ol>
 <li>قم بإعداد <a href="https://github.com/ArchiveBox/ArchiveBox#quickstart">ArchiveBox</a> الخادم وتأكد من إمكانية وصول الجهاز الذي تتصفح منه إليه</li>
 <li>في ArchiveBox 0.9.0، افتح <strong>المسؤول ← API ← مفاتيح API ← إنشاء مفتاح API</strong>, أنشئ مفتاحاً وانسخه.</li>
-<li>افتح <strong>خيارات الإضافة ← الإعدادات</strong>، الصق المفتاح في <strong>API Key</strong>, وأدخل عنوان URL لخادم ArchiveBox (مثلاً <code>https://archivebox.example.com</code>) في <strong>عنوان URL للخادم</strong>. احفظ الإعدادات واختبر الاتصال. <img alt="Extension configuration" src="__BASE__screenshots/configuration-desktop.png?v=091b56eea7eef2ac4188574b837f966361cea0f8" width="720"/></li>
+<li>افتح <strong>خيارات الإضافة ← الإعدادات</strong>، الصق المفتاح في <strong>مفتاح API</strong>, وأدخل عنوان URL لخادم ArchiveBox (مثلاً <code>https://archivebox.example.com</code>) في <strong>عنوان URL للخادم</strong>. احفظ الإعدادات واختبر الاتصال. <img alt="Extension configuration" src="__BASE__screenshots/configuration-desktop.png?v=091b56eea7eef2ac4188574b837f966361cea0f8" width="720"/></li>
 <li>✅ <em>اختبر ذلك بالنقر بزر الفأرة الأيمن على أي صفحة واختيار <code>Save to ArchiveBox</code>, أو بالنقر على أيقونة الإضافة في شريط القوائم.</em> <img alt="ArchiveBox popup" src="__BASE__screenshots/popup-desktop.png?v=091b56eea7eef2ac4188574b837f966361cea0f8" width="560"/></li>
 </ol>
 <hr/>
 <h2 id="development">التطوير</h2>
 <p><em>✨ ساهم في الأصل بواسطة <a href="https://github.com/tjhorner">TJ Horner (@tjhorner)</a>، ويتولى صيانتها الآن <a href="https://github.com/benmuth">@benmuth</a> و <a href="https://github.com/ArchiveBox">ArchiveBox</a> الفريق.</em></p>
-<p>إذا رغبت في المساهمة في هذه الإضافة (أو بنائها لنفسك فقط)، فستحتاج إلى تنزيل وتثبيت <a href="https://nodejs.org/en/">Node.js</a> and <a href="https://pnpm.io/">pnpm</a>.</p>
+<p>إذا رغبت في المساهمة في هذه الإضافة (أو بنائها لنفسك فقط)، فستحتاج إلى تنزيل وتثبيت <a href="https://nodejs.org/en/">Node.js</a> و <a href="https://pnpm.io/">pnpm</a>.</p>
 <pre><code class="language-bash">git clone https://github.com/ArchiveBox/archivebox-browser-extension
 cd archivebox-browser-extension/
 
@@ -131,9 +131,9 @@ node scripts/test-retention-live.mjs
 <ul>
 <li>في 2026-05، أضافت الإضافة v3.2.1 مزامنة هويات ArchiveBox 0.9 وإصلاحات أذونات مضيف الخادم</li>
 <li>في 2026-05، نُقلت الإضافة v3.2.0 إلى WXT وReact وTypeScript وManifest v3، مع التقاط لقطات محلياً والتقاط MHTML في Chrome/Edge والتقاط HTML عبر SingleFile</li>
-<li>2025-03 إصدار Manifest v3 الجديد <a href="https://github.com/ArchiveBox/archivebox-browser-extension/releases/tag/v2.1.3">Extension v2.1.3</a> أُصدرت</li>
+<li>2025-03 إصدار Manifest v3 الجديد <a href="https://github.com/ArchiveBox/archivebox-browser-extension/releases/tag/v2.1.3">الإضافة v2.1.3</a> أُصدرت</li>
 <li>2024-11 التطوير <a href="https://github.com/ArchiveBox/archivebox-browser-extension/pull/31">بدأ</a> على إضافة v2 ذات واجهة مستخدم وخيارات وسم أكثر تقدماً</li>
-<li>نُقل مستودع الإضافة في 2024-01 من <code>tjhorner/archivebox-exporter</code> to <code>Archivebox/archivebox-browser-extension</code></li>
+<li>نُقل مستودع الإضافة في 2024-01 من <code>tjhorner/archivebox-exporter</code> إلى <code>Archivebox/archivebox-browser-extension</code></li>
 <li>إضافة 2021-09 مدعومة رسمياً من ArchiveBox v0.6.2، ولم تعد هناك حاجة لتشغيلها <code>:dev</code> الفرع</li>
 <li>2021-07 الإضافة الأولى <a href="https://github.com/ArchiveBox/ArchiveBox/issues/577#issuecomment-872915877">نُشرت</a> على متجري Chrome وMozilla للويب</li>
 <li>2021-06 <a href="https://github.com/tjhorner">@tjhorner</a> <a href="https://github.com/ArchiveBox/ArchiveBox/issues/577">أُنشئت</a> الأولى <code>archivebox-exporter</code> الإضافة</li>
