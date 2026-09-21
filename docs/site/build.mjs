@@ -89,4 +89,25 @@ await writeFile(path.join(output, 'index.html'), page('ArchiveBox Browser Extens
 await writeFile(path.join(output, 'screenshots/index.html'), page('Screenshots · ArchiveBox Browser Extension', gallery, true));
 await writeFile(path.join(output, '.nojekyll'), '');
 execFileSync('uv', ['run', '--no-project', 'python', path.join(root, '.github/pages/site.py'), 'render', output, '--baseurl', base], { cwd: root, stdio: 'inherit' });
+const languages = [];
+for (const language of ['es', 'fr', 'zh', 'ru', 'ar']) {
+  try { if ((await stat(path.join(site, language, 'index.html'))).isFile()) languages.push(language); } catch {}
+}
+if (languages.length) {
+  const alternateLinks = ['en', ...languages].map((language) => `<link rel="alternate" hreflang="${language}" href="https://extension.archivebox.io/${language === 'en' ? '' : `${language}/`}">`).join('') + '<link rel="alternate" hreflang="x-default" href="https://extension.archivebox.io/">';
+  const rootIndex = path.join(output, 'index.html');
+  const localizedRoot = (await readFile(rootIndex, 'utf8'))
+    .replace('</head>', `${alternateLinks}</head>`)
+    .replace('</body>', `<script src="${base}language.js" defer></script></body>`);
+  await writeFile(rootIndex, localizedRoot);
+  await cp(path.join(site, 'language.js'), path.join(output, 'language.js'));
+}
+for (const language of languages) {
+  const target = path.join(output, language);
+  await mkdir(target, { recursive: true });
+  const source = await readFile(path.join(site, language, 'index.html'), 'utf8');
+  await writeFile(path.join(target, 'index.html'), source.replaceAll('__BASE__', base));
+}
+const sitemapUrls = ['', ...languages.map((language) => `${language}/`), 'screenshots/'];
+await writeFile(path.join(output, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${sitemapUrls.map((route) => `<url><loc>https://extension.archivebox.io/${route}</loc></url>`).join('')}</urlset>\n`);
 console.log(`Built README and ${manifest.screenshots.length} screenshot views at ${output} (${base})`);

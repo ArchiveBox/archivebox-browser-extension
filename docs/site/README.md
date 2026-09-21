@@ -2,6 +2,8 @@
 
 The landing page is rendered directly from the repository's `README.md`. Edit that file to change its content; this directory contains only presentation, navigation, and screenshot gallery generation.
 
+Translated landing pages are independent HTML copies in `es/`, `fr/`, `zh/`, `ru/`, and `ar/`. To remove localization, delete those folders and `language.js`, then remove the small localization block at the end of `build.mjs`.
+
 From the repository root:
 
 ```sh
