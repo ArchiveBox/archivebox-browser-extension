@@ -29,14 +29,22 @@ test('options sections and saved URL actions fit mobile and desktop viewports', 
     `--user-data-dir=${profile}`, '--remote-debugging-port=0',
     '--enable-unsafe-extension-debugging', '--headless=new', '--no-first-run',
     '--no-default-browser-check', ...(process.platform === 'linux' ? ['--no-sandbox'] : []),
-  ], { stdio: 'ignore' });
+  ], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let browserStderr = '';
+  processHandle.stderr?.on('data', (chunk: Buffer) => {
+    browserStderr = (browserStderr + chunk.toString()).slice(-4096);
+  });
   let browserInstance: Browser | undefined;
   try {
     let port = '';
-    await expect.poll(async () => {
-      port = await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8').then((text) => text.split('\n')[0] || '').catch(() => '');
-      return port;
-    }).not.toBe('');
+    try {
+      await expect.poll(async () => {
+        port = await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8').then((text) => text.split('\n')[0] || '').catch(() => '');
+        return port;
+      }).not.toBe('');
+    } catch (error) {
+      throw new Error(`Chromium did not open DevTools (exit ${processHandle.exitCode ?? 'running'}, ${executable}): ${browserStderr}`, { cause: error });
+    }
     browserInstance = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
     const session = await browserInstance.newBrowserCDPSession();
     const extensionPath = path.join(profile, 'extension');

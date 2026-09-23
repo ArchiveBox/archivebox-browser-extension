@@ -82,7 +82,7 @@ test('local retention defaults to 30 days and persists every choice', async ({},
     await expect.poll(() => page.evaluate(async () => {
       const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
       const { server_registry } = await api.storage.local.get('server_registry');
-      return (server_registry as ServerRegistry).servers[0]?.server;
+      return (server_registry as ServerRegistry | undefined)?.servers[0]?.server;
     })).toBe('http://127.0.0.1:18764');
     await page.reload();
     await expect(page.locator('.saved-url-table tbody tr')).toHaveCount(1);
