@@ -257,7 +257,7 @@ export async function addToArchiveBox(
     const resultUrl = new URL(response.url);
     const crawl_id = resultUrl.pathname.match(/\/admin\/core\/crawl\/([0-9a-f-]+)\/change\/?$/i)?.[1] || null;
     if (/class=["'][^"']*errorlist/.test(html)
-      || (!supportsApi && !/id=["']stdout["']/.test(html))
+      || (!crawl_id && !/id=["']stdout["']/.test(html))
       || (crawl_id && resultUrl.origin !== new URL(archiveboxServerUrl).origin)) {
       throw new Error(t("ArchiveBox did not confirm that the URLs were added. Open the server's Add URLs page to check the form errors."));
     }

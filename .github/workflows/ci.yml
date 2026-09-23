@@ -42,4 +42,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: Test real extension import and layout flows
         if: matrix.browser == 'chrome'
-        run: pnpm exec playwright test tests/safari-import.test.ts tests/options-responsive.test.ts
+        run: pnpm exec playwright test tests/safari-import.test.ts tests/options-responsive.test.ts tests/retention.test.ts tests/server_registry.test.ts
+      - name: Verify local capture and reject unconfirmed submissions
+        if: matrix.browser == 'chrome'
+        run: pnpm exec playwright test tests/popup.test.ts --grep 'action popup saves MHTML|HTTP 200 from a normal website'

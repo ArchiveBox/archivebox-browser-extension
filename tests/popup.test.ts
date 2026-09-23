@@ -1706,11 +1706,11 @@ test('HTTP 200 from a normal website cannot confirm an ArchiveBox submission', a
   try {
     for (const key of ['', 'invalid-key']) {
       await setExtensionStorage(harness, serverSettings(server.url, key));
-      const response = await harness.storagePage.evaluate(async () => {
+      const response = await harness.storagePage.evaluate(async (destinationId) => {
         const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
         return api.runtime.sendMessage({ type: 'archivebox_add',
-        server_id, body: { urls: ['https://example.com/post-confirmation-check'], tags: [], depth: 0 } });
-      });
+        server_id: destinationId, body: { urls: ['https://example.com/post-confirmation-check'], tags: [], depth: 0 } });
+      }, server_id);
       expect(response.ok).toBe(false);
       expect(response.errorMessage).toContain('did not confirm');
     }

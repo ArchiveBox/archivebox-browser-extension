@@ -206,12 +206,11 @@ function ArchiveBoxOverlay() {
     kind: 'screenshot' | 'mhtml' | 'singlefile',
     artifactLabel: string,
   ): Promise<void> {
-    const connection = destination();
-    if (kind === 'screenshot' && !connection.policy.upload_screenshots_to_server) return;
-    if (kind === 'mhtml' && !connection.policy.upload_mhtml_to_server) return;
     const snapshots = await getSnapshots();
     let latestSnapshot = snapshots.find((item) => item.id === snapshot_id);
-    if (!latestSnapshot || (remoteStatus !== 'archived' && !latestSnapshot.remote_copies?.[server_id]?.crawl_id)) return;
+    if (!server || !latestSnapshot || (remoteStatus !== 'archived' && !latestSnapshot.remote_copies?.[server_id]?.crawl_id)) return;
+    if (kind === 'screenshot' && !server.policy.upload_screenshots_to_server) return;
+    if (kind === 'mhtml' && !server.policy.upload_mhtml_to_server) return;
 
     try {
       setOk(null);

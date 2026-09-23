@@ -1,0 +1,362 @@
+name: Release browser extension
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-store-release
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      candidate: ${{ steps.classify.outputs.candidate }}
+      prepare: ${{ steps.classify.outputs.prepare }}
+      version: ${{ steps.classify.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify tested main commit
+        id: classify
+        shell: bash
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          git fetch origin main --tags
+          VERSION="$(node -p 'require("./package.json").version')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if test "$(git rev-list -n 1 "v$VERSION" 2>/dev/null || true)" = "$TESTED_SHA"; then
+            git merge-base --is-ancestor "$TESTED_SHA" origin/main
+            if ! git diff --quiet "$TESTED_SHA" origin/main -- entrypoints src public locales wxt.config.ts package.json pnpm-lock.yaml; then
+              echo 'Tagged candidate superseded by newer extension source; the newer CI run will reserve the next version.'
+              echo 'candidate=false' >> "$GITHUB_OUTPUT"
+              echo 'prepare=false' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo 'candidate=true' >> "$GITHUB_OUTPUT"
+            echo 'prepare=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if test "$(git rev-parse origin/main)" != "$TESTED_SHA"; then
+            echo 'A newer main commit has its own CI run; skipping stale source.'
+            echo 'candidate=false' >> "$GITHUB_OUTPUT"
+            echo 'prepare=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git log -1 --format=%s | grep -q '^chore(release): bump extension to '; then
+            echo 'Release commit has no matching version tag' >&2
+            exit 1
+          fi
+          LAST_TAG="$(git tag --merged HEAD --list 'v[0-9]*' --sort=-version:refname | head -n 1)"
+          if test -n "$LAST_TAG" && git diff --quiet "$LAST_TAG" HEAD -- entrypoints src public locales wxt.config.ts package.json pnpm-lock.yaml; then
+            echo 'prepare=false' >> "$GITHUB_OUTPUT"
+            echo 'candidate=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo 'prepare=true' >> "$GITHUB_OUTPUT"
+          echo 'candidate=false' >> "$GITHUB_OUTPUT"
+
+  prepare:
+    needs: inspect
+    if: needs.inspect.outputs.prepare == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_GH_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Allocate the next unreserved patch version
+        shell: bash
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          RELEASE_TOKEN: ${{ secrets.RELEASE_GH_TOKEN }}
+        run: |
+          test -n "$RELEASE_TOKEN" || { echo 'RELEASE_GH_TOKEN is unavailable' >&2; exit 1; }
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$TESTED_SHA"
+          git fetch origin --tags
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+          const versions = [pkg.version, ...execFileSync('git', ['tag', '--list', 'v*'], { encoding: 'utf8' }).trim().split('\n').map(tag => tag.replace(/^v/, ''))]
+            .filter(version => /^\d+\.\d+\.\d+$/.test(version))
+            .map(version => version.split('.').map(Number));
+          versions.sort((a, b) => b[0] - a[0] || b[1] - a[1] || b[2] - a[2]);
+          const [major, minor, patch] = versions[0];
+          const version = `${major}.${minor}.${patch + 1}`;
+          pkg.version = version;
+          writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          writeFileSync(process.env.GITHUB_ENV, `VERSION=${version}\n`, { flag: 'a' });
+          NODE
+      - name: Commit and atomically reserve the version
+        shell: bash
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$TESTED_SHA"
+          git config user.name 'archivebox-release-bot'
+          git config user.email 'release-bot@archivebox.io'
+          git add package.json
+          git commit -m "chore(release): bump extension to $VERSION"
+          git tag "v$VERSION"
+          git push --atomic origin HEAD:main "refs/tags/v$VERSION"
+
+  package:
+    needs: inspect
+    if: needs.inspect.outputs.candidate == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ needs.inspect.outputs.version }}
+      release_sha: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - name: Confirm the versioned CI commit still owns main and its tag
+        shell: bash
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          VERSION: ${{ needs.inspect.outputs.version }}
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "$TESTED_SHA" origin/main
+          git diff --quiet "$TESTED_SHA" origin/main -- entrypoints src public locales wxt.config.ts package.json pnpm-lock.yaml
+          test "$(git ls-remote origin "refs/tags/v$VERSION")" = "$TESTED_SHA$(printf '\t')refs/tags/v$VERSION"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm compile
+      - name: Build all store packages from the versioned CI commit
+        run: pnpm zip:stores
+      - name: Install Chromium for real extension tests
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Test import, options, retention, and registry flows
+        run: pnpm exec playwright test tests/safari-import.test.ts tests/options-responsive.test.ts tests/retention.test.ts tests/server_registry.test.ts
+      - name: Verify local capture and reject unconfirmed submissions
+        run: pnpm exec playwright test tests/popup.test.ts --grep 'action popup saves MHTML|HTTP 200 from a normal website'
+      - name: Verify package versions and source bundle
+        shell: bash
+        env:
+          VERSION: ${{ needs.inspect.outputs.version }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { readFileSync } from 'node:fs';
+          const version = process.env.VERSION;
+          for (const browser of ['chrome', 'edge', 'firefox']) {
+            const zip = `.output/archivebox-browser-extension-${version}-${browser}.zip`;
+            const manifest = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json'], { encoding: 'utf8' }));
+            if (manifest.version !== version) throw new Error(`${browser} manifest version differs from package.json`);
+          }
+          const source = `.output/archivebox-browser-extension-${version}-sources.zip`;
+          const names = execFileSync('unzip', ['-Z1', source], { encoding: 'utf8' }).split('\n');
+          if (!names.includes('package.json') || !names.includes('pnpm-lock.yaml') || names.some(name => /(^|\/)(\.env[^/]*|node_modules|tmp|test-results)(\/|$)/.test(name))) {
+            throw new Error('Firefox source bundle is incomplete or contains local data');
+          }
+          const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+          if (pkg.version !== version) throw new Error('Version changed after tests');
+          NODE
+          sha256sum .output/archivebox-browser-extension-"$VERSION"-{chrome,edge,firefox,sources}.zip > .output/store-package-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: store-packages-${{ needs.inspect.outputs.version }}
+          path: |
+            .output/archivebox-browser-extension-${{ needs.inspect.outputs.version }}-chrome.zip
+            .output/archivebox-browser-extension-${{ needs.inspect.outputs.version }}-edge.zip
+            .output/archivebox-browser-extension-${{ needs.inspect.outputs.version }}-firefox.zip
+            .output/archivebox-browser-extension-${{ needs.inspect.outputs.version }}-sources.zip
+            .output/store-package-sha256.txt
+          if-no-files-found: error
+          retention-days: 90
+
+  chrome:
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.package.outputs.release_sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: store-packages-${{ needs.package.outputs.version }}
+          path: .output
+      - name: Verify tested package hashes
+        run: sha256sum --check .output/store-package-sha256.txt
+      - name: Submit Chrome package
+        id: submit
+        continue-on-error: true
+        run: pnpm submit:chrome
+        env:
+          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+      - name: Record Chrome submission receipt
+        if: always()
+        shell: bash
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+          RELEASE_SHA: ${{ needs.package.outputs.release_sha }}
+          RESULT: ${{ steps.submit.outcome }}
+        run: |
+          sha256sum .output/archivebox-browser-extension-"$VERSION"-chrome.zip > chrome.sha256
+          printf 'store=chrome\nversion=%s\nrelease_sha=%s\nsubmit_result=%s\n' "$VERSION" "$RELEASE_SHA" "$RESULT" > chrome-receipt.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chrome-submission-receipt
+          path: |
+            chrome.sha256
+            chrome-receipt.txt
+          if-no-files-found: warn
+      - if: steps.submit.outcome != 'success'
+        run: exit 1
+
+  firefox:
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.package.outputs.release_sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: store-packages-${{ needs.package.outputs.version }}
+          path: .output
+      - name: Verify tested package hashes
+        run: sha256sum --check .output/store-package-sha256.txt
+      - name: Submit Firefox package and sources
+        id: submit
+        continue-on-error: true
+        run: pnpm submit:firefox
+        env:
+          FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
+          FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
+      - name: Record Firefox submission receipt
+        if: always()
+        shell: bash
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+          RELEASE_SHA: ${{ needs.package.outputs.release_sha }}
+          RESULT: ${{ steps.submit.outcome }}
+        run: |
+          sha256sum .output/archivebox-browser-extension-"$VERSION"-{firefox,sources}.zip > firefox.sha256
+          printf 'store=firefox\nversion=%s\nrelease_sha=%s\nsubmit_result=%s\n' "$VERSION" "$RELEASE_SHA" "$RESULT" > firefox-receipt.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: firefox-submission-receipt
+          path: |
+            firefox.sha256
+            firefox-receipt.txt
+          if-no-files-found: warn
+      - if: steps.submit.outcome != 'success'
+        run: exit 1
+
+  edge:
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.package.outputs.release_sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: store-packages-${{ needs.package.outputs.version }}
+          path: .output
+      - name: Verify tested package hashes
+        run: sha256sum --check .output/store-package-sha256.txt
+      - name: Submit Edge package
+        id: submit
+        continue-on-error: true
+        run: pnpm submit:edge
+        env:
+          EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+      - name: Record Edge submission receipt
+        if: always()
+        shell: bash
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+          RELEASE_SHA: ${{ needs.package.outputs.release_sha }}
+          RESULT: ${{ steps.submit.outcome }}
+        run: |
+          sha256sum .output/archivebox-browser-extension-"$VERSION"-edge.zip > edge.sha256
+          printf 'store=edge\nversion=%s\nrelease_sha=%s\nsubmit_result=%s\n' "$VERSION" "$RELEASE_SHA" "$RESULT" > edge-receipt.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: edge-submission-receipt
+          path: |
+            edge.sha256
+            edge-receipt.txt
+          if-no-files-found: warn
+      - if: steps.submit.outcome != 'success'
+        run: exit 1
+
+  sync_safari_source:
+    needs: package
+    uses: ArchiveBox/monorepo/.github/workflows/cascade-source-pin.yml@main
+    with:
+      source_tag: v${{ needs.package.outputs.version }}
+      source_sha: ${{ needs.package.outputs.release_sha }}
+      artifact_name: store-packages-${{ needs.package.outputs.version }}
+    secrets:
+      release_token: ${{ secrets.RELEASE_GH_TOKEN }}

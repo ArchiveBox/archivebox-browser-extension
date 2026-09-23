@@ -1719,6 +1719,7 @@ function OptionsMain() {
       return;
     }
     setSavedUrlStatus({ kind: 'idle', text: t("Syncing $1 snapshots...", archiveableSelected.length) });
+    let failed = 0;
     for (const snapshot of archiveableSelected) {
       setSyncStatuses((current) => ({
         ...current,
@@ -1731,6 +1732,7 @@ function OptionsMain() {
           [snapshot.id]: { kind: 'success', text: t("Synced") },
         }));
       } catch (error) {
+        failed += 1;
         setSyncStatuses((current) => ({
           ...current,
           [snapshot.id]: { kind: 'error', text: (error as Error).message },
@@ -1738,7 +1740,9 @@ function OptionsMain() {
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
-    setSavedUrlStatus({ kind: 'success', text: t("Finished syncing $1 snapshots", archiveableSelected.length) });
+    setSavedUrlStatus(failed
+      ? { kind: 'error', text: `${t("Sync failed")}: ${failed}/${archiveableSelected.length}` }
+      : { kind: 'success', text: t("Finished syncing $1 snapshots", archiveableSelected.length) });
   }
 
   function openTagEditor() {
