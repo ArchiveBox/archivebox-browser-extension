@@ -537,7 +537,7 @@ async function findDevToolsTarget(
 
 async function collectBackgroundConsole(harness: BrowserHarness, messages: ConsoleMessage[]): Promise<ConsoleCollector> {
   const target = await findDevToolsTarget(harness, (item) => (
-    item.type === 'service_worker' && /\/background\.js/.test(item.url)
+    item.type === 'service_worker' && item.url === `chrome-extension://${harness.extensionId}/background.js`
   ));
   const cdp = await connectCdpWebSocket(target.webSocketDebuggerUrl as string);
   await attachConsoleCollector(cdp, 'background', messages);
