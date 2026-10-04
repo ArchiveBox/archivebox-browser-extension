@@ -69,7 +69,8 @@ try {
   expect(entry.remote_copies[server_id].crawl_id).toBeUndefined();
   expect(entry.remote_copies[server_id].snapshot_id).toBeUndefined();
   await popup.reload();
-  await expect(popup.getByText('Previously submitted. Server status has not been checked in this session.', { exact: true })).toBeVisible();
+  await expect(popup.getByText('Submitted to ArchiveBox Server at depth 0', { exact: true })).toBeVisible();
+  await expect(popup.getByText('Previously submitted', { exact: true })).toHaveCount(0);
   await expect.poll(legacyCount, { timeout: 5000 }).toBe(before + 1);
   console.log('PASS: real Chrome popup submitted to ArchiveBox 0.7.4 /add/, accepted HTML success without inventing crawl or snapshot IDs, and reload did not duplicate the legacy submission.');
 } finally {

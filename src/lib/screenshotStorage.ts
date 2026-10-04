@@ -35,14 +35,14 @@ export function snapshotDirectoryPath(snapshot: Snapshot): string {
   ].join('/');
 }
 
-export function snapshotScreenshotPath(snapshot: Snapshot, partIndex = 0): string {
+export function snapshotScreenshotPath(snapshot: Snapshot, partIndex = 0, viewport = false): string {
   const fileName = partIndex === 0 ? 'screenshot.png' : `screenshot-${partIndex}.png`;
   return [
     'snapshots',
     snapshotDateSegment(snapshot),
     snapshotHostSegment(snapshot),
     pathSafeSegment(snapshot.id),
-    'chrome_extension_screenshot',
+    viewport ? 'chrome_extension_viewport' : 'chrome_extension_screenshot',
     fileName,
   ].join('/');
 }
@@ -132,8 +132,9 @@ export async function writeSnapshotScreenshot(
   blob: Blob,
   width: number,
   height: number,
+  viewport = false,
 ): Promise<SnapshotScreenshot> {
-  return writeSnapshotScreenshotParts(snapshot, [{ blob, x: 0, y: 0, width, height }], width, height);
+  return writeSnapshotScreenshotParts(snapshot, [{ blob, x: 0, y: 0, width, height }], width, height, viewport);
 }
 
 export async function writeSnapshotScreenshotParts(
@@ -141,9 +142,10 @@ export async function writeSnapshotScreenshotParts(
   partBlobs: Array<{ blob: Blob; x: number; y: number; width: number; height: number }>,
   width: number,
   height: number,
+  viewport = false,
 ): Promise<SnapshotScreenshot> {
   if (partBlobs.length === 0) throw new Error(t("No screenshot tiles were captured."));
-  const firstPath = snapshotScreenshotPath(snapshot, 0);
+  const firstPath = snapshotScreenshotPath(snapshot, 0, viewport);
   const firstSegments = firstPath.split('/');
   const firstFileName = firstSegments.pop();
   if (!firstFileName) throw new Error(t("Invalid local screenshot path."));
@@ -153,7 +155,7 @@ export async function writeSnapshotScreenshotParts(
   const parts: SnapshotScreenshotPart[] = [];
 
   for (const [index, part] of partBlobs.entries()) {
-    const path = snapshotScreenshotPath(snapshot, index);
+    const path = snapshotScreenshotPath(snapshot, index, viewport);
     const fileName = path.split('/').pop();
     if (!fileName) throw new Error(t("Invalid local screenshot path."));
     await writeBlobToFile(directory, fileName, part.blob);
@@ -561,7 +563,7 @@ export async function deleteSnapshotOpfs(snapshot: Snapshot): Promise<void> {
     if (!isMissing(error)) throw error;
   }
   // Also remove explicitly referenced files from older storage layouts.
-  const paths = [snapshot.screenshot?.path, ...(snapshot.screenshot?.parts || []).map((part) => part.path),
+  const paths = [snapshot.viewport_screenshot?.path, ...(snapshot.viewport_screenshot?.parts || []).map((part) => part.path), snapshot.screenshot?.path, ...(snapshot.screenshot?.parts || []).map((part) => part.path),
     snapshot.mhtml?.path, snapshot.singlefile?.path];
   for (const path of new Set(paths.filter((path): path is string => Boolean(path)))) {
     const segments = path.split('/');

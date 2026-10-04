@@ -46,8 +46,8 @@ export async function migratePublishedStorage(): Promise<void> {
       registry.default_server_ids = [destination.id];
       policies[destination.id] = { ...defaultServerPolicy,
         ...(selected_persona ? { local_persona_id: selected_persona.id } : {}),
-        upload_screenshots_to_server: Boolean(stored.upload_screenshots_to_server),
-        upload_mhtml_to_server: Boolean(stored.upload_mhtml_to_server),
+        upload_screenshots_to_server: stored.upload_screenshots_to_server === undefined ? defaultServerPolicy.upload_screenshots_to_server : Boolean(stored.upload_screenshots_to_server),
+        upload_mhtml_to_server: stored.upload_mhtml_to_server === undefined ? defaultServerPolicy.upload_mhtml_to_server : Boolean(stored.upload_mhtml_to_server),
       };
     }
     validateRegistry(registry);

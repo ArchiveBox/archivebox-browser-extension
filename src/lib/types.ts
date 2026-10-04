@@ -12,6 +12,7 @@ export type ServerConfiguration = {
 export type ServerPolicy = {
   local_persona_id?: string;
   upload_screenshots_to_server: boolean;
+  upload_viewport_screenshots_to_server: boolean;
   upload_mhtml_to_server: boolean;
   upload_singlefile_to_server: boolean;
 };
@@ -30,6 +31,7 @@ export type RemoteCopy = {
   submitted_at?: string;
   submitted_to: string;
   status: 'accepted' | 'complete';
+  delivery_error?: string;
   persona?: string | null;
 };
 
@@ -44,6 +46,7 @@ export type Snapshot = {
   remote_copies?: Record<string, RemoteCopy>;
   unassigned_remote_copy?: RemoteCopy;
   screenshot?: SnapshotScreenshot;
+  viewport_screenshot?: SnapshotScreenshot;
   mhtml?: SnapshotMhtml;
   singlefile?: SnapshotSingleFile;
 };
@@ -132,6 +135,7 @@ export type ConfigState = ServerRegistry & {
   local_retention_ms: 60000 | 86400000 | 2592000000 | 7776000000 | 'never';
   enable_auto_archive: boolean;
   save_screenshots_locally: boolean;
+  save_viewport_screenshots_locally: boolean;
   save_mhtml_locally: boolean;
   save_singlefile_locally: boolean;
   singlefile_extension_id: string;
@@ -141,6 +145,7 @@ export type ConfigState = ServerRegistry & {
 export type ArchiveboxAddMessage = {
   type: 'archivebox_add';
   server_id: string;
+  tabId?: number;
   body: {
     urls: string[];
     tags: string[];

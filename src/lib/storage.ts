@@ -1,3 +1,4 @@
+import { supportsMhtmlCapture } from './browserCapabilities';
 import { appConnection } from './appConnection';
 import { activeServer, validateRegistry, defaultServerPolicy } from './server_registry';
 import type { ConfigState, Persona, Snapshot, ServerConfiguration, ServerRegistry, ServerPolicy } from './types';
@@ -13,7 +14,8 @@ const defaultConfig: ConfigState = {
   local_retention_ms: 2592000000,
   enable_auto_archive: false,
   save_screenshots_locally: false,
-  save_mhtml_locally: false,
+  save_viewport_screenshots_locally: true,
+  save_mhtml_locally: supportsMhtmlCapture,
   save_singlefile_locally: false,
   singlefile_extension_id: '',
   tab_manager_plus_extension_id: '',
@@ -47,7 +49,7 @@ export async function getConfig(): Promise<ConfigState> {
   if (!['auto', 'en', 'es', 'zh_CN'].includes(config.ui_language)
     || ![60000, 86400000, 2592000000, 7776000000, 'never'].includes(config.local_retention_ms)
     || [config.match_urls, config.exclude_urls, config.singlefile_extension_id, config.tab_manager_plus_extension_id].some((value) => typeof value !== 'string')
-    || [config.enable_auto_archive, config.save_screenshots_locally, config.save_mhtml_locally, config.save_singlefile_locally].some((value) => typeof value !== 'boolean')) {
+    || [config.enable_auto_archive, config.save_screenshots_locally, config.save_viewport_screenshots_locally, config.save_mhtml_locally, config.save_singlefile_locally].some((value) => typeof value !== 'boolean')) {
     throw new Error('Saved extension settings are invalid.');
   }
   return config;
@@ -138,12 +140,13 @@ export async function mutateSnapshots(update: (entries: Snapshot[]) => Snapshot[
     const next = updated.map((snapshot) => {
       const previous = previous_snapshots.get(snapshot.id);
       if (!previous || !snapshot.remote_copies) return snapshot;
-      const changed = (kind: 'screenshot' | 'mhtml' | 'singlefile') => snapshot[kind]
+      const changed = (kind: 'screenshot' | 'viewport_screenshot' | 'mhtml' | 'singlefile') => snapshot[kind]
         && JSON.stringify(previous[kind]) !== JSON.stringify(snapshot[kind]);
-      if (!changed('screenshot') && !changed('mhtml') && !changed('singlefile')) return snapshot;
+      if (!changed('screenshot') && !changed('viewport_screenshot') && !changed('mhtml') && !changed('singlefile')) return snapshot;
       const remote_copies = Object.fromEntries(Object.entries(snapshot.remote_copies).map(([id, copy]) => {
         const policy = { ...defaultServerPolicy, ...server_policies[id] };
-        const pending = (changed('screenshot') && policy.upload_screenshots_to_server)
+        const pending = (changed('viewport_screenshot') && policy.upload_viewport_screenshots_to_server)
+          || (changed('screenshot') && policy.upload_screenshots_to_server)
           || (changed('mhtml') && policy.upload_mhtml_to_server)
           || (changed('singlefile') && policy.upload_singlefile_to_server);
         return [id, pending ? { ...copy, status: 'accepted' as const } : copy];

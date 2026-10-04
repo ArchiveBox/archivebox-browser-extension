@@ -1,4 +1,4 @@
-import { getConfig, getPersonas, mutateSnapshots } from './storage';
+import { getConfig, getPersonas, getSnapshots, mutateSnapshots } from './storage';
 import { t } from './i18n';
 import { archiveBoxServerUrlMatches, isArchiveablePageUrl } from './archiveboxUrlExclusions';
 import type { ArchiveSubmissionReceipt, SubmissionReceipt, ArchiveDepth, ServerConfiguration, ServerDestination, Snapshot } from './types';
@@ -183,7 +183,9 @@ export async function addToArchiveBox(
 
     await ensureServerHostPermission(archiveboxServerUrl);
 
-    const supportsApi = await supportsArchiveBoxApi(archiveboxServerUrl);
+    // A token submission can discover an old server from the POST's 404/405.
+    // Avoid fetching the API docs (and their redirect) before every queued URL.
+    const supportsApi = token && !persona ? true : await supportsArchiveBoxApi(archiveboxServerUrl);
 
     if (!supportsApi && persona && Object.keys(persona.cookies).length) {
       throw new Error(t("This ArchiveBox server does not support persona cookie sync. Select a profile without cookies to submit URLs using the server's own settings, or upgrade the server to use this persona."));
@@ -314,7 +316,8 @@ export async function syncArchiveBoxSnapshotMetadata(server: ServerConfiguration
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const error = await response.json().catch(() => null) as { detail?: string } | null;
+    throw new Error(`HTTP ${response.status}: ${error?.detail || response.statusText}`);
   }
 
   return await response.json().catch(() => ({})) as ArchiveBoxSnapshotMetadataResponse;
@@ -438,7 +441,8 @@ export async function uploadSnapshotArchiveResultFiles(server: ServerConfigurati
       return await response.json().catch(() => ({})) as ArchiveResultUploadResponse;
     }
 
-    lastError = `HTTP ${response.status}: ${response.statusText}`;
+    const error = await response.json().catch(() => null) as { detail?: string } | null;
+    lastError = `HTTP ${response.status}: ${error?.detail || response.statusText}`;
     if (response.status !== 404 || attempt === archiveResultCreateMaxAttempts) {
       throw new Error(lastError);
     }
@@ -671,31 +675,48 @@ export async function snapshotExistsOnServer(snapshot: Snapshot, server: ServerC
   }
 }
 
-export async function submitSnapshot(server: ServerDestination, snapshot: Snapshot): Promise<ArchiveSubmissionReceipt> {
+export async function submitSnapshot(
+  server: ServerDestination,
+  snapshot: Snapshot,
+  captureReady?: Promise<void>,
+  onAccepted?: (receipt: ArchiveSubmissionReceipt) => void,
+): Promise<ArchiveSubmissionReceipt> {
   return await navigator.locks.request<Promise<ArchiveSubmissionReceipt>>(`archivebox-delivery:${snapshot.id}`, { mode: 'shared' }, async () =>
     await navigator.locks.request<Promise<ArchiveSubmissionReceipt>>(`archivebox-delivery:${server.id}:${snapshot.id}`, async () => {
       const result = await addToArchiveBox(server, [snapshot.url], snapshot.tags, snapshot.depth ?? 0,
         false, false, [snapshot.id]);
-      const accepted: Snapshot = { ...snapshot, remote_copies: { ...snapshot.remote_copies, [server.id]: {
-        status: 'accepted', submitted_to: serverBaseUrl(server.server),
-        ...(result.crawl_id ? { crawl_id: result.crawl_id } : {}), persona: server.persona,
-      } } };
-      // Legacy HTML confirmation does not prove completion through the
-      // modern metadata/artifact APIs. Keep the durable accepted receipt and
-      // leave it accepted until a later explicit verification can complete it.
-      if (result.legacy) return result;
-      const metadata = await syncArchiveBoxSnapshotMetadata(server, accepted);
-      if (!metadata.id) throw new Error('Server did not confirm the saved snapshot.');
-      await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
-        ...item, remote_copies: { ...item.remote_copies, [server.id]: {
-          ...item.remote_copies?.[server.id], status: 'accepted', submitted_to: serverBaseUrl(server.server), snapshot_id: metadata.id,
-        } },
-      } : item));
-      const { uploadSnapshotCaptureArtifactsToArchiveBox } = await import('./archiveboxArtifacts');
-      await uploadSnapshotCaptureArtifactsToArchiveBox(server, accepted, metadata.id);
-      await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
-        ...item, remote_copies: { ...item.remote_copies, [server.id]: { ...item.remote_copies[server.id]!, status: 'complete' } },
-      } : item));
-      return result;
+      onAccepted?.(result);
+      try {
+        const accepted: Snapshot = { ...snapshot, remote_copies: { ...snapshot.remote_copies, [server.id]: {
+          status: 'accepted', submitted_to: serverBaseUrl(server.server),
+          ...(result.crawl_id ? { crawl_id: result.crawl_id } : {}), persona: server.persona,
+        } } };
+        // Legacy HTML confirmation does not prove completion through the
+        // modern metadata/artifact APIs. Keep the durable accepted receipt and
+        // leave it accepted until a later explicit verification can complete it.
+        if (result.legacy) return result;
+        const metadata = await syncArchiveBoxSnapshotMetadata(server, accepted);
+        if (!metadata.id) throw new Error('Server did not confirm the saved snapshot.');
+        await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
+          ...item, remote_copies: { ...item.remote_copies, [server.id]: {
+            ...item.remote_copies?.[server.id], status: 'accepted', submitted_to: serverBaseUrl(server.server), snapshot_id: metadata.id,
+          } },
+        } : item));
+        await captureReady;
+        const latest = (await getSnapshots()).find((item) => item.id === snapshot.id);
+        const { uploadSnapshotCaptureArtifactsToArchiveBox } = await import('./archiveboxArtifacts');
+        if (latest) await uploadSnapshotCaptureArtifactsToArchiveBox(server, latest, metadata.id);
+        await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
+          ...item, remote_copies: { ...item.remote_copies, [server.id]: { ...item.remote_copies[server.id]!, status: 'complete' } },
+        } : item));
+        return result;
+      } catch (error) {
+        await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
+          ...item, remote_copies: { ...item.remote_copies, [server.id]: {
+            ...item.remote_copies[server.id]!, delivery_error: error instanceof Error ? error.message : String(error),
+          } },
+        } : item));
+        throw error;
+      }
     }));
 }

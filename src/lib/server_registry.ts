@@ -1,6 +1,6 @@
 import type { ServerRegistry, ServerDestination, ServerPolicy } from './types';
 
-export const defaultServerPolicy: ServerPolicy = { upload_screenshots_to_server: false, upload_mhtml_to_server: false, upload_singlefile_to_server: true };
+export const defaultServerPolicy: ServerPolicy = { upload_screenshots_to_server: false, upload_viewport_screenshots_to_server: true, upload_mhtml_to_server: true, upload_singlefile_to_server: true };
 type RegistryWithPolicies = ServerRegistry & { server_policies?: Record<string, ServerPolicy> };
 
 export function activeServer(registry: RegistryWithPolicies): ServerDestination | undefined {

@@ -1,5 +1,5 @@
 import { defaultServers } from '@/src/lib/server_registry';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { archiveBoxServerUrlMatches, hasServerHostPermission, isArchiveablePageUrl, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
@@ -102,6 +102,7 @@ function unsavedSnapshot(activePage: ActivePage | null): Snapshot | null {
 }
 
 function ArchiveBoxOverlay() {
+  const submittedThisSession = useRef(new Set<string>());
   const [activePage, setActivePage] = useState<ActivePage | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [allTags, setAllTags] = useState<string[]>([]);
@@ -161,14 +162,25 @@ function ArchiveBoxOverlay() {
     setSnapshot({ ...currentSnapshot });
     setDepth(currentSnapshot.depth ?? 0);
     setLocalStatus('saved');
-    setRemoteStatus(!archivebox_server_url ? 'unavailable' : currentSnapshot.remote_copies?.[configured?.id || ''] ? 'previously_submitted' : 'not_archived');
+    const receipt = currentSnapshot.remote_copies?.[configured?.id || ''];
+    const submittedAt = receipt?.submitted_at ? Date.parse(receipt.submitted_at) : NaN;
+    const previouslySubmitted = Number.isFinite(submittedAt) && Date.now() - submittedAt > 120_000;
+    setRemoteStatus(!archivebox_server_url ? 'unavailable' : receipt ? (previouslySubmitted ? 'previously_submitted' : 'archived') : 'not_archived');
     setRemoteDetail(archivebox_server_url ? '' : t("Server not configured"));
     if (!archivebox_server_url) {
       setOk(false);
       setStatus(t("Saved locally. Server connection unavailable."));
-    } else if (currentSnapshot.remote_copies?.[configured?.id || '']) {
+    } else if (previouslySubmitted) {
       setOk(null);
       setStatus(t("Previously submitted. Server status has not been checked in this session."));
+    } else if (receipt) {
+      setOk(true);
+      setStatus(t("Submitted to ArchiveBox Server at depth $1", currentSnapshot.depth ?? 0));
+    }
+    if (receipt?.delivery_error) {
+      setOk(false);
+      setRemoteDetail(receipt.delivery_error);
+      setStatus(t("URL submitted. Capture upload failed: $1", receipt.delivery_error));
     }
     setAllTags([...new Set([...snapshots].reverse().flatMap((item) => item.tags))]);
   }
@@ -209,7 +221,7 @@ function ArchiveBoxOverlay() {
     const snapshots = await getSnapshots();
     let latestSnapshot = snapshots.find((item) => item.id === snapshot_id);
     if (!server || !latestSnapshot || (remoteStatus !== 'archived' && !latestSnapshot.remote_copies?.[server_id]?.crawl_id)) return;
-    if (kind === 'screenshot' && !server.policy.upload_screenshots_to_server) return;
+    if (kind === 'screenshot' && !server.policy.upload_screenshots_to_server && !server.policy.upload_viewport_screenshots_to_server) return;
     if (kind === 'mhtml' && !server.policy.upload_mhtml_to_server) return;
 
     try {
@@ -276,6 +288,7 @@ function ArchiveBoxOverlay() {
     localSnapshotId?: string,
     requestPermission = false,
   ) {
+    if (localSnapshotId) submittedThisSession.current.add(`${localSnapshotId}:${destination().id}`);
     setRemoteStatus('not_archived');
     setRemoteDetail('');
     setStatus(t("Sending URL to ArchiveBox Server..."));
@@ -292,6 +305,7 @@ function ArchiveBoxOverlay() {
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'archivebox_add',
       server_id: destination().id,
+      tabId: (activePage || await getActivePage()).tabId,
       body: {
         urls: [url],
         tags,
@@ -301,6 +315,7 @@ function ArchiveBoxOverlay() {
       },
     });
     if (response.ok) {
+      if (localSnapshotId) submittedThisSession.current.add(`${localSnapshotId}:${destination().id}`);
       if (localSnapshotId) {
         const updated = (await getSnapshots()).find((item) => item.id === localSnapshotId);
         if (updated) setSnapshot(updated);
@@ -339,9 +354,26 @@ function ArchiveBoxOverlay() {
   }, []);
 
   useEffect(() => {
-    if (snapshot && server && !snapshot.remote_copies?.[server.id]) {
+    if (snapshot && server && !snapshot.remote_copies?.[server.id] && !submittedThisSession.current.has(`${snapshot.id}:${server.id}`)) {
       sendToArchiveBox(snapshot.url, snapshot.tags, snapshot.depth ?? 0, snapshot.id);
     }
+  }, [snapshot?.id, server?.id]);
+
+  useEffect(() => {
+    const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
+      if (area !== 'local' || !changes.entries || !snapshot || !server) return;
+      const updated = (changes.entries.newValue as Snapshot[] | undefined)?.find((item) => item.id === snapshot.id);
+      if (!updated) return;
+      setSnapshot(updated);
+      const copy = updated.remote_copies?.[server.id];
+      if (copy?.delivery_error) {
+        setOk(false);
+        setRemoteDetail(copy.delivery_error);
+        setStatus(t("URL submitted. Capture upload failed: $1", copy.delivery_error));
+      }
+    };
+    browser.storage.onChanged.addListener(listener);
+    return () => browser.storage.onChanged.removeListener(listener);
   }, [snapshot?.id, server?.id]);
 
   useEffect(() => {
@@ -633,7 +665,7 @@ function ArchiveBoxOverlay() {
     const nextActivePage = activePage || await getActivePage();
     setActivePage(nextActivePage);
     const { currentSnapshot } = await getCurrentSnapshot(nextActivePage);
-    if (kind === 'screenshot' && currentSnapshot.screenshot) {
+    if (kind === 'screenshot' && (currentSnapshot.screenshot || currentSnapshot.viewport_screenshot)) {
       openCaptureView('screenshot');
       return;
     }
@@ -806,15 +838,15 @@ function ArchiveBoxOverlay() {
   const screenshotCaptureVisible = screenshotCapture.phase === 'visible';
   const screenshotButtonClass = [
     'archivebox-overlay__capture-button',
-    snapshot?.screenshot || screenshotCaptureVisible ? 'archivebox-overlay__capture-button--saved' : '',
+    (snapshot?.screenshot || snapshot?.viewport_screenshot) || screenshotCaptureVisible ? 'archivebox-overlay__capture-button--saved' : '',
     screenshotCaptureActive ? 'archivebox-overlay__capture-button--capturing' : '',
   ].filter(Boolean).join(' ');
-  const savedScreenshotCount = Math.max(1, snapshot?.screenshot?.parts?.length || 0);
+  const savedScreenshotCount = Math.max(1, (snapshot?.screenshot || snapshot?.viewport_screenshot)?.parts?.length || 0);
   const screenshotButtonLabel = screenshotCaptureActive
     ? t("Stop $1/$2", screenshotCapture.captured, screenshotCapture.total || screenshotCapture.captured)
     : screenshotCaptureVisible && screenshotCapture.captured > 0
       ? `✓ ${t("Screenshot")} ${screenshotCapture.captured}/${screenshotCapture.total}`
-      : snapshot?.screenshot
+      : (snapshot?.screenshot || snapshot?.viewport_screenshot)
         ? `✓ ${t("Screenshot")} ${savedScreenshotCount}`
         : t("Screenshot");
 
@@ -872,7 +904,7 @@ function ArchiveBoxOverlay() {
             onClick={() => captureLocalArtifact('screenshot')}
             title={screenshotCaptureActive
               ? t("Cancel full-page screenshot capture and restore scroll position")
-              : snapshot?.screenshot
+              : (snapshot?.screenshot || snapshot?.viewport_screenshot)
                 ? t("Open saved screenshot")
                 : t("Save a screenshot for this URL. Full-page scrolling may ask for optional scripting permission; denying it saves the visible area.")}
           >

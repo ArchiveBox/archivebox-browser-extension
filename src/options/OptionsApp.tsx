@@ -70,7 +70,7 @@ type EditablePersonaSettingKey = Exclude<PersonaSettingKey, 'geolocation'>;
 type SavedUrlSortKey = 'date' | 'url' | 'tags' | 'sync';
 type SortDirection = 'asc' | 'desc';
 type OptionTab = { id: Tab; label: string; Icon: LucideIcon };
-type LocalCaptureConfigKey = 'save_screenshots_locally' | 'save_mhtml_locally' | 'save_singlefile_locally';
+type LocalCaptureConfigKey = 'save_viewport_screenshots_locally' | 'save_screenshots_locally' | 'save_mhtml_locally' | 'save_singlefile_locally';
 type TabManagerPlusTab = {
   favIconUrl?: string;
   title?: string;
@@ -285,7 +285,7 @@ function SnapshotScreenshotThumb({ snapshot }: { snapshot: Snapshot }) {
     let cancelled = false;
     let nextObjectUrl = '';
     setObjectUrl('');
-    readSnapshotScreenshotBlob(snapshot.screenshot).then((blob) => {
+    readSnapshotScreenshotBlob(snapshot.screenshot || snapshot.viewport_screenshot).then((blob) => {
       if (!blob || cancelled) return;
       nextObjectUrl = URL.createObjectURL(blob);
       setObjectUrl(nextObjectUrl);
@@ -294,7 +294,7 @@ function SnapshotScreenshotThumb({ snapshot }: { snapshot: Snapshot }) {
       cancelled = true;
       if (nextObjectUrl) URL.revokeObjectURL(nextObjectUrl);
     };
-  }, [snapshot.screenshot?.path]);
+  }, [(snapshot.screenshot || snapshot.viewport_screenshot)?.path]);
 
   if (!objectUrl) {
     return <span className="snapshot-screenshot-placeholder" aria-hidden="true" />;
@@ -306,7 +306,7 @@ function SnapshotScreenshotThumb({ snapshot }: { snapshot: Snapshot }) {
       href={extensionUrl(`/options.html?screenshot=${encodeURIComponent(snapshot.id)}`)}
       target="_blank"
       rel="noopener noreferrer"
-      title={t("Open local screenshot: $1", snapshot.screenshot?.path || '')}
+      title={t("Open local screenshot: $1", (snapshot.screenshot || snapshot.viewport_screenshot)?.path || '')}
     >
       <img
         className="snapshot-screenshot-thumb"
@@ -598,7 +598,7 @@ function ScreenshotViewer({ snapshot_id }: { snapshot_id: string }) {
         const snapshots = await getSnapshots();
         const snapshot = snapshots.find((item) => item.id === snapshot_id);
         if (!snapshot) throw new Error(t("Saved URL not found"));
-        const blobs = await readSnapshotScreenshotBlobs(snapshot.screenshot);
+        const blobs = await readSnapshotScreenshotBlobs(snapshot.screenshot || snapshot.viewport_screenshot);
         if (blobs.length === 0) throw new Error(t("Local screenshot not found"));
 
         const nextObjectUrls = blobs.map((blob) => URL.createObjectURL(blob));
@@ -651,7 +651,7 @@ function ScreenshotViewer({ snapshot_id }: { snapshot_id: string }) {
 
   const backUrl = extensionUrl(`/options.html?highlight=${encodeURIComponent(snapshot_id)}`);
   const title = state.title || state.snapshot?.title || t("Screenshot");
-  const screenshot = state.snapshot?.screenshot;
+  const screenshot = state.snapshot?.screenshot || state.snapshot?.viewport_screenshot;
   const screenshotObjectUrls = state.objectUrls || [];
   const visibleScreenshotUrl = screenshotObjectUrls[0];
   const fullPageScreenshotUrls = screenshotObjectUrls.length > 1 ? screenshotObjectUrls.slice(1) : screenshotObjectUrls;
@@ -926,7 +926,7 @@ function OptionsMain() {
   }, [highlightedSnapshotId, visibleSnapshots]);
 
   const tags = useMemo(() => uniqueTags(snapshots), [snapshots]);
-  const hasSavedScreenshots = useMemo(() => snapshots.some((snapshot) => Boolean(snapshot.screenshot?.path)), [snapshots]);
+  const hasSavedScreenshots = useMemo(() => snapshots.some((snapshot) => Boolean((snapshot.screenshot || snapshot.viewport_screenshot)?.path)), [snapshots]);
   const tagCounts = useMemo(() => {
     const counts = new Map<string, number>();
     visibleSnapshots.forEach((snapshot) => {
@@ -1081,7 +1081,7 @@ function OptionsMain() {
     let downloaded = 0;
     let missing = 0;
     for (const snapshot of selectedSnapshotList) {
-      const blobs = await readSnapshotScreenshotBlobs(snapshot.screenshot);
+      const blobs = await readSnapshotScreenshotBlobs(snapshot.screenshot || snapshot.viewport_screenshot);
       if (blobs.length === 0) {
         missing += 1;
         continue;
@@ -2113,6 +2113,25 @@ function OptionsMain() {
             <label className="toggle">
               <input
                 type="checkbox"
+                checked={config.save_viewport_screenshots_locally}
+                onChange={(event) => updateLocalCaptureSetting('save_viewport_screenshots_locally', event.currentTarget.checked)}
+              />
+              {t("Save viewport screenshots locally")}
+            </label>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                aria-label={t("Upload viewport screenshots to server")}
+                checked={Boolean(server?.policy.upload_viewport_screenshots_to_server)}
+                onChange={(event) => saveServer({ policy: { upload_viewport_screenshots_to_server: event.currentTarget.checked } })}
+              />
+              {t("Upload to server")}
+            </label>
+          </div>
+          <div className="capture-options-row">
+            <label className="toggle">
+              <input
+                type="checkbox"
                 checked={config.save_screenshots_locally}
                 onChange={(event) => updateLocalCaptureSetting('save_screenshots_locally', event.currentTarget.checked)}
               />
@@ -2121,7 +2140,7 @@ function OptionsMain() {
             <label className="toggle">
               <input
                 type="checkbox"
-                aria-label={t("Upload screenshots to server")}
+                aria-label={t("Upload full-page screenshots to server")}
                 checked={Boolean(server?.policy.upload_screenshots_to_server)}
                 onChange={(event) => saveServer({ policy: { upload_screenshots_to_server: event.currentTarget.checked } })}
               />

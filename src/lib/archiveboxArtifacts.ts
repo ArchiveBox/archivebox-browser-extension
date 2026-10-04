@@ -139,7 +139,9 @@ export async function uploadSnapshotCaptureArtifactsToArchiveBox(server: ServerD
         await mutateSnapshots((entries) => entries.map((item) => {
           const latest = item.remote_copies?.[server.id];
           if (item.id !== current.id || !latest || latest.snapshot_id !== snapshot_id || latest.crawl_id !== copy?.crawl_id) return item;
-          return { ...item, remote_copies: { ...item.remote_copies, [server.id]: { ...latest, status } } };
+          return { ...item, remote_copies: { ...item.remote_copies, [server.id]: { ...latest, status,
+            delivery_error: status === 'complete' ? undefined : latest.delivery_error,
+          } } };
         }));
       };
       await setStatus('accepted');
@@ -164,6 +166,7 @@ async function uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked(server: Server
   const opfsFiles = getOpfsFilesForSnapshot(snapshot, await readSnapshotOpfsFiles(snapshot));
 
   for (const group of buildSnapshotArtifactGroups(snapshot, opfsFiles)) {
+    if (group.plugin === 'chrome_extension_viewport' && !server.policy.upload_viewport_screenshots_to_server) continue;
     if (group.plugin === 'chrome_extension_screenshot' && !server.policy.upload_screenshots_to_server) continue;
     if (group.plugin === 'chrome_mhtml' && !server.policy.upload_mhtml_to_server) continue;
     if (group.plugin === 'chrome_extension_singlefile' && !server.policy.upload_singlefile_to_server) continue;

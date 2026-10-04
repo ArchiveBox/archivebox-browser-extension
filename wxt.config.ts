@@ -29,6 +29,7 @@ export default defineConfig({
       'storage',
       'alarms',
       'activeTab',
+      ...(['chrome', 'edge'].includes(browser) ? ['pageCapture'] : []),
       'contextMenus',
       ...(browser === 'safari' ? ['nativeMessaging'] : []),
       ...(['chrome', 'edge', 'firefox'].includes(browser) ? ['unlimitedStorage'] : []),
@@ -39,7 +40,6 @@ export default defineConfig({
       'cookies',
       'tabs',
       'scripting',
-      ...(['chrome', 'edge'].includes(browser) ? ['pageCapture'] : []),
     ],
     optional_host_permissions: ['<all_urls>'],
     web_accessible_resources: [

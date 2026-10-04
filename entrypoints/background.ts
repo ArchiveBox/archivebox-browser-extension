@@ -53,6 +53,7 @@ type ScriptingApi = {
 
 type CaptureArtifactOptions = {
   screenshot?: boolean;
+  viewportScreenshot?: boolean;
   mhtml?: boolean;
   singlefile?: boolean;
 };
@@ -249,6 +250,7 @@ async function writeBitmapScreenshotParts(
   bitmap: ImageBitmap,
   width: number,
   height: number,
+  viewport = false,
 ): Promise<SnapshotScreenshot> {
   const partCanvases = createScreenshotPartCanvases(width, height);
   drawBitmapIntoScreenshotParts(
@@ -268,7 +270,7 @@ async function writeBitmapScreenshotParts(
     width: part.canvas.width,
     height: part.canvas.height,
   })));
-  return writeSnapshotScreenshotParts(snapshot, partBlobs, width, height);
+  return writeSnapshotScreenshotParts(snapshot, partBlobs, width, height, viewport);
 }
 
 async function captureVisibleTabPng(windowId: number): Promise<Blob> {
@@ -279,7 +281,7 @@ async function captureVisibleTabPng(windowId: number): Promise<Blob> {
   return dataUrlToBlob(dataUrl);
 }
 
-async function captureVisibleScreenshot(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<SnapshotScreenshot> {
+async function captureVisibleScreenshot(tab: Browser.tabs.Tab, snapshot: Snapshot, viewport = false): Promise<SnapshotScreenshot> {
   if (typeof tab.id !== 'number') throw new Error(t("No tab ID available for screenshot capture."));
   if (typeof tab.windowId !== 'number') throw new Error(t("No window ID available for screenshot capture."));
   if (typeof createImageBitmap !== 'function') {
@@ -291,12 +293,12 @@ async function captureVisibleScreenshot(tab: Browser.tabs.Tab, snapshot: Snapsho
   const width = bitmap.width;
   const height = bitmap.height;
   if (width > maxScreenshotPngDimensionPixels || height > maxScreenshotPngDimensionPixels) {
-    const screenshot = await writeBitmapScreenshotParts(snapshot, bitmap, width, height);
+    const screenshot = await writeBitmapScreenshotParts(snapshot, bitmap, width, height, viewport);
     bitmap.close();
     return screenshot;
   }
   bitmap.close();
-  return writeSnapshotScreenshot(snapshot, blob, width, height);
+  return writeSnapshotScreenshot(snapshot, blob, width, height, viewport);
 }
 
 function screenshotProgressTotal(metrics: PageMetrics | ScrollResult, captured: number): number {
@@ -373,9 +375,9 @@ async function measureScreenshotPage(tab: Browser.tabs.Tab): Promise<PageMetrics
   return result.result;
 }
 
-async function attachScreenshotToSnapshot(snapshot_id: string, screenshot: SnapshotScreenshot): Promise<void> {
+async function attachScreenshotToSnapshot(snapshot_id: string, screenshot: SnapshotScreenshot, viewport = false): Promise<void> {
   await mutateSnapshots((snapshots) => snapshots.map((snapshot) => (
-    snapshot.id === snapshot_id ? { ...snapshot, screenshot } : snapshot
+    snapshot.id === snapshot_id ? { ...snapshot, [viewport ? 'viewport_screenshot' : 'screenshot']: screenshot } : snapshot
   )));
 }
 
@@ -654,14 +656,14 @@ async function captureAndAttachSnapshotScreenshot(
   return withSnapshotArtifacts(snapshot.id, async () => {
     if (!(await getSnapshotById(snapshot.id))) throw new Error(t("Saved snapshot not found."));
     if (await usesFastTestCapture()) {
-      const screenshot = await writeSnapshotScreenshot(snapshot, dataUrlToBlob(testScreenshotPngDataUrl), 1, 1);
-      await attachScreenshotToSnapshot(snapshot.id, screenshot);
+      const screenshot = await writeSnapshotScreenshot(snapshot, dataUrlToBlob(testScreenshotPngDataUrl), 1, 1, !fullPage);
+      await attachScreenshotToSnapshot(snapshot.id, screenshot, !fullPage);
       return screenshot;
     }
 
     let screenshot: SnapshotScreenshot;
     if (!fullPage) {
-      screenshot = await captureVisibleScreenshot(tab, snapshot);
+      screenshot = await captureVisibleScreenshot(tab, snapshot, true);
     } else {
       try {
         screenshot = await captureFullPageScreenshot(tab, snapshot);
@@ -670,7 +672,7 @@ async function captureAndAttachSnapshotScreenshot(
         screenshot = await captureVisibleScreenshot(tab, snapshot);
       }
     }
-    await attachScreenshotToSnapshot(snapshot.id, screenshot);
+    await attachScreenshotToSnapshot(snapshot.id, screenshot, !fullPage);
     console.info(`ArchiveBox: saved screenshot for ${snapshot.url}`);
     return screenshot;
   });
@@ -722,39 +724,54 @@ async function captureAndAttachSnapshotArtifacts(
   snapshot: Snapshot,
   options: CaptureArtifactOptions,
 ): Promise<void> {
+  const errors: string[] = [];
+  if (options.viewportScreenshot) {
+    await captureAndAttachSnapshotScreenshot(tab, snapshot, false).catch((error) => {
+      errors.push(errorMessage(error));
+      console.error(`Failed to capture viewport screenshot for ${snapshot.url}:`, error);
+    });
+  }
+
   if (options.mhtml) {
     await captureAndAttachSnapshotMhtml(tab, snapshot).catch((error) => {
+      errors.push(errorMessage(error));
       console.error(`Failed to capture MHTML for ${snapshot.url}:`, error);
     });
   }
 
   if (options.singlefile) {
     await captureAndAttachSnapshotSingleFile(tab, snapshot).catch((error) => {
+      errors.push(errorMessage(error));
       console.error(`Failed to capture SingleFile HTML for ${snapshot.url}:`, error);
     });
   }
 
   if (options.screenshot) {
     await captureAndAttachSnapshotScreenshot(tab, snapshot, true).catch((error) => {
+      errors.push(errorMessage(error));
       console.error(`Failed to capture screenshot for ${snapshot.url}:`, error);
     });
   }
+  if (errors.length) throw new Error(errors.join('; '));
 }
 
 async function configuredCaptureOptions(snapshot: Snapshot, created: boolean): Promise<CaptureArtifactOptions> {
   const {
     save_screenshots_locally,
+    save_viewport_screenshots_locally,
     save_mhtml_locally,
     save_singlefile_locally,
   } = await getConfig();
   const wantsScreenshot = save_screenshots_locally && (created || !snapshot.screenshot);
+  const wantsViewportScreenshot = save_viewport_screenshots_locally && (created || !snapshot.viewport_screenshot);
   const wantsMhtml = supportsMhtmlCapture && save_mhtml_locally && (created || !snapshot.mhtml);
   const wantsSingleFile = save_singlefile_locally && (created || !snapshot.singlefile);
 
-  if (!wantsScreenshot && !wantsMhtml && !wantsSingleFile) return {};
+  if (!wantsScreenshot && !wantsViewportScreenshot && !wantsMhtml && !wantsSingleFile) return {};
 
   return {
     screenshot: wantsScreenshot,
+    viewportScreenshot: wantsViewportScreenshot,
     mhtml: wantsMhtml,
     singlefile: wantsSingleFile,
   };
@@ -766,7 +783,7 @@ async function captureConfiguredSnapshotArtifacts(
   created: boolean,
 ): Promise<void> {
   const options = await configuredCaptureOptions(snapshot, created);
-  if (!options.screenshot && !options.mhtml && !options.singlefile) return;
+  if (!options.screenshot && !options.viewportScreenshot && !options.mhtml && !options.singlefile) return;
   await captureAndAttachSnapshotArtifacts(tab, snapshot, options);
 }
 
@@ -949,7 +966,19 @@ export default defineBackground(() => {
         return getConfig().then(async (config) => {
           const server = requireServer(config, message.server_id);
           const snapshot = (await getSnapshots()).find((item) => item.id === message.body.snapshot_ids?.[0] && item.url === message.body.urls[0]);
-          if (snapshot && message.body.urls.length === 1) return submitSnapshot(server, { ...snapshot, tags: message.body.tags, depth: message.body.depth ?? 0 });
+          if (snapshot && message.body.urls.length === 1) {
+            const captureReady = message.tabId === undefined ? undefined : getMessageTab(message.tabId)
+              .then(async (tab) => {
+                if (tab.url !== snapshot.url) throw new Error('The tab navigated before capture.');
+                await captureConfiguredSnapshotArtifacts(tab, snapshot, false);
+              });
+            // Observe immediately while the URL request runs; delivery awaits and records failures.
+            void captureReady?.catch(() => undefined);
+            return new Promise<Awaited<ReturnType<typeof submitSnapshot>>>((resolve, reject) => {
+              void submitSnapshot(server, { ...snapshot, tags: message.body.tags, depth: message.body.depth ?? 0 }, captureReady, resolve)
+                .then(resolve, reject);
+            });
+          }
           return addToArchiveBox(server, message.body.urls, message.body.tags, message.body.depth ?? 0, false, false, message.body.snapshot_ids || []);
         })
           .then((receipt) => ({ ok: true, receipt }))

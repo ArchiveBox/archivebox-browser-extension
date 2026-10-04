@@ -48,8 +48,11 @@ In **Extension options → Bulk Import URLs**, choose which Safari data to impor
 
 ## Local Captures
 
-When local capture saving is enabled in the options page, the extension stores capture artifacts in the browser's extension-local OPFS storage before the popup is shown:
+Viewport screenshots and MHTML captures (Chrome/Edge/Brave) are enabled by default, along with uploading these artifacts to the selected server. Safari and Firefox do not capture MHTML. Full-page capture and upload are separate opt-in settings. Viewport and full-page images are stored independently when both are enabled. Existing explicit capture and upload choices are preserved.
 
+The extension stores capture artifacts in the browser's extension-local OPFS storage:
+
+- Viewport screenshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_viewport/screenshot.png`
 - Full-page screenshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_screenshot/screenshot.png`
 - MHTML snapshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_mhtml/snapshot.mhtml`
 
@@ -104,6 +107,17 @@ node scripts/test-retention-live.mjs
 ```
 
 The live test imports bookmarks through the options UI, submits them, checks disconnected/missing-server preservation, verifies OPFS and metadata deletion, restarts the service worker, and waits for automatic expiration after resubmission. It creates server test records and deletes one of its own records to test a missing snapshot; use a disposable collection. UI default/persistence and layout checks run with `pnpm exec playwright test tests/retention.test.ts tests/options-responsive.test.ts`.
+
+To verify native popup submission and real capture uploads against a running ArchiveBox server:
+
+```bash
+ARCHIVEBOX_TEST_SERVER=http://127.0.0.1:5797 \
+ARCHIVEBOX_TEST_KEY_FILE=/path/to/disposable-server-api-key \
+FULLPAGE=1 FULLPAGE_UPLOAD=1 AGE_CHECK=1 \
+node scripts/test-popup-delivery-live.mjs
+```
+
+This uses the options and native popup UI, compares replayed captures with local bytes, and waits two real minutes before checking the older-submission label. Omit `FULLPAGE_UPLOAD` to verify that full-page capture stays local while viewport and MHTML upload. The test creates real example.com submissions.
 
 ## Changelog
 

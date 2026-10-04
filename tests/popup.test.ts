@@ -1375,8 +1375,9 @@ test('an already-synced URL without a server shows its connection is unavailable
 
     await setExtensionStorage(harness, serverSettings(server.url.replace('127.0.0.1', 'localhost')));
     const reopened = await openNativePopup(harness, page);
-    await waitForPopupText(harness, reopened, 'Previously submitted');
-    expect(await popupElementsHtml(reopened, '.archivebox-overlay__pill--archived')).toHaveLength(0);
+    await waitForPopupText(harness, reopened, 'Submitted to ArchiveBox Server at depth 0');
+    expect(await popupElementsHtml(reopened, '.archivebox-overlay__pill--archived')).toHaveLength(1);
+    expect(htmlText(await popupHtml(harness, reopened))).not.toContain('Previously submitted');
     expect(htmlText(await popupHtml(harness, reopened))).not.toContain('Saved to ArchiveBox Server');
     reopened.cdp.close();
   } finally {
