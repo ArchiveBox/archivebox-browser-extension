@@ -51,10 +51,10 @@ try {
   context = await chromium.launchPersistentContext(profile, {
     channel: 'chromium',
     headless: true,
-    args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+    args: ['--enable-unsafe-extension-debugging'],
   });
-  const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
-  const id = new URL(worker.url()).hostname;
+  const cdp = await context.browser().newBrowserCDPSession();
+  const { id } = await cdp.send('Extensions.loadUnpacked', { path: extensionPath });
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.setViewportSize(sizes[0]);
