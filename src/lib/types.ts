@@ -152,6 +152,7 @@ export type ArchiveboxAddMessage = {
     depth?: ArchiveDepth;
     snapshot_ids?: string[];
     titles?: string[];
+    only_new?: boolean;
   };
 };
 

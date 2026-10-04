@@ -970,16 +970,16 @@ export default defineBackground(() => {
             const captureReady = message.tabId === undefined ? undefined : getMessageTab(message.tabId)
               .then(async (tab) => {
                 if (tab.url !== snapshot.url) throw new Error('The tab navigated before capture.');
-                await captureConfiguredSnapshotArtifacts(tab, snapshot, false);
+                await captureConfiguredSnapshotArtifacts(tab, snapshot, message.body.only_new === false);
               });
             // Observe immediately while the URL request runs; delivery awaits and records failures.
             void captureReady?.catch(() => undefined);
             return new Promise<Awaited<ReturnType<typeof submitSnapshot>>>((resolve, reject) => {
-              void submitSnapshot(server, { ...snapshot, tags: message.body.tags, depth: message.body.depth ?? 0 }, captureReady, resolve)
+              void submitSnapshot(server, { ...snapshot, tags: message.body.tags, depth: message.body.depth ?? 0 }, captureReady, resolve, message.body.only_new)
                 .then(resolve, reject);
             });
           }
-          return addToArchiveBox(server, message.body.urls, message.body.tags, message.body.depth ?? 0, false, false, message.body.snapshot_ids || []);
+          return addToArchiveBox(server, message.body.urls, message.body.tags, message.body.depth ?? 0, false, false, message.body.snapshot_ids || [], message.body.only_new);
         })
           .then((receipt) => ({ ok: true, receipt }))
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));

@@ -113,11 +113,11 @@ To verify native popup submission and real capture uploads against a running Arc
 ```bash
 ARCHIVEBOX_TEST_SERVER=http://127.0.0.1:5797 \
 ARCHIVEBOX_TEST_KEY_FILE=/path/to/disposable-server-api-key \
-FULLPAGE=1 FULLPAGE_UPLOAD=1 AGE_CHECK=1 \
+FULLPAGE=1 FULLPAGE_UPLOAD=1 AGE_CHECK=1 RESUBMIT=1 \
 node scripts/test-popup-delivery-live.mjs
 ```
 
-This uses the options and native popup UI, compares replayed captures with local bytes, and waits two real minutes before checking the older-submission label. Omit `FULLPAGE_UPLOAD` to verify that full-page capture stays local while viewport and MHTML upload. The test creates real example.com submissions.
+This uses the options and native popup UI, verifies the live seconds counter, compares replayed captures with local bytes, and waits two real minutes before checking the submission age and fresh server lookup. `RESUBMIT=1` verifies that Re-submit creates a new crawl and snapshot with `ONLY_NEW=False`, and checks the crawl depth wording. `DELETE_AFTER_AGE=1` deletes its own server snapshot through the public API, then verifies that reopening the popup detects the missing capture and submits it again. Omit `FULLPAGE_UPLOAD` to verify that full-page capture stays local while viewport and MHTML upload. The test creates real example.com submissions.
 
 ## Changelog
 

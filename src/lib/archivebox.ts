@@ -147,6 +147,7 @@ export async function addToArchiveBox(
   update = false,
   update_all = false,
   snapshot_ids: string[] = [],
+  only_new?: boolean,
 ): Promise<ArchiveSubmissionReceipt> {
   return navigator.locks.request<Promise<ArchiveSubmissionReceipt>>(`archivebox-submissions:${server.id}`, async () => {
     const { server: configuredServerUrl, token } = server;
@@ -213,6 +214,7 @@ export async function addToArchiveBox(
           persona: server.persona ?? "Default",
           update,
           update_all,
+          ...(only_new === undefined ? {} : { only_new }),
         }),
       });
 
@@ -237,6 +239,7 @@ export async function addToArchiveBox(
       }
     }
 
+    if (only_new === false) throw new Error('Re-submit requires an ArchiveBox server with the add API and an API key.');
     const body = new FormData();
     body.append('url', archiveableUrls.join('\n'));
     body.append('tag', formattedTags);
@@ -655,6 +658,30 @@ export async function testApiKey(serverUrl: string, apiKey: string): Promise<str
   return data.user_id;
 }
 
+export async function findSubmittedSnapshot(server: ServerConfiguration, url: string): Promise<{ id: string; created_at: string } | null> {
+  const origin = serverBaseUrl(server.server);
+  await ensureServerHostPermission(origin);
+  let newest: { id: string; created_at: string } | null = null;
+  let offset = 0;
+  while (true) {
+    const query = new URLSearchParams({ url, with_archiveresults: 'false', limit: '200', offset: String(offset) });
+    const response = await fetchWithTimeout(`${origin}/api/v1/core/snapshots?${query}`, {
+      headers: apiHeaders(server.token), credentials: 'include', redirect: 'error', cache: 'no-store',
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const data = await response.json() as { items?: Array<{ id?: string; url?: string; created_at?: string; status?: string }>; count?: number };
+    if (!Array.isArray(data.items) || !Number.isInteger(data.count) || data.count! < 0) throw new Error('Invalid snapshot lookup response.');
+    for (const item of data.items) {
+      if (item.url !== url || !item.id || !item.created_at || !Number.isFinite(Date.parse(item.created_at))) throw new Error('Invalid snapshot lookup result.');
+      if (item.status === 'deleting') continue;
+      if (!newest || Date.parse(item.created_at) > Date.parse(newest.created_at)) newest = { id: item.id, created_at: item.created_at };
+    }
+    offset += data.items.length;
+    if (offset >= data.count!) return newest;
+    if (!data.items.length) throw new Error('Incomplete snapshot lookup response.');
+  }
+}
+
 // Retention must not use cached submission state as proof of current connectivity.
 export async function snapshotExistsOnServer(snapshot: Snapshot, server: ServerConfiguration): Promise<boolean> {
   try {
@@ -680,11 +707,12 @@ export async function submitSnapshot(
   snapshot: Snapshot,
   captureReady?: Promise<void>,
   onAccepted?: (receipt: ArchiveSubmissionReceipt) => void,
+  only_new?: boolean,
 ): Promise<ArchiveSubmissionReceipt> {
   return await navigator.locks.request<Promise<ArchiveSubmissionReceipt>>(`archivebox-delivery:${snapshot.id}`, { mode: 'shared' }, async () =>
     await navigator.locks.request<Promise<ArchiveSubmissionReceipt>>(`archivebox-delivery:${server.id}:${snapshot.id}`, async () => {
       const result = await addToArchiveBox(server, [snapshot.url], snapshot.tags, snapshot.depth ?? 0,
-        false, false, [snapshot.id]);
+        false, false, [snapshot.id], only_new);
       onAccepted?.(result);
       try {
         const accepted: Snapshot = { ...snapshot, remote_copies: { ...snapshot.remote_copies, [server.id]: {

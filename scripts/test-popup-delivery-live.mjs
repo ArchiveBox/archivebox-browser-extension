@@ -42,8 +42,23 @@ try {
     await expect.poll(async () => { const targets = await fetch('http://127.0.0.1:' + port + '/json/list').then(r => r.json()); const worker = targets.find(t => t.url.startsWith('chrome-extension://') && t.url.endsWith('/background.js')); id = worker ? new URL(worker.url).host : undefined; return id; }).toBeTruthy();
   } else ({ id } = await cdp.send('Extensions.loadUnpacked', { path: extensionPath }));
   const context = browser.contexts()[0];
+  const extensions = await context.newPage();
+  await extensions.goto(`chrome://extensions/?id=${id}`);
+  await extensions.getByRole('button', { name: 'Reload', exact: true }).click();
+  await expect.poll(async () => (await fetch('http://127.0.0.1:' + port + '/json/list').then(r => r.json())).some(t => t.url === `chrome-extension://${id}/background.js`)).toBe(true);
+  await extensions.close();
+  const addRequests = [];
+  const lookupRequests = [];
+  const recordLookups = async popup => lookupRequests.push(...await popup.evaluate(`performance.getEntriesByType('resource').map(entry => entry.name).filter(url => url.startsWith(${JSON.stringify(server + '/api/v1/core/snapshots?')}))`));
+  context.on('request', request => {
+    if (request.url().endsWith('/api/v1/cli/add')) {
+      const body = request.postDataJSON();
+      addRequests.push({ only_new: body.only_new, depth: body.depth });
+      console.log(JSON.stringify({ event: 'add-request', only_new: body.only_new, depth: body.depth }));
+    }
+  });
   let acceptanceTtfbMs;
-  context.on('response', response => { if (response.url().endsWith('/api/v1/cli/add')) { const timing = response.request().timing(); acceptanceTtfbMs = timing.responseStart - timing.requestStart; } });
+  context.on('response', response => { if (acceptanceTtfbMs === undefined && response.url().endsWith('/api/v1/cli/add')) { const timing = response.request().timing(); acceptanceTtfbMs = timing.responseStart - timing.requestStart; } });
   const options = await context.newPage();
   await options.goto(`chrome-extension://${id}/options.html`);
   await options.getByRole('button', { name: 'Configuration', exact: true }).click();
@@ -86,9 +101,14 @@ try {
   expect(popupTarget).toBeTruthy();
   const popup = await connectPopup(popupTarget.webSocketDebuggerUrl);
   await popup.evaluate(`window.testStatusHistory = []; const recordStatus = () => { const text = document.querySelector('.archivebox-overlay__states')?.textContent || ''; if (window.testStatusHistory.at(-1) !== text) window.testStatusHistory.push(text); }; new MutationObserver(recordStatus).observe(document.documentElement, { subtree: true, childList: true, characterData: true }); recordStatus();`);
-  await expect.poll(() => popup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent'), { timeout: 10000 }).toContain('Submitted to ArchiveBox Server');
+  await expect.poll(() => popup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent'), { timeout: 10000 }).toBe('Submitted');
   const acceptedMs = performance.now() - openAt;
   console.log(JSON.stringify({ event: 'accepted', acceptedMs, acceptanceTtfbMs, url }));
+  for (const seconds of [1, 2]) {
+    await expect.poll(() => popup.evaluate(`window.testStatusHistory.some(text => text.includes('Submitted ${seconds}s ago'))`), { intervals: [100], timeout: 5000 }).toBe(true);
+  }
+  expect(addRequests).toHaveLength(1);
+  expect(await popup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent')).toBe('Submitted');
   const entries = () => options.evaluate(async () => (await chrome.storage.local.get('entries')).entries || []);
   const serverId = await options.evaluate(async () => (await chrome.storage.local.get('server_registry')).server_registry.active_server_id);
   await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.status, { timeout: 30000 }).toBe('complete');
@@ -109,19 +129,22 @@ try {
   expect(await target.evaluate(() => ({ x: scrollX, y: scrollY }))).toEqual(originalScroll);
   console.log(JSON.stringify({ event: 'complete', elapsedMs: performance.now() - openAt, screenshot: saved.viewport_screenshot, mhtml: saved.mhtml, remote: saved.remote_copies[serverId] }));
   await popup.click('input[placeholder="+ tag"]');
+  await popup.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', modifiers: 4, commands: ['selectAll'] });
+  await popup.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 4 });
   await popup.send('Input.insertText', { text: 'fresh-submission-regression' });
   await popup.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
   await popup.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
   await expect.poll(() => popup.evaluate('document.querySelector(".archivebox-overlay__states")?.textContent')).toContain('Submitted');
-  expect(await popup.evaluate('document.querySelector(".archivebox-overlay__states")?.textContent')).not.toContain('Previously submitted');
+  expect(await popup.evaluate('document.querySelector(".archivebox-overlay__states")?.textContent')).not.toContain('Submitted 2 minutes ago');
   await expect.poll(async () => (await entries()).find(e => e.url === url)?.tags).toContain('fresh-submission-regression');
   await popup.click('.archivebox-tag-chip--current .archivebox-tag-chip__remove');
   await expect.poll(async () => (await entries()).find(e => e.url === url)?.tags).not.toContain('fresh-submission-regression');
-  expect(await popup.evaluate('document.querySelector(".archivebox-overlay__states")?.textContent')).not.toContain('Previously submitted');
+  expect(await popup.evaluate('document.querySelector(".archivebox-overlay__states")?.textContent')).not.toContain('Submitted 2 minutes ago');
   const screenshot = await popup.send('Page.captureScreenshot');
   await writeFile(path.join(evidence, 'fresh-popup.png'), Buffer.from(screenshot.data, 'base64'));
   const statusHistory = await popup.evaluate('window.testStatusHistory');
   expect(statusHistory.some(text => text.includes('Previously submitted'))).toBe(false);
+  await recordLookups(popup);
   await popup.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }).catch(() => undefined);
   await popup.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }).catch(() => undefined);
   await expect.poll(async () => (await fetch('http://127.0.0.1:' + port + '/json/list').then(r => r.json())).some(t => t.id === popupTarget.id)).toBe(false);
@@ -134,9 +157,11 @@ try {
   expect(reopenedTarget).toBeTruthy();
   const reopened = await connectPopup(reopenedTarget.webSocketDebuggerUrl);
   await expect.poll(() => reopened.evaluate('document.querySelector(".archivebox-overlay__states")?.textContent')).toContain('Submitted');
-  expect(await reopened.evaluate('document.querySelector(".archivebox-overlay__states")?.textContent')).not.toContain('Previously submitted');
+  expect(await reopened.evaluate('document.querySelector(".archivebox-overlay__states")?.textContent')).not.toContain('Submitted 2 minutes ago');
+  await recordLookups(reopened);
   await reopened.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }).catch(() => undefined);
   reopened.close();
+  expect(lookupRequests).toHaveLength(0);
   const crawlsResponse = await fetch(server + '/api/v1/crawls/crawls', { headers: { Authorization: 'Bearer ' + key } });
   expect(crawlsResponse.ok).toBe(true);
   const crawls = await crawlsResponse.json();
@@ -167,6 +192,9 @@ try {
       expect(Buffer.from(await replay.arrayBuffer()).equals(Buffer.from(localBytes))).toBe(true);
     }
   }
+  let lastPopup;
+  let expectedCrawls = 1;
+  let staleDeletionReplacement;
   if (process.env.AGE_CHECK) {
     const after = Date.parse(saved.remote_copies[serverId].submitted_at) + 121000;
     while (Date.now() < after) { console.log(JSON.stringify({ event: 'waiting-real-receipt-age', remainingMs: after - Date.now() })); await new Promise(resolve => setTimeout(resolve, Math.min(30000, after - Date.now()))); }
@@ -175,12 +203,66 @@ try {
     await options.evaluate(windowId => chrome.action.openPopup({ windowId }), windowId);
     const agedTarget = (await fetch('http://127.0.0.1:' + port + '/json/list').then(r => r.json())).find(t => t.url === `chrome-extension://${id}/popup.html`);
     const aged = await connectPopup(agedTarget.webSocketDebuggerUrl);
-    await expect.poll(() => aged.evaluate('document.querySelector(".archivebox-overlay__states")?.textContent')).toContain('Previously submitted');
-    aged.close();
+    await expect.poll(() => aged.evaluate('document.querySelector(".archivebox-overlay__states")?.textContent')).toContain('Submitted 2 minutes ago');
+    await recordLookups(aged);
+    expect(lookupRequests).toHaveLength(1);
+    expect(new URL(lookupRequests[0]).searchParams.get('url')).toBe(url);
+    expect((await entries()).find(e => e.url === url).remote_copies[serverId].submitted_at).toBe(saved.remote_copies[serverId].submitted_at);
+    await writeFile(path.join(evidence, 'aged-popup.png'), Buffer.from((await aged.send('Page.captureScreenshot')).data, 'base64'));
+    lastPopup = aged;
     const afterCrawls = await fetch(server + '/api/v1/crawls/crawls', { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json());
     expect(afterCrawls.filter(c => c.urls.split('\n').includes(url))).toHaveLength(1);
   }
-  const report = { statusHistory, acceptanceTtfbMs, acceptedMs, elapsedMs: performance.now() - openAt, saved, remote, fullpage: Boolean(process.env.FULLPAGE), fullpageUpload: Boolean(process.env.FULLPAGE_UPLOAD) };
+  if (process.env.DELETE_AFTER_AGE) {
+    if (!lastPopup) throw new Error('DELETE_AFTER_AGE requires AGE_CHECK=1.');
+    await lastPopup.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }).catch(() => undefined);
+    lastPopup.close();
+    const removed = await fetch(server + '/api/v1/core/snapshot/' + saved.remote_copies[serverId].snapshot_id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + key } });
+    expect(removed.ok).toBe(true);
+    expect((await fetch(server + '/api/v1/core/snapshot/' + saved.remote_copies[serverId].snapshot_id, { headers: { Authorization: 'Bearer ' + key } })).status).toBe(404);
+    await options.evaluate(async windowId => { await chrome.windows.update(windowId, { focused: true }); await chrome.action.openPopup({ windowId }); }, windowId);
+    const replacementTarget = (await fetch('http://127.0.0.1:' + port + '/json/list').then(r => r.json())).find(t => t.url === `chrome-extension://${id}/popup.html`);
+    lastPopup = await connectPopup(replacementTarget.webSocketDebuggerUrl);
+    await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.crawl_id).not.toBe(saved.remote_copies[serverId].crawl_id);
+    await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.status, { timeout: 30000 }).toBe('complete');
+    staleDeletionReplacement = (await entries()).find(e => e.url === url).remote_copies[serverId];
+    expect(staleDeletionReplacement.snapshot_id).not.toBe(saved.remote_copies[serverId].snapshot_id);
+    await recordLookups(lastPopup);
+    expect(lookupRequests).toHaveLength(2);
+    await expect.poll(() => lastPopup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent')).toBe('Submitted');
+    expectedCrawls++;
+  }
+  let resubmission;
+  if (process.env.RESUBMIT) {
+    if (!lastPopup) {
+      await options.evaluate(async windowId => { await chrome.windows.update(windowId, { focused: true }); await chrome.action.openPopup({ windowId }); }, windowId);
+      const lastTarget = (await fetch('http://127.0.0.1:' + port + '/json/list').then(r => r.json())).find(t => t.url === `chrome-extension://${id}/popup.html`);
+      lastPopup = await connectPopup(lastTarget.webSocketDebuggerUrl);
+    }
+    await expect.poll(() => lastPopup.evaluate('Boolean(document.querySelector(".archivebox-overlay__resubmit"))')).toBe(true);
+    const previousReceipt = (await entries()).find(e => e.url === url).remote_copies[serverId];
+    await lastPopup.click('.archivebox-overlay__resubmit');
+    await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.crawl_id).not.toBe(previousReceipt.crawl_id);
+    await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.status, { timeout: 30000 }).toBe('complete');
+    resubmission = (await entries()).find(e => e.url === url).remote_copies[serverId];
+    expect(resubmission.snapshot_id).not.toBe(previousReceipt.snapshot_id);
+    await expect.poll(() => lastPopup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent')).toBe('Submitted');
+    await writeFile(path.join(evidence, 'resubmitted-popup.png'), Buffer.from((await lastPopup.send('Page.captureScreenshot')).data, 'base64'));
+    const newCrawls = await fetch(server + '/api/v1/crawls/crawls', { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json());
+    expect(newCrawls.filter(c => c.urls.split('\n').includes(url))).toHaveLength(expectedCrawls + 1);
+    expect(newCrawls.find(c => c.id.replaceAll('-', '') === resubmission.crawl_id.replaceAll('-', '')).config.ONLY_NEW).toBe(false);
+    const newRemote = await fetch(server + '/api/v1/core/snapshot/' + resubmission.snapshot_id, { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json());
+    expect(newRemote.url).toBe(url);
+    expect(newRemote.archiveresults.find(r => r.plugin === 'chrome_extension_viewport')?.status).toBe('succeeded');
+    await lastPopup.click('.archivebox-overlay__crawl-button');
+    await lastPopup.click('.archivebox-overlay__crawl-menu button:nth-child(2)');
+    await expect.poll(() => lastPopup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent')).toBe('Submitted + will crawl URLs 1 hop out');
+    await lastPopup.click('.archivebox-overlay__crawl-button');
+    await lastPopup.click('.archivebox-overlay__crawl-menu button:nth-child(3)');
+    await expect.poll(() => lastPopup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent')).toBe('Submitted + will crawl URLs 2 hops out');
+  }
+  lastPopup?.close();
+  const report = { staleDeletionReplacement, lookupRequests, addRequests, resubmission, statusHistory, acceptanceTtfbMs, acceptedMs, elapsedMs: performance.now() - openAt, saved, remote, fullpage: Boolean(process.env.FULLPAGE), fullpageUpload: Boolean(process.env.FULLPAGE_UPLOAD) };
   await writeFile(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify({ event: 'verified', acceptanceTtfbMs, evidence, plugins: remote.archiveresults.map(r => r.plugin), fullpage: report.fullpage, fullpageUpload: report.fullpageUpload }));
 } finally {

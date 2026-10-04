@@ -2,7 +2,7 @@ import { defaultServers } from '@/src/lib/server_registry';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { archiveBoxServerUrlMatches, hasServerHostPermission, isArchiveablePageUrl, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
+import { archiveBoxServerUrlMatches, findSubmittedSnapshot, hasServerHostPermission, isArchiveablePageUrl, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { mhtmlUnsupportedMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
@@ -12,9 +12,10 @@ import { getConfig, getSnapshots, mutateSnapshots } from '@/src/lib/storage';
 import { matchingTagSuggestions } from '@/src/lib/tags';
 import type { ArchiveDepth, RuntimeMessage, RuntimeResponse, Snapshot, ServerDestination } from '@/src/lib/types';
 import { compactUuid } from '@/src/lib/uuid';
+import { submissionAge, submissionMessage } from '@/src/lib/submissionStatus';
 import './style.css';
 
-type RemoteArchiveStatus = 'not_archived' | 'archived' | 'sync_failed' | 'unavailable' | 'previously_submitted';
+type RemoteArchiveStatus = 'checking' | 'not_archived' | 'archived' | 'sync_failed' | 'unavailable';
 type LocalArchiveStatus = 'saved' | 'unsaved' | 'removed';
 type ScreenshotCaptureState = {
   phase: 'idle' | 'visible' | 'capturing' | 'canceling';
@@ -103,6 +104,7 @@ function unsavedSnapshot(activePage: ActivePage | null): Snapshot | null {
 
 function ArchiveBoxOverlay() {
   const submittedThisSession = useRef(new Set<string>());
+  const [now, setNow] = useState(Date.now);
   const [activePage, setActivePage] = useState<ActivePage | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [allTags, setAllTags] = useState<string[]>([]);
@@ -117,6 +119,18 @@ function ArchiveBoxOverlay() {
   const [crawlMenuOpen, setCrawlMenuOpen] = useState(false);
   const [server, setServer] = useState<ServerDestination | null>(null);
   const server_id = server?.id || '';
+  const submittedAt = snapshot?.remote_copies?.[server_id]?.submitted_at;
+  useEffect(() => {
+    const timestamp = submittedAt ? Date.parse(submittedAt) : NaN;
+    setNow(Date.now());
+    if (!Number.isFinite(timestamp) || Date.now() - timestamp >= 120_000) return;
+    const timer = setInterval(() => {
+      const time = Date.now();
+      setNow(time);
+      if (time - timestamp >= 120_000) clearInterval(timer);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [submittedAt]);
   function destination(): ServerDestination {
     if (!server) throw new Error(t("Server not configured"));
     return server;
@@ -152,32 +166,63 @@ function ArchiveBoxOverlay() {
     return () => browser.runtime.onMessage.removeListener(listener);
   }, []);
 
-  async function refresh() {
+  async function refresh(checkServer = false) {
     const configured = defaultServers(await getConfig())[0] || null;
     setServer(configured);
     const archivebox_server_url = configured?.server || '';
     const nextActivePage = activePage || await getActivePage();
     setActivePage(nextActivePage);
-    const { currentSnapshot, snapshots } = await getCurrentSnapshot(nextActivePage);
+    const { currentSnapshot: savedSnapshot, snapshots } = await getCurrentSnapshot(nextActivePage);
+    let currentSnapshot = savedSnapshot;
+    const cached = currentSnapshot.remote_copies?.[configured?.id || ''];
+    let checkError = '';
+    // Recent receipts keep submission instant. After two minutes, check server truth:
+    // someone may have deleted the URL, or acceptance may not have persisted it.
+    // Never reset the submission age just because a check succeeded.
+    if (checkServer && configured && cached && !(Date.now() - Date.parse(cached.submitted_at || '') < 120_000)) {
+      setRemoteStatus('checking');
+      setStatus(t("Checking ArchiveBox Server..."));
+      try {
+        const remote = await findSubmittedSnapshot(configured, currentSnapshot.url);
+        const stored = await mutateSnapshots(items => items.map(item => {
+          if (item.id !== currentSnapshot.id) return item;
+          const latest = item.remote_copies?.[configured.id];
+          if (!latest || latest.submitted_at !== cached.submitted_at || latest.snapshot_id !== cached.snapshot_id || latest.crawl_id !== cached.crawl_id) return item;
+          const copies = { ...item.remote_copies };
+          if (remote) {
+            const sameSnapshot = latest?.snapshot_id?.replaceAll('-', '') === remote.id.replaceAll('-', '');
+            copies[configured.id] = {
+              ...(sameSnapshot ? latest! : { status: 'accepted' as const, submitted_to: configured.server }),
+              snapshot_id: remote.id,
+              submitted_at: sameSnapshot && latest?.submitted_at ? latest.submitted_at : remote.created_at,
+            };
+          } else delete copies[configured.id];
+          return { ...item, remote_copies: copies };
+        }));
+        currentSnapshot = stored.find(item => item.id === currentSnapshot.id) || currentSnapshot;
+      } catch (error) {
+        checkError = error instanceof Error ? error.message : String(error);
+      }
+    }
     setSnapshot({ ...currentSnapshot });
     setDepth(currentSnapshot.depth ?? 0);
     setLocalStatus('saved');
     const receipt = currentSnapshot.remote_copies?.[configured?.id || ''];
-    const submittedAt = receipt?.submitted_at ? Date.parse(receipt.submitted_at) : NaN;
-    const previouslySubmitted = Number.isFinite(submittedAt) && Date.now() - submittedAt > 120_000;
-    setRemoteStatus(!archivebox_server_url ? 'unavailable' : receipt ? (previouslySubmitted ? 'previously_submitted' : 'archived') : 'not_archived');
+    setRemoteStatus(!archivebox_server_url ? 'unavailable' : receipt ? 'archived' : 'not_archived');
     setRemoteDetail(archivebox_server_url ? '' : t("Server not configured"));
     if (!archivebox_server_url) {
       setOk(false);
       setStatus(t("Saved locally. Server connection unavailable."));
-    } else if (previouslySubmitted) {
-      setOk(null);
-      setStatus(t("Previously submitted. Server status has not been checked in this session."));
     } else if (receipt) {
       setOk(true);
-      setStatus(t("Submitted to ArchiveBox Server at depth $1", currentSnapshot.depth ?? 0));
+      setStatus(submissionMessage(currentSnapshot.depth ?? 0));
     }
-    if (receipt?.delivery_error) {
+    if (checkError) {
+      setOk(false);
+      setRemoteStatus('unavailable');
+      setRemoteDetail(checkError);
+      setStatus(t("Unable to check ArchiveBox Server: $1", checkError));
+    } else if (receipt?.delivery_error) {
       setOk(false);
       setRemoteDetail(receipt.delivery_error);
       setStatus(t("URL submitted. Capture upload failed: $1", receipt.delivery_error));
@@ -287,6 +332,7 @@ function ArchiveBoxOverlay() {
     archiveDepth: ArchiveDepth,
     localSnapshotId?: string,
     requestPermission = false,
+    onlyNew?: boolean,
   ) {
     if (localSnapshotId) submittedThisSession.current.add(`${localSnapshotId}:${destination().id}`);
     setRemoteStatus('not_archived');
@@ -312,6 +358,7 @@ function ArchiveBoxOverlay() {
         depth: archiveDepth,
         snapshot_ids: localSnapshotId ? [localSnapshotId] : [],
         titles: snapshot?.title ? [snapshot.title] : [],
+        only_new: onlyNew,
       },
     });
     if (response.ok) {
@@ -323,7 +370,7 @@ function ArchiveBoxOverlay() {
       setOk(true);
       setRemoteDetail('');
       setRemoteStatus('archived');
-      setStatus(t("Submitted to ArchiveBox Server at depth $1", archiveDepth));
+      setStatus(submissionMessage(archiveDepth));
       console.info(`ArchiveBox: saved ${url} to ArchiveBox server`);
     } else {
       const errorMessage = response.errorMessage || response.error || t("Unknown error");
@@ -341,7 +388,7 @@ function ArchiveBoxOverlay() {
         setUiLanguage(ui_language);
       })
       .catch(() => undefined)
-      .then(refresh)
+      .then(() => refresh(true))
       .catch((error: unknown) => {
         setOk(false);
         setStatus(error instanceof Error ? error.message : String(error));
@@ -357,7 +404,7 @@ function ArchiveBoxOverlay() {
     if (snapshot && server && !snapshot.remote_copies?.[server.id] && !submittedThisSession.current.has(`${snapshot.id}:${server.id}`)) {
       sendToArchiveBox(snapshot.url, snapshot.tags, snapshot.depth ?? 0, snapshot.id);
     }
-  }, [snapshot?.id, server?.id]);
+  }, [snapshot?.id, server?.id, Boolean(snapshot?.remote_copies?.[server_id])]);
 
   useEffect(() => {
     const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
@@ -982,17 +1029,17 @@ function ArchiveBoxOverlay() {
             title={remoteDetail || undefined}
           >
             {remoteStatus === 'archived'
-              ? t("Submitted")
-              : remoteStatus === 'previously_submitted'
-                ? t("Previously submitted")
+              ? submissionAge(snapshot?.remote_copies?.[server_id]?.submitted_at, now)
+              : remoteStatus === 'checking'
+                ? t("Checking server...")
               : remoteStatus === 'unavailable'
                 ? t("Connection unavailable")
               : remoteStatus === 'sync_failed'
                 ? t("Sync failed")
                 : t("Not yet archived")}
           </span>
-          {remoteStatus !== 'archived' && remoteStatus !== 'previously_submitted' ? (
-            <button className="archivebox-overlay__action" onClick={syncRemoteSnapshot} title={t("Sync to ArchiveBox server")}>
+          {remoteStatus !== 'archived' ? (
+            <button className="archivebox-overlay__action" onClick={syncRemoteSnapshot} disabled={remoteStatus === 'checking'} title={t("Sync to ArchiveBox server")}>
               ↑
             </button>
           ) : (
@@ -1002,6 +1049,9 @@ function ArchiveBoxOverlay() {
               </button>
               <button className="archivebox-overlay__action" onClick={viewRemoteSnapshot} title={t("View archived copy on server")}>
                 👁
+              </button>
+              <button className="archivebox-overlay__resubmit" onClick={() => snapshot && sendToArchiveBox(snapshot.url, snapshot.tags, depth, snapshot.id, true, false)}>
+                {t("Re-submit")}
               </button>
             </>
           )}
