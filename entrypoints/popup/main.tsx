@@ -2,7 +2,7 @@ import { defaultServers } from '@/src/lib/server_registry';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { archiveBoxServerUrlMatches, findSubmittedSnapshot, hasServerHostPermission, isArchiveablePageUrl, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
+import { archiveBoxServerUrlMatches, findSubmittedSnapshot, getServerPersonas, hasServerHostPermission, isArchiveablePageUrl, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { mhtmlUnsupportedMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
@@ -105,6 +105,7 @@ function unsavedSnapshot(activePage: ActivePage | null): Snapshot | null {
 function ArchiveBoxOverlay() {
   const submittedThisSession = useRef(new Set<string>());
   const [now, setNow] = useState(Date.now);
+  const [confirmedRemoteId, setConfirmedRemoteId] = useState<string | null>(null);
   const [activePage, setActivePage] = useState<ActivePage | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [allTags, setAllTags] = useState<string[]>([]);
@@ -119,6 +120,24 @@ function ArchiveBoxOverlay() {
   const [crawlMenuOpen, setCrawlMenuOpen] = useState(false);
   const [server, setServer] = useState<ServerDestination | null>(null);
   const server_id = server?.id || '';
+  const [serverPersonas, setServerPersonas] = useState<Array<{ id: string; name: string }>>([]);
+  const [personasLoading, setPersonasLoading] = useState(false);
+  const [personasError, setPersonasError] = useState('');
+  const [changingPersona, setChangingPersona] = useState(false);
+  const [personaMenuOpen, setPersonaMenuOpen] = useState(false);
+  const selectedPersona = snapshot?.persona_overrides?.[server_id] ?? (snapshot?.remote_copies?.[server_id]?.persona !== undefined ? snapshot.remote_copies[server_id].persona || 'Default' : server?.persona || 'Default');
+  useEffect(() => {
+    let current = true;
+    setServerPersonas([]);
+    setPersonasError('');
+    if (!server) return;
+    setPersonasLoading(true);
+    void getServerPersonas(server).then(
+      items => { if (current) setServerPersonas(items); },
+      error => { if (current) setPersonasError(error instanceof Error ? error.message : String(error)); },
+    ).finally(() => { if (current) setPersonasLoading(false); });
+    return () => { current = false; };
+  }, [server?.id, server?.server, server?.token]);
   const submittedAt = snapshot?.remote_copies?.[server_id]?.submitted_at;
   useEffect(() => {
     const timestamp = submittedAt ? Date.parse(submittedAt) : NaN;
@@ -180,10 +199,12 @@ function ArchiveBoxOverlay() {
     // someone may have deleted the URL, or acceptance may not have persisted it.
     // Never reset the submission age just because a check succeeded.
     if (checkServer && configured && cached && !(Date.now() - Date.parse(cached.submitted_at || '') < 120_000)) {
+      setConfirmedRemoteId(null);
       setRemoteStatus('checking');
       setStatus(t("Checking ArchiveBox Server..."));
       try {
         const remote = await findSubmittedSnapshot(configured, currentSnapshot.url);
+        setConfirmedRemoteId(remote?.id || null);
         const stored = await mutateSnapshots(items => items.map(item => {
           if (item.id !== currentSnapshot.id) return item;
           const latest = item.remote_copies?.[configured.id];
@@ -194,6 +215,8 @@ function ArchiveBoxOverlay() {
             copies[configured.id] = {
               ...(sameSnapshot ? latest! : { status: 'accepted' as const, submitted_to: configured.server }),
               snapshot_id: remote.id,
+              snapshot_crawl_id: remote.crawl_id,
+              ...(remote.persona !== undefined ? { persona: remote.persona } : {}),
               submitted_at: sameSnapshot && latest?.submitted_at ? latest.submitted_at : remote.created_at,
             };
           } else delete copies[configured.id];
@@ -333,11 +356,14 @@ function ArchiveBoxOverlay() {
     localSnapshotId?: string,
     requestPermission = false,
     onlyNew?: boolean,
+    persona = snapshot?.persona_overrides?.[server_id] ?? (snapshot?.remote_copies?.[server_id]?.persona === null ? 'Default' : snapshot?.remote_copies?.[server_id]?.persona),
+    replaceFresh = false,
   ) {
     if (localSnapshotId) submittedThisSession.current.add(`${localSnapshotId}:${destination().id}`);
+    setConfirmedRemoteId(null);
     setRemoteStatus('not_archived');
     setRemoteDetail('');
-    setStatus(t("Sending URL to ArchiveBox Server..."));
+    setStatus(replaceFresh ? t("Finishing previous capture before changing persona...") : t("Sending URL to ArchiveBox Server..."));
     try {
       await ensureConfiguredServerPermission(requestPermission);
     } catch (error) {
@@ -359,6 +385,8 @@ function ArchiveBoxOverlay() {
         snapshot_ids: localSnapshotId ? [localSnapshotId] : [],
         titles: snapshot?.title ? [snapshot.title] : [],
         only_new: onlyNew,
+        persona,
+        replace_fresh: replaceFresh,
       },
     });
     if (response.ok) {
@@ -426,6 +454,28 @@ function ArchiveBoxOverlay() {
   useEffect(() => {
     setFaviconFailed(false);
   }, [snapshot?.url, snapshot?.favIconUrl]);
+
+  async function changePersona(persona: string) {
+    setPersonaMenuOpen(false);
+    if (!snapshot || !server || persona === selectedPersona) return;
+    setChangingPersona(true);
+    try {
+      const entries = await mutateSnapshots(items => items.map(item => item.id === snapshot.id ? {
+        ...item, persona_overrides: { ...item.persona_overrides, [server.id]: persona },
+      } : item));
+      const updated = entries.find(item => item.id === snapshot.id);
+      if (!updated) throw new Error(t("Saved snapshot not found."));
+      setSnapshot(updated);
+      // The background checks actual server ownership before replacing a recent capture.
+      await sendToArchiveBox(updated.url, updated.tags, updated.depth ?? depth, updated.id, true,
+        updated.remote_copies?.[server.id] ? false : undefined, persona, true);
+    } catch (error) {
+      setOk(false);
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setChangingPersona(false);
+    }
+  }
 
   async function syncRemoteSnapshot() {
     if (!snapshot) return;
@@ -941,6 +991,7 @@ function ArchiveBoxOverlay() {
               />
             )}
           </TagList>
+
         </div>
       </div>
 
@@ -1007,8 +1058,20 @@ function ArchiveBoxOverlay() {
             </div>
           )}
         </div>
+          <div className="archivebox-overlay__persona">
+            <button aria-label={t("Persona")} aria-expanded={personaMenuOpen}
+              disabled={!server || !snapshot || personasLoading || changingPersona}
+              onClick={() => setPersonaMenuOpen(open => !open)}><span>👤</span><span className="archivebox-overlay__persona-name">{selectedPersona}</span><span>▾</span></button>
+            {personaMenuOpen && <div className="archivebox-overlay__persona-menu" role="menu">
+              {[...new Set(['Default', selectedPersona, ...serverPersonas.map(item => item.name)])].map(name => (
+                <button role="menuitem" key={name} data-persona={name} onClick={() => void changePersona(name)}>{name}</button>
+              ))}
+            </div>}
+          </div>
+
       </div>
 
+          {personasError && <small className="archivebox-overlay__persona-error">{t("Unable to load personas: $1", personasError)}</small>}
       <div className="archivebox-overlay__states" aria-label={t("Archive status")}>
         <div className="archivebox-overlay__state-row">
           <span className="archivebox-overlay__state-label">{t("Local")}</span>
@@ -1022,13 +1085,13 @@ function ArchiveBoxOverlay() {
             👁
           </button>
         </div>
-        <div className="archivebox-overlay__state-row">
+        <div className="archivebox-overlay__state-row archivebox-overlay__state-row--status-only">
           <span className="archivebox-overlay__state-label">{t("Server")}</span>
           <span
             className={`archivebox-overlay__pill archivebox-overlay__pill--${remoteStatus}`}
             title={remoteDetail || undefined}
           >
-            {remoteStatus === 'archived'
+            <span className="archivebox-overlay__pill-text">{remoteStatus === 'archived'
               ? submissionAge(snapshot?.remote_copies?.[server_id]?.submitted_at, now)
               : remoteStatus === 'checking'
                 ? t("Checking server...")
@@ -1036,25 +1099,26 @@ function ArchiveBoxOverlay() {
                 ? t("Connection unavailable")
               : remoteStatus === 'sync_failed'
                 ? t("Sync failed")
-                : t("Not yet archived")}
+                : t("Not yet archived")}</span>
+            {remoteStatus !== 'archived' ? (
+              <button className="archivebox-overlay__action" onClick={syncRemoteSnapshot} disabled={remoteStatus === 'checking'} title={t("Sync to ArchiveBox server")}>
+                ↑
+              </button>
+            ) : (
+              <>
+                <button className="archivebox-overlay__action" onClick={removeRemoteSnapshot} title={t("Remove from ArchiveBox server")}>
+                  🗑
+                </button>
+                <button className="archivebox-overlay__action" onClick={viewRemoteSnapshot} title={t("View archived copy on server")}>
+                  👁
+                </button>
+                {confirmedRemoteId === snapshot?.remote_copies?.[server_id]?.snapshot_id
+                  && now - Date.parse(snapshot?.remote_copies?.[server_id]?.submitted_at || '') >= 120_000 && <button className="archivebox-overlay__resubmit" onClick={() => snapshot && sendToArchiveBox(snapshot.url, snapshot.tags, depth, snapshot.id, true, false)}>
+                  {t("Re-submit")}
+                </button>}
+              </>
+            )}
           </span>
-          {remoteStatus !== 'archived' ? (
-            <button className="archivebox-overlay__action" onClick={syncRemoteSnapshot} disabled={remoteStatus === 'checking'} title={t("Sync to ArchiveBox server")}>
-              ↑
-            </button>
-          ) : (
-            <>
-              <button className="archivebox-overlay__action" onClick={removeRemoteSnapshot} title={t("Remove from ArchiveBox server")}>
-                🗑
-              </button>
-              <button className="archivebox-overlay__action" onClick={viewRemoteSnapshot} title={t("View archived copy on server")}>
-                👁
-              </button>
-              <button className="archivebox-overlay__resubmit" onClick={() => snapshot && sendToArchiveBox(snapshot.url, snapshot.tags, depth, snapshot.id, true, false)}>
-                {t("Re-submit")}
-              </button>
-            </>
-          )}
         </div>
       </div>
 

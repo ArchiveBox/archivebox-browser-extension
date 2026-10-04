@@ -28,6 +28,7 @@ export type ServerRegistry = {
 export type RemoteCopy = {
   crawl_id?: string;
   snapshot_id?: string;
+  snapshot_crawl_id?: string;
   submitted_at?: string;
   submitted_to: string;
   status: 'accepted' | 'complete';
@@ -44,6 +45,7 @@ export type Snapshot = {
   favIconUrl?: string | null;
   depth?: ArchiveDepth;
   remote_copies?: Record<string, RemoteCopy>;
+  persona_overrides?: Record<string, string>;
   unassigned_remote_copy?: RemoteCopy;
   screenshot?: SnapshotScreenshot;
   viewport_screenshot?: SnapshotScreenshot;
@@ -153,6 +155,8 @@ export type ArchiveboxAddMessage = {
     snapshot_ids?: string[];
     titles?: string[];
     only_new?: boolean;
+    persona?: string;
+    replace_fresh?: boolean;
   };
 };
 

@@ -1,12 +1,12 @@
 import { defaultServers, requireServer } from '@/src/lib/server_registry';
 import { configureLocalRetention, withSnapshotArtifacts } from '@/src/lib/retention';
 import { configureCookieSync } from '@/src/lib/cookieSync';
-import { submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, supportsArchiveBoxApi, testApiKey, testServerUrl } from '@/src/lib/archivebox';
+import { removeFreshOwnedCapture, submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, supportsArchiveBoxApi, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { appendSnapshotScreenshotParts, writeSnapshotMhtmlBytes, writeSnapshotScreenshot, writeSnapshotScreenshotParts, writeSnapshotSingleFileHtml } from '@/src/lib/screenshotStorage';
 import { createSnapshot } from '@/src/lib/snapshots';
-import { getArchiveBoxServerUrl, getConfig, getSnapshots, mutateSnapshots } from '@/src/lib/storage';
+import { getArchiveBoxServerUrl, getConfig, getPersonas, getSnapshots, mutateSnapshots } from '@/src/lib/storage';
 import type { RuntimeMessage, RuntimeResponse, Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotSingleFile } from '@/src/lib/types';
 import { compactUuid } from '@/src/lib/uuid';
 
@@ -964,16 +964,26 @@ export default defineBackground(() => {
     switch (message.type) {
       case 'archivebox_add':
         return getConfig().then(async (config) => {
-          const server = requireServer(config, message.server_id);
+          const configuredServer = requireServer(config, message.server_id);
+          let server = configuredServer;
+          if (message.body.persona !== undefined) {
+            const localPersona = configuredServer.policy.local_persona_id
+              ? (await getPersonas()).personas.find(item => item.id === configuredServer.policy.local_persona_id)
+              : undefined;
+            // Existing cookie consent is for that local profile, not a newly selected persona.
+            server = { ...configuredServer, persona: message.body.persona, policy: {
+              ...configuredServer.policy,
+              local_persona_id: localPersona?.name === message.body.persona ? localPersona.id : undefined,
+            } };
+          }
           const snapshot = (await getSnapshots()).find((item) => item.id === message.body.snapshot_ids?.[0] && item.url === message.body.urls[0]);
           if (snapshot && message.body.urls.length === 1) {
-            const captureReady = message.tabId === undefined ? undefined : getMessageTab(message.tabId)
+            if (message.body.replace_fresh) await removeFreshOwnedCapture(server, snapshot);
+            const captureReady = message.tabId === undefined ? undefined : () => getMessageTab(message.tabId!)
               .then(async (tab) => {
                 if (tab.url !== snapshot.url) throw new Error('The tab navigated before capture.');
                 await captureConfiguredSnapshotArtifacts(tab, snapshot, message.body.only_new === false);
               });
-            // Observe immediately while the URL request runs; delivery awaits and records failures.
-            void captureReady?.catch(() => undefined);
             return new Promise<Awaited<ReturnType<typeof submitSnapshot>>>((resolve, reject) => {
               void submitSnapshot(server, { ...snapshot, tags: message.body.tags, depth: message.body.depth ?? 0 }, captureReady, resolve, message.body.only_new)
                 .then(resolve, reject);

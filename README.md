@@ -108,7 +108,7 @@ node scripts/test-retention-live.mjs
 
 The live test imports bookmarks through the options UI, submits them, checks disconnected/missing-server preservation, verifies OPFS and metadata deletion, restarts the service worker, and waits for automatic expiration after resubmission. It creates server test records and deletes one of its own records to test a missing snapshot; use a disposable collection. UI default/persistence and layout checks run with `pnpm exec playwright test tests/retention.test.ts tests/options-responsive.test.ts`.
 
-To verify native popup submission and real capture uploads against a running ArchiveBox server:
+To verify native popup submission and real capture uploads, start a disposable collection with `archivebox server` (including its normal crawler worker):
 
 ```bash
 ARCHIVEBOX_TEST_SERVER=http://127.0.0.1:5797 \
@@ -117,7 +117,7 @@ FULLPAGE=1 FULLPAGE_UPLOAD=1 AGE_CHECK=1 RESUBMIT=1 \
 node scripts/test-popup-delivery-live.mjs
 ```
 
-This uses the options and native popup UI, verifies the live seconds counter, compares replayed captures with local bytes, and waits two real minutes before checking the submission age and fresh server lookup. `RESUBMIT=1` verifies that Re-submit creates a new crawl and snapshot with `ONLY_NEW=False`, and checks the crawl depth wording. `DELETE_AFTER_AGE=1` deletes its own server snapshot through the public API, then verifies that reopening the popup detects the missing capture and submits it again. Omit `FULLPAGE_UPLOAD` to verify that full-page capture stays local while viewport and MHTML upload. The test creates real example.com submissions.
+This uses the options and native popup UI, verifies the live seconds counter, compares replayed captures with local bytes, and waits two real minutes before checking the submission age and fresh server lookup. `RESUBMIT=1` verifies that Re-submit creates a new crawl and snapshot with `ONLY_NEW=False`, and checks the crawl depth wording. `DELETE_AFTER_AGE=1` deletes its own server snapshot through the public API, then verifies that reopening the popup detects the missing capture and submits it again. Omit `FULLPAGE_UPLOAD` to verify that full-page capture stays local while viewport and MHTML upload. The test creates real example.com submissions and verifies their crawls seal. `PERSONA_TEST=1` creates a test persona through the public API and selects it in the popup; combine with `AGE_CHECK=1` to verify an older capture is preserved, or `REUSE_LOCAL=1` to verify a reused capture is preserved while new local captures still run. Run persona and Re-submit scenarios separately. `ARCHIVEBOX_TEST_COLLECTION=/path/to/collection` additionally checks the real crawl persona foreign key read-only. `OLD_SERVER=1` tests a real older server whose schema lacks snapshot ownership/persona fields; this compatibility fixture can run without workers.
 
 ## Changelog
 

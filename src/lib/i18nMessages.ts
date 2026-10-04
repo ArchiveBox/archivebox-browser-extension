@@ -1,5 +1,8 @@
 export const translations = {
   "es": {
+    "Persona": "Perfil",
+    "Finishing previous capture before changing persona...": "Finalizando la captura anterior antes de cambiar el perfil...",
+    "Unable to load personas: $1": "No se pudieron cargar los perfiles: $1",
     "Checking ArchiveBox Server...": "Consultando el servidor ArchiveBox...",
     "Checking server...": "Consultando servidor...",
     "Unable to check ArchiveBox Server: $1": "No se pudo consultar el servidor ArchiveBox: $1",
@@ -372,6 +375,9 @@ export const translations = {
     "MHTML file does not contain any readable parts": "El archivo MHTML no contiene ninguna parte legible."
   },
   "zh_CN": {
+    "Persona": "身份",
+    "Finishing previous capture before changing persona...": "正在完成上一次捕获，然后切换身份……",
+    "Unable to load personas: $1": "无法加载身份：$1",
     "Checking ArchiveBox Server...": "正在检查 ArchiveBox 服务器...",
     "Checking server...": "正在检查服务器...",
     "Unable to check ArchiveBox Server: $1": "无法检查 ArchiveBox 服务器：$1",

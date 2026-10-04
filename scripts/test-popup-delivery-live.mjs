@@ -1,7 +1,7 @@
 // Real extension UI + ArchiveBox API; no rewritten manifest, fake captures, or HTTP interception.
 // ARCHIVEBOX_TEST_SERVER=http://127.0.0.1:5897 ARCHIVEBOX_TEST_KEY_FILE=/path/to/key node scripts/test-popup-delivery-live.mjs
 import { chromium, expect } from '@playwright/test';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -10,6 +10,23 @@ const server = process.env.ARCHIVEBOX_TEST_SERVER;
 const keyFile = process.env.ARCHIVEBOX_TEST_KEY_FILE;
 if (!server || !keyFile) throw new Error('Set ARCHIVEBOX_TEST_SERVER and ARCHIVEBOX_TEST_KEY_FILE for a disposable real server.');
 const key = (await readFile(keyFile, 'utf8')).trim();
+const oldInterface = Boolean(process.env.OLD_SERVER);
+if (oldInterface) {
+  const schema = await fetch(server + '/api/v1/openapi.json', { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json());
+  expect(schema.components.schemas.SnapshotSchema.properties.crawl_id).toBeUndefined();
+  expect(schema.components.schemas.SnapshotSchema.properties.persona).toBeUndefined();
+}
+let testPersona;
+const personaUserAgent = 'ArchiveBox popup persona test ' + Date.now();
+if (process.env.PERSONA_TEST) {
+  const response = await fetch(server + '/api/v1/personas/sync', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ extension_persona_id: crypto.randomUUID(), name: 'zzzz Popup test ' + Date.now(), settings: { user_agent: personaUserAgent } }),
+  });
+  expect(response.ok).toBe(true);
+  testPersona = (await response.json()).persona;
+}
+
 const profile = process.env.ARCHIVEBOX_TEST_PROFILE || await mkdtemp(path.join(tmpdir(), 'archivebox-popup-delivery-'));
 const canary = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary';
 const executable = process.env.CHROME_FOR_TESTING_BIN || process.env.CHROME_BIN || (existsSync(canary) ? canary : chromium.executablePath());
@@ -19,6 +36,7 @@ const loadByFlag = executable.endsWith('Google Chrome for Testing');
 await rm(path.join(profile, 'DevToolsActivePort'), { force: true });
 const chrome = spawn(executable, [`--user-data-dir=${profile}`, ...(loadByFlag ? [`--load-extension=${extensionPath}`, `--disable-extensions-except=${extensionPath}`] : []), '--remote-debugging-port=0', '--enable-unsafe-extension-debugging', ...(process.env.HEADLESS ? ['--headless=new'] : []), '--no-first-run', '--no-default-browser-check', ...(process.platform === 'linux' ? ['--no-sandbox'] : [])], { stdio: 'ignore' });
 let browser;
+let verified = false;
 const evidence = await mkdtemp(path.join(tmpdir(), 'archivebox-popup-evidence-'));
 async function connectPopup(url) {
   const socket = new WebSocket(url);
@@ -49,11 +67,13 @@ try {
   await extensions.close();
   const addRequests = [];
   const lookupRequests = [];
+  const deleteRequests = [];
   const recordLookups = async popup => lookupRequests.push(...await popup.evaluate(`performance.getEntriesByType('resource').map(entry => entry.name).filter(url => url.startsWith(${JSON.stringify(server + '/api/v1/core/snapshots?')}))`));
   context.on('request', request => {
+    if (request.method() === 'DELETE') deleteRequests.push(request.url());
     if (request.url().endsWith('/api/v1/cli/add')) {
       const body = request.postDataJSON();
-      addRequests.push({ only_new: body.only_new, depth: body.depth });
+      addRequests.push({ only_new: body.only_new, depth: body.depth, persona: body.persona });
       console.log(JSON.stringify({ event: 'add-request', only_new: body.only_new, depth: body.depth }));
     }
   });
@@ -90,6 +110,7 @@ try {
   await target.goto(url);
   await target.bringToFront();
   const originalScroll = await target.evaluate(() => ({ x: scrollX, y: scrollY }));
+  await target.evaluate(() => { window.testPageInput = []; for (const kind of ['keydown', 'wheel', 'scroll']) addEventListener(kind, event => window.testPageInput.push({ kind, key: event.key, trusted: event.isTrusted, x: scrollX, y: scrollY })); });
   const viewport = await target.evaluate(() => ({ width: innerWidth, height: innerHeight }));
   const openAt = performance.now();
 
@@ -113,6 +134,13 @@ try {
   const serverId = await options.evaluate(async () => (await chrome.storage.local.get('server_registry')).server_registry.active_server_id);
   await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.status, { timeout: 30000 }).toBe('complete');
   const saved = (await entries()).find(e => e.url === url);
+  const controls = await popup.evaluate(`['.archivebox-overlay__capture-actions button', '.archivebox-overlay__crawl-button', 'button[aria-label="Persona"]'].map(selector => { const element = document.querySelector(selector); const rect = element.getBoundingClientRect(); return { top: rect.top, left: rect.left, right: rect.right, text: element.textContent }; })`);
+  expect(controls[0].top).toBe(controls[1].top);
+  expect(controls[1].top).toBe(controls[2].top);
+  expect(controls[2].left).toBeGreaterThan(controls[1].right);
+  expect(controls[2].right).toBeLessThanOrEqual(await popup.evaluate('innerWidth'));
+  expect(controls[2].text).toContain('👤');
+
   expect(saved.viewport_screenshot).toBeTruthy();
   expect(saved.mhtml).toBeTruthy();
   expect(saved.remote_copies[serverId].delivery_error).toBeUndefined();
@@ -126,6 +154,8 @@ try {
     expect(saved.screenshot.path).not.toBe(saved.viewport_screenshot.path);
     expect(saved.screenshot.height).toBeGreaterThan(saved.viewport_screenshot.height);
   } else expect(saved.screenshot).toBeUndefined();
+  const pageInput = await target.evaluate(() => window.testPageInput);
+  if (pageInput.length) console.log(JSON.stringify({ event: 'captured-page-input', pageInput }));
   expect(await target.evaluate(() => ({ x: scrollX, y: scrollY }))).toEqual(originalScroll);
   console.log(JSON.stringify({ event: 'complete', elapsedMs: performance.now() - openAt, screenshot: saved.viewport_screenshot, mhtml: saved.mhtml, remote: saved.remote_copies[serverId] }));
   await popup.click('input[placeholder="+ tag"]');
@@ -137,7 +167,7 @@ try {
   await expect.poll(() => popup.evaluate('document.querySelector(".archivebox-overlay__states")?.textContent')).toContain('Submitted');
   expect(await popup.evaluate('document.querySelector(".archivebox-overlay__states")?.textContent')).not.toContain('Submitted 2 minutes ago');
   await expect.poll(async () => (await entries()).find(e => e.url === url)?.tags).toContain('fresh-submission-regression');
-  await popup.click('.archivebox-tag-chip--current .archivebox-tag-chip__remove');
+  await popup.click('button[title="Remove tag fresh-submission-regression"]');
   await expect.poll(async () => (await entries()).find(e => e.url === url)?.tags).not.toContain('fresh-submission-regression');
   expect(await popup.evaluate('document.querySelector(".archivebox-overlay__states")?.textContent')).not.toContain('Submitted 2 minutes ago');
   const screenshot = await popup.send('Page.captureScreenshot');
@@ -219,7 +249,7 @@ try {
     lastPopup.close();
     const removed = await fetch(server + '/api/v1/core/snapshot/' + saved.remote_copies[serverId].snapshot_id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + key } });
     expect(removed.ok).toBe(true);
-    expect((await fetch(server + '/api/v1/core/snapshot/' + saved.remote_copies[serverId].snapshot_id, { headers: { Authorization: 'Bearer ' + key } })).status).toBe(404);
+    expect((await removed.json()).queued_count).toBe(1);
     await options.evaluate(async windowId => { await chrome.windows.update(windowId, { focused: true }); await chrome.action.openPopup({ windowId }); }, windowId);
     const replacementTarget = (await fetch('http://127.0.0.1:' + port + '/json/list').then(r => r.json())).find(t => t.url === `chrome-extension://${id}/popup.html`);
     lastPopup = await connectPopup(replacementTarget.webSocketDebuggerUrl);
@@ -232,40 +262,136 @@ try {
     await expect.poll(() => lastPopup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent')).toBe('Submitted');
     expectedCrawls++;
   }
+  if (process.env.REUSE_LOCAL) {
+    await expect.poll(async () => (await fetch(server + '/api/v1/crawls/crawl/' + saved.remote_copies[serverId].crawl_id, { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json())).status, { timeout: 60000 }).toBe('sealed');
+    const oldCapture = await fetch(server + '/api/v1/core/snapshot/' + saved.remote_copies[serverId].snapshot_id, { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json());
+    await options.evaluate(async windowId => { await chrome.windows.update(windowId, { focused: true }); await chrome.action.openPopup({ windowId }); }, windowId);
+    const opened = (await fetch('http://127.0.0.1:' + port + '/json/list').then(r => r.json())).find(t => t.url === `chrome-extension://${id}/popup.html`);
+    lastPopup = await connectPopup(opened.webSocketDebuggerUrl);
+    await expect.poll(() => lastPopup.evaluate(`document.querySelector('button[title="Remove from local saved URLs"]').disabled`)).toBe(false);
+    await lastPopup.click('button[title="Remove from local saved URLs"]');
+    await expect.poll(async () => (await entries()).some(item => item.url === url)).toBe(false);
+    await expect.poll(async () => (await fetch('http://127.0.0.1:' + port + '/json/list').then(r => r.json())).some(t => t.url === `chrome-extension://${id}/popup.html`)).toBe(false);
+    lastPopup.close();
+    await options.evaluate(async windowId => { await chrome.windows.update(windowId, { focused: true }); await chrome.action.openPopup({ windowId }); }, windowId);
+    const reopened = (await fetch('http://127.0.0.1:' + port + '/json/list').then(r => r.json())).find(t => t.url === `chrome-extension://${id}/popup.html`);
+    lastPopup = await connectPopup(reopened.webSocketDebuggerUrl);
+    await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.status, { timeout: 30000 }).toBe('complete');
+    const reusedLocal = (await entries()).find(e => e.url === url);
+    expect(reusedLocal.id).not.toBe(saved.id);
+    expect(reusedLocal.viewport_screenshot.path).not.toBe(saved.viewport_screenshot.path);
+    expect(reusedLocal.mhtml.path).not.toBe(saved.mhtml.path);
+    expect(reusedLocal.remote_copies[serverId].snapshot_id).toBe(saved.remote_copies[serverId].snapshot_id);
+    expect(reusedLocal.remote_copies[serverId].snapshot_crawl_id).toBe(saved.remote_copies[serverId].crawl_id);
+    expect(reusedLocal.remote_copies[serverId].crawl_id).not.toBe(saved.remote_copies[serverId].crawl_id);
+    expect(await fetch(server + '/api/v1/core/snapshot/' + saved.remote_copies[serverId].snapshot_id, { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json())).toEqual(oldCapture);
+    expectedCrawls++;
+  }
+  async function chooseDepth(value) {
+    await lastPopup.click('.archivebox-overlay__crawl-button');
+    await lastPopup.click(`.archivebox-overlay__crawl-menu button:nth-child(${value + 1})`);
+    await expect.poll(() => lastPopup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent')).toBe(`Submitted + will crawl URLs ${value} ${value === 1 ? 'hop' : 'hops'} out`);
+    const layout = await lastPopup.evaluate(`(() => {const crawl = document.querySelector('.archivebox-overlay__crawl-button'); const persona = document.querySelector('button[aria-label="Persona"]'); const capture = document.querySelector('.archivebox-overlay__capture-actions button'); return { crawlWidth: crawl.clientWidth, textWidth: crawl.scrollWidth, text: crawl.textContent, crawlTop: crawl.getBoundingClientRect().top, personaTop: persona.getBoundingClientRect().top, captureTop: capture.getBoundingClientRect().top, personaRight: persona.getBoundingClientRect().right, width: innerWidth };})()`);
+    expect(layout.text).toContain(String(value));
+    expect(layout.textWidth).toBeLessThanOrEqual(layout.crawlWidth);
+    expect(layout.crawlTop).toBe(layout.personaTop);
+    expect(layout.crawlTop).toBe(layout.captureTop);
+    expect(layout.personaRight).toBeLessThanOrEqual(layout.width);
+    await writeFile(path.join(evidence, `depth-${value}-popup.png`), Buffer.from((await lastPopup.send('Page.captureScreenshot')).data, 'base64'));
+  }
   let resubmission;
-  if (process.env.RESUBMIT) {
+  let personaSubmission;
+  if (process.env.RESUBMIT || testPersona) {
     if (!lastPopup) {
       await options.evaluate(async windowId => { await chrome.windows.update(windowId, { focused: true }); await chrome.action.openPopup({ windowId }); }, windowId);
       const lastTarget = (await fetch('http://127.0.0.1:' + port + '/json/list').then(r => r.json())).find(t => t.url === `chrome-extension://${id}/popup.html`);
       lastPopup = await connectPopup(lastTarget.webSocketDebuggerUrl);
     }
-    await expect.poll(() => lastPopup.evaluate('Boolean(document.querySelector(".archivebox-overlay__resubmit"))')).toBe(true);
-    const previousReceipt = (await entries()).find(e => e.url === url).remote_copies[serverId];
-    await lastPopup.click('.archivebox-overlay__resubmit');
-    await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.crawl_id).not.toBe(previousReceipt.crawl_id);
-    await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.status, { timeout: 30000 }).toBe('complete');
-    resubmission = (await entries()).find(e => e.url === url).remote_copies[serverId];
-    expect(resubmission.snapshot_id).not.toBe(previousReceipt.snapshot_id);
-    await expect.poll(() => lastPopup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent')).toBe('Submitted');
-    await writeFile(path.join(evidence, 'resubmitted-popup.png'), Buffer.from((await lastPopup.send('Page.captureScreenshot')).data, 'base64'));
-    const newCrawls = await fetch(server + '/api/v1/crawls/crawls', { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json());
-    expect(newCrawls.filter(c => c.urls.split('\n').includes(url))).toHaveLength(expectedCrawls + 1);
-    expect(newCrawls.find(c => c.id.replaceAll('-', '') === resubmission.crawl_id.replaceAll('-', '')).config.ONLY_NEW).toBe(false);
-    const newRemote = await fetch(server + '/api/v1/core/snapshot/' + resubmission.snapshot_id, { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json());
-    expect(newRemote.url).toBe(url);
-    expect(newRemote.archiveresults.find(r => r.plugin === 'chrome_extension_viewport')?.status).toBe('succeeded');
-    await lastPopup.click('.archivebox-overlay__crawl-button');
-    await lastPopup.click('.archivebox-overlay__crawl-menu button:nth-child(2)');
-    await expect.poll(() => lastPopup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent')).toBe('Submitted + will crawl URLs 1 hop out');
-    await lastPopup.click('.archivebox-overlay__crawl-button');
-    await lastPopup.click('.archivebox-overlay__crawl-menu button:nth-child(3)');
-    await expect.poll(() => lastPopup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent')).toBe('Submitted + will crawl URLs 2 hops out');
+    await expect.poll(() => lastPopup.evaluate('Boolean(document.querySelector(".archivebox-overlay__resubmit"))')).toBe(Boolean(process.env.AGE_CHECK));
+    if (testPersona) {
+      const beforePersona = (await entries()).find(e => e.url === url).remote_copies[serverId];
+      const globalPersona = await options.evaluate(async serverId => (await chrome.storage.local.get('server_registry')).server_registry.servers.find(s => s.id === serverId).persona, serverId);
+      await expect.poll(() => lastPopup.evaluate(`document.querySelector('button[aria-label="Persona"]').disabled`)).toBe(false);
+      await lastPopup.click('button[aria-label="Persona"]');
+      await expect.poll(() => lastPopup.evaluate(`Boolean(document.querySelector('[data-persona=${JSON.stringify(testPersona.name)}]'))`)).toBe(true);
+      await writeFile(path.join(evidence, 'persona-menu.png'), Buffer.from((await lastPopup.send('Page.captureScreenshot')).data, 'base64'));
+      const { root } = await lastPopup.send('DOM.getDocument');
+      const { nodeId } = await lastPopup.send('DOM.querySelector', { nodeId: root.nodeId, selector: `[data-persona=${JSON.stringify(testPersona.name)}]` });
+      await lastPopup.send('DOM.scrollIntoViewIfNeeded', { nodeId });
+      const personaStart = performance.now();
+      await lastPopup.click(`[data-persona=${JSON.stringify(testPersona.name)}]`);
+      await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.persona, { timeout: 5000 }).toBe(testPersona.name);
+      await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.status, { timeout: 30000 }).toBe('complete');
+      personaSubmission = (await entries()).find(e => e.url === url).remote_copies[serverId];
+      console.log(JSON.stringify({ event: "persona-applied", elapsedMs: performance.now() - personaStart }));
+      expect(personaSubmission.crawl_id).not.toBe(beforePersona.crawl_id);
+      expect(personaSubmission.snapshot_id).not.toBe(beforePersona.snapshot_id);
+      const priorResponse = await fetch(server + '/api/v1/core/snapshot/' + beforePersona.snapshot_id, { headers: { Authorization: 'Bearer ' + key } });
+      if (process.env.AGE_CHECK || process.env.REUSE_LOCAL || oldInterface) { expect(priorResponse.ok).toBe(true); expect(deleteRequests).toHaveLength(0); }
+      else if (priorResponse.ok) expect((await priorResponse.json()).status).toBe('deleting');
+      else expect(priorResponse.status).toBe(404);
+      expect((await entries()).find(e => e.url === url).persona_overrides[serverId]).toBe(testPersona.name);
+      expect(await options.evaluate(async serverId => (await chrome.storage.local.get('server_registry')).server_registry.servers.find(s => s.id === serverId).persona, serverId)).toBe(globalPersona);
+      const personaCrawls = await fetch(server + '/api/v1/crawls/crawls', { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json());
+      const newCrawl = personaCrawls.find(c => c.id.replaceAll('-', '') === personaSubmission.crawl_id.replaceAll('-', ''));
+      expect(newCrawl.config.USER_AGENT).toBe(personaUserAgent);
+      expect(newCrawl.config.ONLY_NEW).toBe(false);
+      expect(personaCrawls.find(c => c.id.replaceAll('-', '') === beforePersona.crawl_id.replaceAll('-', '')).config.USER_AGENT).not.toBe(personaUserAgent);
+      if (process.env.ARCHIVEBOX_TEST_COLLECTION) {
+        const query = spawnSync('uv', ['run', '--no-project', 'python', '-c', 'import sqlite3,sys; db=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro", uri=True); print(db.execute("SELECT persona_id FROM crawls_crawl WHERE id=?",(sys.argv[2],)).fetchone()[0])', path.join(process.env.ARCHIVEBOX_TEST_COLLECTION, 'index.sqlite3'), personaSubmission.crawl_id.replaceAll('-', '')], { encoding: 'utf8' });
+        expect(query.status).toBe(0);
+        expect(query.stdout.trim().replaceAll('-', '')).toBe(testPersona.id.replaceAll('-', ''));
+      }
+      await writeFile(path.join(evidence, 'persona-popup.png'), Buffer.from((await lastPopup.send('Page.captureScreenshot')).data, 'base64'));
+      await chooseDepth(1);
+      await chooseDepth(2);
+      expectedCrawls++;
+    }
+    if (process.env.RESUBMIT) {
+      const previousReceipt = (await entries()).find(e => e.url === url).remote_copies[serverId];
+      await lastPopup.click('.archivebox-overlay__resubmit');
+      await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.crawl_id).not.toBe(previousReceipt.crawl_id);
+      await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.status, { timeout: 30000 }).toBe('complete');
+      resubmission = (await entries()).find(e => e.url === url).remote_copies[serverId];
+      expect(resubmission.snapshot_id).not.toBe(previousReceipt.snapshot_id);
+      if (testPersona) expect(resubmission.persona).toBe(testPersona.name);
+      await expect.poll(() => lastPopup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent')).toBe('Submitted');
+      await writeFile(path.join(evidence, 'resubmitted-popup.png'), Buffer.from((await lastPopup.send('Page.captureScreenshot')).data, 'base64'));
+      const newCrawls = await fetch(server + '/api/v1/crawls/crawls', { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json());
+      expect(newCrawls.filter(c => c.urls.split('\n').includes(url))).toHaveLength(expectedCrawls + 1);
+      expect(newCrawls.find(c => c.id.replaceAll('-', '') === resubmission.crawl_id.replaceAll('-', '')).config.ONLY_NEW).toBe(false);
+      const newRemote = await fetch(server + '/api/v1/core/snapshot/' + resubmission.snapshot_id, { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json());
+      expect(newRemote.url).toBe(url);
+      expect(newRemote.archiveresults.find(r => r.plugin === 'chrome_extension_viewport')?.status).toBe('succeeded');
+      await expect.poll(async () => (await fetch(server + '/api/v1/crawls/crawl/' + resubmission.crawl_id, { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json())).status, { timeout: 60000 }).toBe('sealed');
+      const preservedCapture = await fetch(server + '/api/v1/core/snapshot/' + resubmission.snapshot_id, { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json());
+      await chooseDepth(1);
+      await chooseDepth(2);
+      await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.status).toBe('complete');
+      const reusedReceipt = (await entries()).find(e => e.url === url).remote_copies[serverId];
+      expect(reusedReceipt.snapshot_id).toBe(resubmission.snapshot_id);
+      expect(reusedReceipt.snapshot_crawl_id).toBe(resubmission.crawl_id);
+      expect(reusedReceipt.crawl_id).not.toBe(reusedReceipt.snapshot_crawl_id);
+      const reusedCapture = await fetch(server + '/api/v1/core/snapshot/' + reusedReceipt.snapshot_id, { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json());
+      expect(reusedCapture).toEqual(preservedCapture);
+      const reusedCrawlSnapshots = await fetch(server + '/api/v1/core/snapshots?url=' + encodeURIComponent(url), { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json());
+      expect(reusedCrawlSnapshots.items.filter(item => item.crawl_id === reusedReceipt.crawl_id)).toHaveLength(0);
+    }
   }
   lastPopup?.close();
-  const report = { staleDeletionReplacement, lookupRequests, addRequests, resubmission, statusHistory, acceptanceTtfbMs, acceptedMs, elapsedMs: performance.now() - openAt, saved, remote, fullpage: Boolean(process.env.FULLPAGE), fullpageUpload: Boolean(process.env.FULLPAGE_UPLOAD) };
+  const finalCrawls = () => fetch(server + '/api/v1/crawls/crawls', { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json()).then(items => items.filter(c => c.urls.split('\n').includes(url)));
+  if (!oldInterface) await expect.poll(async () => (await finalCrawls()).every(c => c.status === 'sealed'), { timeout: 90000, intervals: [1000] }).toBe(true);
+  const sealedCrawls = await finalCrawls();
+  const report = { oldInterface, deleteRequests, sealedCrawls, testPersona, personaSubmission, staleDeletionReplacement, lookupRequests, addRequests, resubmission, statusHistory, acceptanceTtfbMs, acceptedMs, elapsedMs: performance.now() - openAt, saved, remote, fullpage: Boolean(process.env.FULLPAGE), fullpageUpload: Boolean(process.env.FULLPAGE_UPLOAD) };
   await writeFile(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2));
+  verified = true;
   console.log(JSON.stringify({ event: 'verified', acceptanceTtfbMs, evidence, plugins: remote.archiveresults.map(r => r.plugin), fullpage: report.fullpage, fullpageUpload: report.fullpageUpload }));
 } finally {
+  if (verified && process.env.KEEP_OPEN && process.env.ARCHIVEBOX_TEST_PROFILE) {
+    chrome.unref();
+    console.log(JSON.stringify({ event: 'canary-left-open', profile, evidence }));
+    process.exit(process.exitCode || 0);
+  }
   if (chrome.exitCode === null && chrome.signalCode === null) {
     const exited = new Promise(resolve => chrome.once('exit', resolve));
     if (browser?.isConnected()) await (await browser.newBrowserCDPSession()).send('Browser.close');

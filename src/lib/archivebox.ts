@@ -27,6 +27,9 @@ export type ArchiveResultUploadResponse = {
 
 export type ArchiveBoxSnapshotMetadataResponse = {
   id?: string;
+  crawl_id?: string;
+  created_at?: string;
+  persona?: string | null;
 };
 
 export const archiveResultUploadChunkSize = 32 * 1024 * 1024;
@@ -658,10 +661,10 @@ export async function testApiKey(serverUrl: string, apiKey: string): Promise<str
   return data.user_id;
 }
 
-export async function findSubmittedSnapshot(server: ServerConfiguration, url: string): Promise<{ id: string; created_at: string } | null> {
+export async function findSubmittedSnapshot(server: ServerConfiguration, url: string): Promise<{ id: string; created_at: string; crawl_id?: string; persona?: string | null } | null> {
   const origin = serverBaseUrl(server.server);
   await ensureServerHostPermission(origin);
-  let newest: { id: string; created_at: string } | null = null;
+  let newest: { id: string; created_at: string; crawl_id?: string; persona?: string | null } | null = null;
   let offset = 0;
   while (true) {
     const query = new URLSearchParams({ url, with_archiveresults: 'false', limit: '200', offset: String(offset) });
@@ -669,12 +672,12 @@ export async function findSubmittedSnapshot(server: ServerConfiguration, url: st
       headers: apiHeaders(server.token), credentials: 'include', redirect: 'error', cache: 'no-store',
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    const data = await response.json() as { items?: Array<{ id?: string; url?: string; created_at?: string; status?: string }>; count?: number };
+    const data = await response.json() as { items?: Array<{ id?: string; url?: string; created_at?: string; status?: string; crawl_id?: string; persona?: string | null }>; count?: number };
     if (!Array.isArray(data.items) || !Number.isInteger(data.count) || data.count! < 0) throw new Error('Invalid snapshot lookup response.');
     for (const item of data.items) {
       if (item.url !== url || !item.id || !item.created_at || !Number.isFinite(Date.parse(item.created_at))) throw new Error('Invalid snapshot lookup result.');
       if (item.status === 'deleting') continue;
-      if (!newest || Date.parse(item.created_at) > Date.parse(newest.created_at)) newest = { id: item.id, created_at: item.created_at };
+      if (!newest || Date.parse(item.created_at) > Date.parse(newest.created_at)) newest = { id: item.id, created_at: item.created_at, crawl_id: item.crawl_id, persona: item.persona };
     }
     offset += data.items.length;
     if (offset >= data.count!) return newest;
@@ -705,46 +708,95 @@ export async function snapshotExistsOnServer(snapshot: Snapshot, server: ServerC
 export async function submitSnapshot(
   server: ServerDestination,
   snapshot: Snapshot,
-  captureReady?: Promise<void>,
+  captureReady?: Promise<void> | (() => Promise<void>),
   onAccepted?: (receipt: ArchiveSubmissionReceipt) => void,
   only_new?: boolean,
 ): Promise<ArchiveSubmissionReceipt> {
-  return await navigator.locks.request<Promise<ArchiveSubmissionReceipt>>(`archivebox-delivery:${snapshot.id}`, { mode: 'shared' }, async () =>
-    await navigator.locks.request<Promise<ArchiveSubmissionReceipt>>(`archivebox-delivery:${server.id}:${snapshot.id}`, async () => {
-      const result = await addToArchiveBox(server, [snapshot.url], snapshot.tags, snapshot.depth ?? 0,
-        false, false, [snapshot.id], only_new);
-      onAccepted?.(result);
-      try {
-        const accepted: Snapshot = { ...snapshot, remote_copies: { ...snapshot.remote_copies, [server.id]: {
-          status: 'accepted', submitted_to: serverBaseUrl(server.server),
-          ...(result.crawl_id ? { crawl_id: result.crawl_id } : {}), persona: server.persona,
-        } } };
-        // Legacy HTML confirmation does not prove completion through the
-        // modern metadata/artifact APIs. Keep the durable accepted receipt and
-        // leave it accepted until a later explicit verification can complete it.
-        if (result.legacy) return result;
-        const metadata = await syncArchiveBoxSnapshotMetadata(server, accepted);
-        if (!metadata.id) throw new Error('Server did not confirm the saved snapshot.');
-        await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
-          ...item, remote_copies: { ...item.remote_copies, [server.id]: {
-            ...item.remote_copies?.[server.id], status: 'accepted', submitted_to: serverBaseUrl(server.server), snapshot_id: metadata.id,
-          } },
-        } : item));
-        await captureReady;
-        const latest = (await getSnapshots()).find((item) => item.id === snapshot.id);
-        const { uploadSnapshotCaptureArtifactsToArchiveBox } = await import('./archiveboxArtifacts');
-        if (latest) await uploadSnapshotCaptureArtifactsToArchiveBox(server, latest, metadata.id);
-        await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
-          ...item, remote_copies: { ...item.remote_copies, [server.id]: { ...item.remote_copies[server.id]!, status: 'complete' } },
-        } : item));
-        return result;
-      } catch (error) {
-        await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
-          ...item, remote_copies: { ...item.remote_copies, [server.id]: {
-            ...item.remote_copies[server.id]!, delivery_error: error instanceof Error ? error.message : String(error),
-          } },
-        } : item));
-        throw error;
+  return await navigator.locks.request<Promise<ArchiveSubmissionReceipt>>(`archivebox-delivery:${snapshot.id}`, { mode: 'shared' }, async () => {
+    let captureAttempted = false;
+    const captureAndDeliver = (remoteId?: string) => navigator.locks.request(`archivebox-capture-delivery:${snapshot.id}`, async () => {
+      // Acceptance stays concurrent, but a later capture must not replace these local bytes mid-upload.
+      if (!captureAttempted) {
+        captureAttempted = true;
+        await (typeof captureReady === 'function' ? captureReady() : captureReady);
       }
-    }));
+      if (remoteId) {
+        const captured = (await getSnapshots()).find((item) => item.id === snapshot.id);
+        const { uploadSnapshotCaptureArtifactsToArchiveBox } = await import('./archiveboxArtifacts');
+        if (captured) await uploadSnapshotCaptureArtifactsToArchiveBox(server, captured, remoteId);
+      }
+    });
+    let result: ArchiveSubmissionReceipt;
+    try {
+      result = await addToArchiveBox(server, [snapshot.url], snapshot.tags, snapshot.depth ?? 0,
+        false, false, [snapshot.id], only_new);
+    } catch (error) {
+      // Saving locally must survive an unavailable server, just like an ordinary local save.
+      await captureAndDeliver();
+      throw error;
+    }
+    onAccepted?.(result);
+    try {
+      const accepted: Snapshot = { ...snapshot, remote_copies: { ...snapshot.remote_copies, [server.id]: {
+        status: 'accepted', submitted_to: serverBaseUrl(server.server),
+        ...(result.crawl_id ? { crawl_id: result.crawl_id } : {}), persona: server.persona,
+      } } };
+      // Legacy HTML confirmation does not prove completion through the
+      // modern metadata/artifact APIs. Keep the durable accepted receipt and
+      // leave it accepted until a later explicit verification can complete it.
+      if (result.legacy) { await captureAndDeliver(); return result; }
+      const metadata = await syncArchiveBoxSnapshotMetadata(server, accepted);
+      if (!metadata.id) throw new Error('Server did not confirm the saved snapshot.');
+      const reused = Boolean(metadata.crawl_id && result.crawl_id && metadata.crawl_id.replaceAll('-', '') !== result.crawl_id.replaceAll('-', ''));
+      await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
+        ...item, remote_copies: { ...item.remote_copies, [server.id]: {
+          ...item.remote_copies?.[server.id], status: 'accepted', submitted_to: serverBaseUrl(server.server), snapshot_id: metadata.id, snapshot_crawl_id: metadata.crawl_id,
+          ...(metadata.persona !== undefined ? { persona: metadata.persona } : reused ? { persona: snapshot.remote_copies?.[server.id]?.persona } : {}),
+          ...(reused ? { submitted_at: metadata.created_at } : {}),
+        } },
+      } : item));
+      // ONLY_NEW can resolve to somebody else's older capture. Its artifacts and persona are immutable here.
+      await captureAndDeliver(reused ? undefined : metadata.id);
+      await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
+        ...item, remote_copies: { ...item.remote_copies, [server.id]: { ...item.remote_copies[server.id]!, status: 'complete' } },
+      } : item));
+      return result;
+    } catch (error) {
+      await captureAndDeliver().catch(() => undefined);
+      await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
+        ...item, remote_copies: { ...item.remote_copies, [server.id]: {
+          ...item.remote_copies[server.id]!, delivery_error: error instanceof Error ? error.message : String(error),
+        } },
+      } : item));
+      throw error;
+    }
+  });
+}
+
+export async function removeFreshOwnedCapture(server: ServerDestination, snapshot: Snapshot): Promise<void> {
+  const snapshotId = snapshot.id;
+  const expectedCrawl = snapshot.remote_copies?.[server.id]?.crawl_id;
+  // Wait for metadata to establish actual ownership, including a fast persona change just after acceptance.
+  await navigator.locks.request(`archivebox-delivery:${snapshotId}`, async () => {
+    const copy = (await getSnapshots()).find(item => item.id === snapshotId)?.remote_copies?.[server.id];
+    const age = Date.now() - Date.parse(copy?.submitted_at || '');
+    // A receipt alone is not ownership: ONLY_NEW may have reused an older capture.
+    if (!copy?.snapshot_id || copy.submitted_to !== serverBaseUrl(server.server) || copy.crawl_id !== expectedCrawl
+      || !copy.crawl_id || !copy.snapshot_crawl_id || !(age >= 0 && age < 120_000)
+      || copy.snapshot_crawl_id.replaceAll('-', '') !== copy.crawl_id.replaceAll('-', '')) return;
+    await ensureServerHostPermission(server.server);
+    const origin = serverBaseUrl(server.server);
+    for (const [path, method, body] of [
+      [`/api/v1/crawls/crawl/${encodeURIComponent(copy.crawl_id)}`, 'PATCH', JSON.stringify({ action: 'cancel' })],
+      [`/api/v1/core/snapshot/${encodeURIComponent(copy.snapshot_id)}`, 'DELETE', undefined],
+    ] as const) {
+      const response = await fetchWithTimeout(origin + path, { method, body, headers: apiHeaders(server.token),
+        credentials: 'include', mode: 'cors', redirect: 'error' });
+      if (response.status === 404) continue; // The user may already have removed this capture on the server.
+      if (!response.ok) {
+        const error = await response.json().catch(() => null) as { detail?: string } | null;
+        throw new Error(`HTTP ${response.status}: ${error?.detail || response.statusText}`);
+      }
+    }
+  });
 }
