@@ -39,7 +39,12 @@ jobs:
         run: pnpm exec wxt zip -b ${{ matrix.browser }} --mv3
       - name: Install browser for import and layout regression tests
         if: matrix.browser == 'chrome'
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          # Hosted runners export CHROME_BIN for their system browser. Pin our
+          # existing higher-priority override to the browser installed above,
+          # so runner image updates cannot silently change the tested runtime.
+          node --input-type=module -e 'import { chromium } from "@playwright/test"; import { appendFileSync } from "node:fs"; appendFileSync(process.env.GITHUB_ENV, `CHROME_FOR_TESTING_BIN=${chromium.executablePath()}\n`);'
       - name: Test real extension import and layout flows
         if: matrix.browser == 'chrome'
         run: pnpm exec playwright test tests/safari-import.test.ts tests/options-responsive.test.ts tests/retention.test.ts tests/server_registry.test.ts
