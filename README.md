@@ -54,7 +54,9 @@ The extension stores capture artifacts in the browser's extension-local OPFS sto
 
 - Viewport screenshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_viewport/screenshot.png`
 - Full-page screenshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_screenshot/screenshot.png`
-- MHTML snapshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_mhtml/snapshot.mhtml`
+- MHTML snapshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_mhtml/snapshot.mhtml`
+
+Older local MHTML files retain their recorded `chrome_mhtml` paths. Uploads use the separate `chrome_extension_mhtml` server directory so server-side MHTML captures cannot overwrite browser-captured files.
 
 Local copies in OPFS are removed after 30 days by default; you can configure the extension to keep them indefinitely or remove them as soon as the server receives the URL.
 

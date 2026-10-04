@@ -66,13 +66,17 @@ function outputFileAlreadyUploaded(file: ArchiveResultUploadFile, outputFile?: A
 function buildSnapshotArtifactGroups(snapshot: Snapshot, opfsFiles: OpfsFile[]): SnapshotArtifactGroup[] {
   const byDirectory = new Map<string, OpfsFile[]>();
   for (const file of opfsFiles) {
+    // Older local captures keep their recorded path. A later recapture can leave both
+    // directories present; only the active MHTML may be uploaded to its isolated server namespace.
+    if (['chrome_mhtml', 'chrome_extension_mhtml'].includes(file.directory) && file.path !== snapshot.mhtml?.path) continue;
     byDirectory.set(file.directory, [...(byDirectory.get(file.directory) || []), file]);
   }
 
   return [...byDirectory.entries()].flatMap(([directory, files]) => {
     if (!files.length) return [];
     return [{
-      plugin: directory,
+      // Never share the server hook's chrome_mhtml directory: its later capture would overwrite ours.
+      plugin: directory === 'chrome_mhtml' ? 'chrome_extension_mhtml' : directory,
       output_str: files[0]?.output_path || '',
       output_json: {
         source: extensionArtifactSource,
@@ -168,7 +172,7 @@ async function uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked(server: Server
   for (const group of buildSnapshotArtifactGroups(snapshot, opfsFiles)) {
     if (group.plugin === 'chrome_extension_viewport' && !server.policy.upload_viewport_screenshots_to_server) continue;
     if (group.plugin === 'chrome_extension_screenshot' && !server.policy.upload_screenshots_to_server) continue;
-    if (group.plugin === 'chrome_mhtml' && !server.policy.upload_mhtml_to_server) continue;
+    if (group.plugin === 'chrome_extension_mhtml' && !server.policy.upload_mhtml_to_server) continue;
     if (group.plugin === 'chrome_extension_singlefile' && !server.policy.upload_singlefile_to_server) continue;
     const groupUploaded = await uploadSnapshotArtifactGroup(server, snapshot, group, snapshot_id);
     uploadedAny = uploadedAny || groupUploaded;

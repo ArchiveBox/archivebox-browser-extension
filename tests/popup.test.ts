@@ -1309,7 +1309,7 @@ test('saved URL sync uploads local OPFS artifacts', async () => {
       const body = route.request().postDataBuffer()?.toString('latin1') || '';
       expect(body).toContain(`name="snapshot_id"\r\n\r\n${serverSnapshotId}`);
       archiveResultBodies.push(body);
-      const plugin = body.includes('chrome_mhtml') ? 'chrome_mhtml' : 'chrome_extension_screenshot';
+      const plugin = body.includes('chrome_extension_mhtml') ? 'chrome_extension_mhtml' : 'chrome_extension_screenshot';
       await route.fulfill({
         status: 200,
         contentType: 'application/json',

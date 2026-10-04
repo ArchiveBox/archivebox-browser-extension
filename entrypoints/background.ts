@@ -1,7 +1,7 @@
 import { defaultServers, requireServer } from '@/src/lib/server_registry';
 import { configureLocalRetention, withSnapshotArtifacts } from '@/src/lib/retention';
 import { configureCookieSync } from '@/src/lib/cookieSync';
-import { removeFreshOwnedCapture, submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, supportsArchiveBoxApi, testApiKey, testServerUrl } from '@/src/lib/archivebox';
+import { findSubmittedSnapshot, removeFreshOwnedCapture, submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, supportsArchiveBoxApi, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { appendSnapshotScreenshotParts, writeSnapshotMhtmlBytes, writeSnapshotScreenshot, writeSnapshotScreenshotParts, writeSnapshotSingleFileHtml } from '@/src/lib/screenshotStorage';
@@ -1083,10 +1083,18 @@ export default defineBackground(() => {
       case 'open_archivebox_snapshot':
         return getConfig()
           .then(async (config) => {
-            const serverUrl = requireServer(config, message.server_id).server;
+            const server = requireServer(config, message.server_id);
+            const serverUrl = server.server;
             if (!serverUrl) throw new Error(t("Server not configured"));
             const modernApi = await supportsArchiveBoxApi(serverUrl).catch(() => true);
-            return browser.tabs.create({ url: archiveBoxSnapshotUrl(serverUrl, message.url, !modernApi) });
+            let snapshotId: string | undefined;
+            if (modernApi) {
+              const copy = (await getSnapshots()).find(item => item.url === message.url)?.remote_copies?.[server.id];
+              snapshotId = copy?.submitted_to === new URL(serverUrl).toString().replace(/\/$/, '') ? copy.snapshot_id : undefined;
+              snapshotId ||= (await findSubmittedSnapshot(server, message.url))?.id;
+              if (!snapshotId) throw new Error(t("The URL is queued, but its archived copy is not available yet."));
+            }
+            return browser.tabs.create({ url: archiveBoxSnapshotUrl(serverUrl, message.url, !modernApi, snapshotId) });
           })
           .then(() => ({ ok: true }))
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));

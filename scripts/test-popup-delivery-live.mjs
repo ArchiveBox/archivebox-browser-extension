@@ -200,7 +200,7 @@ try {
   expect(remoteResponse.ok).toBe(true);
   const remote = await remoteResponse.json();
   const remoteViewport = remote.archiveresults.find(r => r.plugin === 'chrome_extension_viewport');
-  const remoteMhtml = remote.archiveresults.find(r => r.plugin === 'chrome_mhtml');
+  const remoteMhtml = remote.archiveresults.find(r => r.plugin === 'chrome_extension_mhtml');
   const remoteFullpage = remote.archiveresults.find(r => r.plugin === 'chrome_extension_screenshot');
   expect(remoteViewport?.status).toBe('succeeded');
   expect(remoteViewport.output_files['screenshot.png'].size).toBeGreaterThan(100);
@@ -208,7 +208,7 @@ try {
   expect(remoteMhtml.output_files['snapshot.mhtml'].size).toBe(saved.mhtml.size);
   if (process.env.FULLPAGE_UPLOAD) expect(remoteFullpage?.status).toBe('succeeded');
   else expect(remoteFullpage).toBeUndefined();
-  for (const [artifact, plugin] of [[saved.viewport_screenshot, 'chrome_extension_viewport'], [saved.mhtml, 'chrome_mhtml'], ...(process.env.FULLPAGE_UPLOAD ? [[saved.screenshot, 'chrome_extension_screenshot']] : [])]) {
+  for (const [artifact, plugin] of [[saved.viewport_screenshot, 'chrome_extension_viewport'], [saved.mhtml, 'chrome_extension_mhtml'], ...(process.env.FULLPAGE_UPLOAD ? [[saved.screenshot, 'chrome_extension_screenshot']] : [])]) {
     const parts = artifact.parts?.length ? artifact.parts : [{ path: artifact.path }];
     for (const part of parts) {
       const localBytes = await options.evaluate(async filePath => {
@@ -216,7 +216,8 @@ try {
         for (const segment of segments) directory = await directory.getDirectoryHandle(segment);
         const file = await (await directory.getFileHandle(name)).getFile(); return [...new Uint8Array(await file.arrayBuffer())];
       }, part.path);
-      const replayUrl = server + '/' + remote.archive_path + '/' + plugin + '/' + part.path.split('/').at(-1);
+      // /snapshot/{id} lets the server choose the public replay origin in either security mode.
+      const replayUrl = server + '/snapshot/' + encodeURIComponent(remote.id) + '/' + plugin + '/' + encodeURIComponent(part.path.split('/').at(-1));
       const replay = await fetch(replayUrl, { headers: { Authorization: 'Bearer ' + key } });
       expect(replay.ok).toBe(true);
       expect(Buffer.from(await replay.arrayBuffer()).equals(Buffer.from(localBytes))).toBe(true);

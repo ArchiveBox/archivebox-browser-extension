@@ -53,7 +53,7 @@ export function snapshotMhtmlPath(snapshot: Snapshot): string {
     snapshotDateSegment(snapshot),
     snapshotHostSegment(snapshot),
     pathSafeSegment(snapshot.id),
-    'chrome_mhtml',
+    'chrome_extension_mhtml',
     'snapshot.mhtml',
   ].join('/');
 }

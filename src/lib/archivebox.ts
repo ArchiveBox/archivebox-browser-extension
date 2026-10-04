@@ -129,7 +129,10 @@ async function ensureServerHostPermission(serverUrl: string): Promise<void> {
   await requestServerHostPermission(serverUrl);
 }
 
-export function archiveBoxSnapshotUrl(serverUrl: string, url: string, legacy = false): string {
+export function archiveBoxSnapshotUrl(serverUrl: string, url: string, legacy = false, snapshotId?: string): string {
+  // The server routes this stable entry point to its configured web/replay origin.
+  // A filesystem archive_path on an API origin is incorrectly treated as an API route.
+  if (!legacy && snapshotId) return `${serverBaseUrl(serverUrl)}/snapshot/${encodeURIComponent(snapshotId)}/`;
   const path = legacy ? url.replace(/^https?:\/\//, '') : url;
   return `${serverBaseUrl(serverUrl)}/archive/${path}`;
 }
