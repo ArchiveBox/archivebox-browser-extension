@@ -63,7 +63,9 @@ and the marked workflow build section are intentionally repository-specific.
 Check the built site with real Chromium (also run by Pages CI):
 
 ```sh
-uv run --no-config --no-project --with playwright==1.63.0 playwright install chromium
+export ABXPKG_LIB_DIR="${ABXPKG_LIB_DIR:-/tmp/archivebox-site-browser}"
+uv run --no-project --with abx-dl==1.13.106 abx-dl install chrome
+export CHROME_BIN="$ABXPKG_LIB_DIR/env/bin/chromium"
 uv run --no-config --no-project --with playwright==1.63.0 python .github/pages/verify.py SITE_OUTPUT --evidence /tmp/site-evidence
 ```
 

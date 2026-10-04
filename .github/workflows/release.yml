@@ -156,8 +156,7 @@ jobs:
       - run: pnpm compile
       - name: Build all store packages from the versioned CI commit
         run: pnpm zip:stores
-      - name: Install Chromium for real extension tests
-        run: pnpm exec playwright install --with-deps chromium
+      - uses: ./.github/actions/setup-browser
       - name: Test import, options, retention, and registry flows
         run: pnpm exec playwright test tests/safari-import.test.ts tests/options-responsive.test.ts tests/retention.test.ts tests/server_registry.test.ts
       - name: Verify local capture and reject unconfirmed submissions

@@ -42,7 +42,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - uses: ./.github/actions/setup-browser
       - run: pnpm compile
       - run: pnpm build
       - name: Capture real extension screens and public store listings

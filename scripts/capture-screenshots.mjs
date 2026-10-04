@@ -49,6 +49,7 @@ try {
   manifest.host_permissions = ['<all_urls>'];
   await writeFile(manifestFile, JSON.stringify(manifest));
   context = await chromium.launchPersistentContext(profile, {
+    executablePath: process.env.CHROME_BIN,
     channel: 'chromium',
     headless: true,
     args: ['--enable-unsafe-extension-debugging'],

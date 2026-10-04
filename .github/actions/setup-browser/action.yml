@@ -1,0 +1,22 @@
+name: Resolve browser with ArchiveBox
+description: Let abx-dl and abxpkg install and cache the Chrome plugin runtime.
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v7
+    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: ${{ runner.temp }}/extension-abx-lib
+        key: extension-abx-lib-${{ runner.os }}-${{ runner.arch }}-abx-dl-1.13.106
+    - name: Resolve the Chrome plugin runtime
+      shell: bash
+      working-directory: ${{ runner.temp }}
+      env:
+        ABXPKG_LIB_DIR: ${{ runner.temp }}/extension-abx-lib
+      run: |
+        uv run --no-project --with abx-dl==1.13.106 abx-dl install chrome
+        # env/bin is abxpkg's canonical projection of the resolved binary.
+        # Use the same runtime for all browser clients rather than letting
+        # Playwright install a second copy with different provider/version rules.
+        test -x "$ABXPKG_LIB_DIR/env/bin/chromium"
+        echo "CHROME_BIN=$ABXPKG_LIB_DIR/env/bin/chromium" >> "$GITHUB_ENV"
