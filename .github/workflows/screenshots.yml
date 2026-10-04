@@ -1,20 +1,33 @@
 name: Capture extension screenshots
 
 on:
-  push:
-    branches: [main]
-    paths-ignore: ['.github/pages/**', 'README.md', 'docs/site/**', '.github/workflows/pages.yml', 'release.json', 'docs/TESTFLIGHT.md']
+  schedule:
+    - cron: '49 5,17 * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: extension-captures-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+      key: ${{ steps.check.outputs.key }}
+      backend: ${{ steps.check.outputs.backend }}
+    steps:
+      - id: check
+        uses: ArchiveBox/monorepo/.github/actions/changed-scheduled-inputs@main
+
+
   build:
+    needs: changes
+    if: needs.changes.outputs.changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -57,3 +70,11 @@ jobs:
           path: docs/site/screenshots
           if-no-files-found: error
           retention-days: 90
+
+  complete:
+    name: 'Scheduled inputs: ${{ needs.changes.outputs.key }}'
+    needs: [changes, build]
+    if: needs.changes.outputs.changed == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'Scheduled work completed successfully.'
