@@ -121,24 +121,29 @@ try {
   const originalScroll = await target.evaluate(() => ({ x: scrollX, y: scrollY }));
   await target.evaluate(() => { window.testPageInput = []; for (const kind of ['keydown', 'wheel', 'scroll']) addEventListener(kind, event => window.testPageInput.push({ kind, key: event.key, trusted: event.isTrusted, x: scrollX, y: scrollY })); });
   const viewport = await target.evaluate(() => ({ width: innerWidth, height: innerHeight }));
-  const openAt = performance.now();
-
   const windowId = await options.evaluate(async (url) => { const [tab] = await chrome.tabs.query({ url }); await chrome.windows.update(tab.windowId, { focused: true }); return tab.windowId; }, url);
   await expect.poll(() => options.evaluate(async id => (await chrome.windows.get(id)).focused, windowId)).toBe(true);
+  const openAt = performance.now();
+  const openEpoch = performance.timeOrigin + openAt;
   await options.evaluate(windowId => chrome.action.openPopup({ windowId }), windowId);
   const targets = await fetch('http://127.0.0.1:' + port + '/json/list').then(r => r.json());
   const popupTarget = targets.find(t => t.url === `chrome-extension://${id}/popup.html`);
   expect(popupTarget).toBeTruthy();
   const popup = await connectPopup(popupTarget.webSocketDebuggerUrl);
-  await popup.evaluate(`window.testStatusHistory = []; const recordStatus = () => { const text = document.querySelector('.archivebox-overlay__states')?.textContent || ''; if (window.testStatusHistory.at(-1) !== text) window.testStatusHistory.push(text); }; new MutationObserver(recordStatus).observe(document.documentElement, { subtree: true, childList: true, characterData: true }); recordStatus();`);
+  // Record the DOM transition itself: expect.poll's backoff used to add up to
+  // hundreds of milliseconds after submission had already finished. If the
+  // popup wins the race with CDP attachment, report that timing as an upper
+  // bound instead of claiming we observed the exact transition.
+  await popup.evaluate(`window.testStatusHistory = []; window.testSubmissionWasAlreadyVisible = document.querySelector('.archivebox-overlay__status')?.textContent === 'Submitted'; const recordStatus = () => { const text = document.querySelector('.archivebox-overlay__states')?.textContent || ''; if (window.testStatusHistory.at(-1) !== text) window.testStatusHistory.push(text); if (window.testSubmittedAt === undefined && document.querySelector('.archivebox-overlay__status')?.textContent === 'Submitted') window.testSubmittedAt = performance.timeOrigin + performance.now(); }; new MutationObserver(recordStatus).observe(document.documentElement, { subtree: true, childList: true, characterData: true }); recordStatus();`);
   await expect.poll(() => popup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent'), { timeout: 10000 }).toBe('Submitted');
-  const acceptedMs = performance.now() - openAt;
+  const acceptedMs = await popup.evaluate('window.testSubmittedAt') - openEpoch;
+  const acceptedMsIsUpperBound = await popup.evaluate('window.testSubmissionWasAlreadyVisible');
   const savedRow = options.locator('.saved-url-table tbody tr').filter({ has: options.locator('a[href="' + url + '"]') });
   // URL acceptance is independent of capture/upload completion and survives reload.
   await expect(savedRow.locator('.sync-icon')).toHaveAttribute('aria-label', 'Submitted');
   await options.reload();
   await expect(savedRow.locator('.sync-icon')).toHaveAttribute('aria-label', 'Submitted');
-  console.log(JSON.stringify({ event: 'accepted', acceptedMs, acceptanceTtfbMs, url }));
+  console.log(JSON.stringify({ event: 'accepted', acceptedMs, acceptedMsIsUpperBound, acceptanceTtfbMs, url }));
   for (const seconds of [1, 2]) {
     await expect.poll(() => popup.evaluate(`window.testStatusHistory.some(text => text.includes('Submitted ${seconds}s ago'))`), { intervals: [100], timeout: 5000 }).toBe(true);
   }
@@ -457,7 +462,7 @@ try {
   const finalCrawls = () => fetch(server + '/api/v1/crawls/crawls', { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json()).then(items => items.filter(c => c.urls.split('\n').includes(url)));
   if (!oldInterface) await expect.poll(async () => (await finalCrawls()).every(c => c.status === 'sealed'), { timeout: 90000, intervals: [1000] }).toBe(true);
   const sealedCrawls = await finalCrawls();
-  const report = { oldInterface, deleteRequests, sealedCrawls, testPersona, personaSubmission, staleDeletionReplacement, lookupRequests, addRequests, resubmission, statusHistory, acceptanceTtfbMs, acceptedMs, elapsedMs: performance.now() - openAt, saved, remote, fullpage: Boolean(process.env.FULLPAGE), fullpageUpload: Boolean(process.env.FULLPAGE_UPLOAD) };
+  const report = { oldInterface, deleteRequests, sealedCrawls, testPersona, personaSubmission, staleDeletionReplacement, lookupRequests, addRequests, resubmission, statusHistory, acceptanceTtfbMs, acceptedMs, acceptedMsIsUpperBound, elapsedMs: performance.now() - openAt, saved, remote, fullpage: Boolean(process.env.FULLPAGE), fullpageUpload: Boolean(process.env.FULLPAGE_UPLOAD) };
   await writeFile(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2));
   verified = true;
   console.log(JSON.stringify({ event: 'verified', acceptanceTtfbMs, evidence, plugins: remote.archiveresults.map(r => r.plugin), fullpage: report.fullpage, fullpageUpload: report.fullpageUpload }));
