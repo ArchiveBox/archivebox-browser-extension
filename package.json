@@ -2,7 +2,7 @@
   "name": "archivebox-browser-extension",
   "description": "Collect URLs and preserve them using a remote ArchiveBox server",
   "private": true,
-  "version": "3.3.6",
+  "version": "3.3.7",
   "type": "module",
   "scripts": {
     "dev": "wxt",
