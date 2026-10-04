@@ -1615,6 +1615,9 @@ test('action popup saves MHTML + screenshots without console errors or closing t
     const background = await collectBackgroundConsole(harness, messages);
 
     const page = await harness.context.newPage();
+    // Force the real scrolling path on both large desktop displays and CI.
+    // A page that fits the viewport correctly saves only viewport_screenshot.
+    await page.setViewportSize({ width: 1100, height: 360 });
     page.on('console', (message) => messages.push({ source: 'page', type: message.type(), text: message.text() }));
     page.on('pageerror', (error) => messages.push({ source: 'page', type: 'error', text: error.message }));
     const testPageUrl = `${server.url}?archivebox_test=1`;
@@ -1628,7 +1631,9 @@ test('action popup saves MHTML + screenshots without console errors or closing t
     await waitForSavedEntry(harness, testPageUrl, (saved) => Boolean(saved.mhtml), 'popup MHTML', 15_000);
 
     await clickPopupButtonText(harness, popup, 'Screenshot');
-    await waitForSavedEntry(harness, testPageUrl, (saved) => Boolean(saved.screenshot), 'popup screenshot', 20_000);
+    const captured = await waitForSavedEntry(harness, testPageUrl, (saved) => ((saved.screenshot as { parts?: unknown[] } | undefined)?.parts?.length || 0) > 1, 'completed full-page screenshot', 20_000);
+    expect((captured.screenshot as { parts: unknown[] }).parts.length).toBeGreaterThan(1);
+    await waitForPopupElementsCondition(harness, popup, 'capture finished', '.archivebox-overlay__capture-button--capturing', items => items.length === 0);
 
     // The page the user was viewing must still be open.
     expect(await pageTargetExists(harness, testPageUrl)).toBe(true);

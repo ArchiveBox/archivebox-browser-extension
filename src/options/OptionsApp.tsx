@@ -64,6 +64,16 @@ import type { ConfigState, Persona, RuntimeMessage, RuntimeResponse, Snapshot, S
 
 type Tab = 'urls' | 'config' | 'profiles' | 'import';
 type Status = { kind: 'idle' | 'success' | 'error' | 'warning'; text: string };
+
+function snapshotSyncStatus(snapshot: Snapshot, serverId: string, pending?: Status): Status {
+  if (pending) return pending;
+  // Popup/background submissions never populate this page's transient sync map.
+  // Acceptance is durable even while uploads run; use the selected server's receipt.
+  const receipt = snapshot.remote_copies?.[serverId];
+  if (receipt?.delivery_error) return { kind: 'warning', text: t("URL submitted. Capture upload failed: $1", receipt.delivery_error) };
+  if (receipt) return { kind: 'success', text: t("Submitted") };
+  return { kind: 'idle', text: t("Not synced") };
+}
 type ImportItem = Snapshot & { selected: boolean; isNew: boolean };
 type PersonaSettingKey = keyof Persona['settings'];
 type EditablePersonaSettingKey = Exclude<PersonaSettingKey, 'geolocation'>;
@@ -905,13 +915,13 @@ function OptionsMain() {
       } else if (savedUrlSortKey === 'tags') {
         comparison = a.tags.join(' ').toLowerCase().localeCompare(b.tags.join(' ').toLowerCase());
       } else {
-        const aStatus = syncStatuses[a.id]?.text || syncStatuses[a.id]?.kind || 'idle';
-        const bStatus = syncStatuses[b.id]?.text || syncStatuses[b.id]?.kind || 'idle';
+        const aStatus = snapshotSyncStatus(a, activeServer(config)?.id || '', syncStatuses[a.id]).text;
+        const bStatus = snapshotSyncStatus(b, activeServer(config)?.id || '', syncStatuses[b.id]).text;
         comparison = aStatus.toLowerCase().localeCompare(bStatus.toLowerCase());
       }
       return comparison * direction;
     });
-  }, [filterText, savedUrlSortDirection, savedUrlSortKey, snapshots, syncStatuses]);
+  }, [config, filterText, savedUrlSortDirection, savedUrlSortKey, snapshots, syncStatuses]);
   const visibleSnapshotIds = useMemo(() => visibleSnapshots.map((snapshot) => snapshot.id), [visibleSnapshots]);
   const visibleSelectedCount = useMemo(
     () => visibleSnapshotIds.filter((id) => selectedSnapshots.has(id)).length,
@@ -1974,7 +1984,7 @@ function OptionsMain() {
                 </thead>
                 <tbody>
                   {visibleSnapshots.map((snapshot) => {
-                    const syncStatus = syncStatuses[snapshot.id];
+                    const syncStatus = snapshotSyncStatus(snapshot, server_id, syncStatuses[snapshot.id]);
                     const inlineTagSuggestions = inlineTagEditor?.snapshot_id === snapshot.id
                       ? matchingTagSuggestions(tags, inlineTagEditor.value, snapshot.tags)
                       : [];

@@ -167,11 +167,14 @@ function ArchiveBoxOverlay() {
       if (message.type !== 'screenshot_capture_progress') return undefined;
       setScreenshotCapture((current) => {
         if (current.snapshot_id && current.snapshot_id !== message.snapshot_id) return current;
+        // Automatic captures run after URL acceptance, so no awaiting popup call
+        // will reset this state. Terminal events must also remove input listeners;
+        // otherwise normal typing/scrolling cancels a capture that already finished.
         const nextPhase = message.phase === 'scrolling'
           ? 'capturing'
           : message.phase === 'visible'
             ? 'visible'
-            : current.phase;
+            : 'idle';
         return {
           phase: nextPhase,
           snapshot_id: message.snapshot_id,
@@ -568,7 +571,8 @@ function ArchiveBoxOverlay() {
 
   async function viewRemoteSnapshot() {
     if (!snapshot) return;
-    setStatus(t("ArchiveBox needs permission to connect to your configured server so it can open the archived copy."));
+    // Keep submission feedback on successful navigation. A permission request can
+    // already be granted; only its actual failure belongs in the status message.
     try {
       await ensureConfiguredServerPermission(true);
     } catch (error) {

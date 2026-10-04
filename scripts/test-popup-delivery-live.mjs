@@ -101,6 +101,7 @@ try {
     if (await checkbox.isChecked() !== enabled) await checkbox.click();
     await expect(checkbox).toBeChecked({ checked: enabled });
   }
+  await options.getByRole('navigation').getByRole('button', { name: 'Saved URLs', exact: true }).click();
   const url = 'https://example.com/?archivebox_popup_delivery=' + Date.now();
   const target = await context.newPage();
   const targetSession = await context.newCDPSession(target);
@@ -124,6 +125,11 @@ try {
   await popup.evaluate(`window.testStatusHistory = []; const recordStatus = () => { const text = document.querySelector('.archivebox-overlay__states')?.textContent || ''; if (window.testStatusHistory.at(-1) !== text) window.testStatusHistory.push(text); }; new MutationObserver(recordStatus).observe(document.documentElement, { subtree: true, childList: true, characterData: true }); recordStatus();`);
   await expect.poll(() => popup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent'), { timeout: 10000 }).toBe('Submitted');
   const acceptedMs = performance.now() - openAt;
+  const savedRow = options.locator('.saved-url-table tbody tr').filter({ has: options.locator('a[href="' + url + '"]') });
+  // URL acceptance is independent of capture/upload completion and survives reload.
+  await expect(savedRow.locator('.sync-icon')).toHaveAttribute('aria-label', 'Submitted');
+  await options.reload();
+  await expect(savedRow.locator('.sync-icon')).toHaveAttribute('aria-label', 'Submitted');
   console.log(JSON.stringify({ event: 'accepted', acceptedMs, acceptanceTtfbMs, url }));
   for (const seconds of [1, 2]) {
     await expect.poll(() => popup.evaluate(`window.testStatusHistory.some(text => text.includes('Submitted ${seconds}s ago'))`), { intervals: [100], timeout: 5000 }).toBe(true);
@@ -134,6 +140,17 @@ try {
   const serverId = await options.evaluate(async () => (await chrome.storage.local.get('server_registry')).server_registry.active_server_id);
   await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.status, { timeout: 30000 }).toBe('complete');
   const saved = (await entries()).find(e => e.url === url);
+  // Automatic full-page capture has no awaiting popup call to clear its state:
+  // the terminal progress event must stop the button and input cancellation.
+  if (process.env.FULLPAGE) {
+    await expect.poll(() => popup.evaluate('document.querySelectorAll(".archivebox-overlay__capture-button--capturing").length')).toBe(0);
+    for (const key of ['ArrowLeft', 'ArrowRight']) {
+      await popup.send('Input.dispatchKeyEvent', { type: 'keyDown', key });
+      await popup.send('Input.dispatchKeyEvent', { type: 'keyUp', key });
+    }
+    expect(await popup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent')).not.toContain('Canceling');
+  }
+
   const controls = await popup.evaluate(`['.archivebox-overlay__capture-actions button', '.archivebox-overlay__crawl-button', 'button[aria-label="Persona"]'].map(selector => { const element = document.querySelector(selector); const rect = element.getBoundingClientRect(); return { top: rect.top, left: rect.left, right: rect.right, text: element.textContent }; })`);
   expect(controls[0].top).toBe(controls[1].top);
   expect(controls[1].top).toBe(controls[2].top);
@@ -414,6 +431,21 @@ try {
     await responsivePage.close();
   }
   lastPopup?.close();
+  const feedbackPage = await context.newPage();
+  await feedbackPage.goto('chrome-extension://' + id + '/popup.html');
+  await expect(feedbackPage.getByTitle('View archived copy on server')).toBeVisible();
+  const replayOpened = context.waitForEvent('page');
+  await feedbackPage.getByTitle('View archived copy on server').click();
+  const replayTab = await replayOpened;
+  const currentRemoteId = (await entries()).find(e => e.url === url).remote_copies[serverId].snapshot_id;
+  // The canonical snapshot route redirects to the server's configured replay host/path.
+  await replayTab.waitForURL(u => u.pathname.replaceAll('-', '').includes(currentRemoteId.replaceAll('-', '')));
+  await expect(feedbackPage.locator('.archivebox-overlay__status')).not.toContainText('needs permission');
+  await feedbackPage.screenshot({ path: path.join(evidence, 'after-eye-popup.png') });
+  await replayTab.close();
+  await feedbackPage.close();
+  await options.screenshot({ path: path.join(evidence, 'submitted-list.png') });
+  console.log(JSON.stringify({ event: 'popup-feedback-verified', evidence }));
   const finalCrawls = () => fetch(server + '/api/v1/crawls/crawls', { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json()).then(items => items.filter(c => c.urls.split('\n').includes(url)));
   if (!oldInterface) await expect.poll(async () => (await finalCrawls()).every(c => c.status === 'sealed'), { timeout: 90000, intervals: [1000] }).toBe(true);
   const sealedCrawls = await finalCrawls();
