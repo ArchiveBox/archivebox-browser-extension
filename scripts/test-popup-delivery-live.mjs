@@ -32,9 +32,8 @@ const canary = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chr
 const executable = process.env.CHROME_FOR_TESTING_BIN || process.env.CHROME_BIN || (existsSync(canary) ? canary : chromium.executablePath());
 const extensionPath = path.join(profile, 'extension');
 await cp(path.resolve('.output/chrome-mv3'), extensionPath, { recursive: true });
-const loadByFlag = executable.endsWith('Google Chrome for Testing');
 await rm(path.join(profile, 'DevToolsActivePort'), { force: true });
-const chrome = spawn(executable, [`--user-data-dir=${profile}`, ...(loadByFlag ? [`--load-extension=${extensionPath}`, `--disable-extensions-except=${extensionPath}`] : []), '--remote-debugging-port=0', '--enable-unsafe-extension-debugging', ...(process.env.HEADLESS ? ['--headless=new'] : []), '--no-first-run', '--no-default-browser-check', ...(process.platform === 'linux' ? ['--no-sandbox'] : [])], { stdio: 'ignore' });
+const chrome = spawn(executable, [`--user-data-dir=${profile}`, '--remote-debugging-port=0', '--enable-unsafe-extension-debugging', ...(process.env.HEADLESS ? ['--headless=new'] : []), '--no-first-run', '--no-default-browser-check', ...(process.platform === 'linux' ? ['--no-sandbox'] : [])], { stdio: 'ignore' });
 let browser;
 let verified = false;
 const evidence = await mkdtemp(path.join(tmpdir(), 'archivebox-popup-evidence-'));
@@ -55,10 +54,7 @@ try {
   await expect.poll(async () => { port = await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8').then(s => s.split('\n')[0]).catch(() => ''); return port; }).not.toBe('');
   browser = await chromium.connectOverCDP('http://127.0.0.1:' + port);
   const cdp = await browser.newBrowserCDPSession();
-  let id;
-  if (loadByFlag) {
-    await expect.poll(async () => { const targets = await fetch('http://127.0.0.1:' + port + '/json/list').then(r => r.json()); const worker = targets.find(t => t.url.startsWith('chrome-extension://') && t.url.endsWith('/background.js')); id = worker ? new URL(worker.url).host : undefined; return id; }).toBeTruthy();
-  } else ({ id } = await cdp.send('Extensions.loadUnpacked', { path: extensionPath }));
+  const { id } = await cdp.send('Extensions.loadUnpacked', { path: extensionPath });
   const context = browser.contexts()[0];
   const extensions = await context.newPage();
   await extensions.goto(`chrome://extensions/?id=${id}`);

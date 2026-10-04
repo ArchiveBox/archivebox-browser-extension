@@ -375,21 +375,6 @@ function spawnBrowser(
   return spawn(executablePath, args, { stdio: 'ignore' });
 }
 
-async function waitForLoadedExtensionId(remoteDebuggingPort: number, timeoutMs = 15_000): Promise<string> {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    const targets = await waitForJson<DevToolsTarget[]>(`http://127.0.0.1:${remoteDebuggingPort}/json/list`);
-    const worker = targets.find((target) => (
-      (target.type === 'service_worker' || target.type === 'background_page')
-      && /^chrome-extension:\/\/[a-p]{32}\/background\.js/.test(target.url)
-    ));
-    const match = worker?.url.match(/^chrome-extension:\/\/([a-p]{32})\//);
-    if (match?.[1]) return match[1];
-    await sleep();
-  }
-  throw new Error('Timed out waiting for the extension service worker to register');
-}
-
 async function launchHarness(): Promise<BrowserHarness> {
   const runId = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const extensionPath = await prepareTestExtensionPath(path.join(testExtensionBasePath, runId));
@@ -399,39 +384,10 @@ async function launchHarness(): Promise<BrowserHarness> {
   await rm(userDataDir, { recursive: true, force: true });
   await mkdir(userDataDir, { recursive: true });
 
-  let activeUserDataDir = userDataDir;
-  let browserProcess = spawnBrowser(executablePath, activeUserDataDir, remoteDebuggingPort, []);
+  const browserProcess = spawnBrowser(executablePath, userDataDir, remoteDebuggingPort, []);
   await waitForJson(`http://127.0.0.1:${remoteDebuggingPort}/json/version`);
-  let cdp = await connectBrowserCdp(remoteDebuggingPort);
-
-  let extensionId: string;
-  try {
-    const loaded = await cdp.send<{ id: string }>('Extensions.loadUnpacked', { path: extensionPath });
-    extensionId = loaded.id;
-  } catch (error) {
-    if (!/method not available|not found|extensions/i.test(error instanceof Error ? error.message : String(error))) {
-      throw error;
-    }
-    // Chrome <149 does not expose the CDP Extensions domain over the websocket
-    // endpoint, so fall back to the --load-extension launch flag it still
-    // supports and discover the generated extension ID from its service worker.
-    // Relaunch into a fresh profile dir (rather than wiping and reusing the
-    // first one, which races with the just-killed browser releasing the dir).
-    cdp.close();
-    browserProcess.kill('SIGTERM');
-    await waitForProcessExit(browserProcess);
-    const firstUserDataDir = activeUserDataDir;
-    activeUserDataDir = `${userDataDir}-loadext`;
-    await mkdir(activeUserDataDir, { recursive: true });
-    browserProcess = spawnBrowser(executablePath, activeUserDataDir, remoteDebuggingPort, [
-      `--disable-extensions-except=${extensionPath}`,
-      `--load-extension=${extensionPath}`,
-    ]);
-    await waitForJson(`http://127.0.0.1:${remoteDebuggingPort}/json/version`);
-    extensionId = await waitForLoadedExtensionId(remoteDebuggingPort);
-    cdp = await connectBrowserCdp(remoteDebuggingPort);
-    await rm(firstUserDataDir, { recursive: true, force: true }).catch(() => undefined);
-  }
+  const cdp = await connectBrowserCdp(remoteDebuggingPort);
+  const { id: extensionId } = await cdp.send<{ id: string }>('Extensions.loadUnpacked', { path: extensionPath });
 
   const browser = await chromium.connectOverCDP(`http://127.0.0.1:${remoteDebuggingPort}`);
   const context = browser.contexts()[0];
@@ -448,7 +404,7 @@ async function launchHarness(): Promise<BrowserHarness> {
     process: browserProcess,
     remoteDebuggingPort,
     storagePage,
-    userDataDir: activeUserDataDir,
+    userDataDir,
   };
 }
 
