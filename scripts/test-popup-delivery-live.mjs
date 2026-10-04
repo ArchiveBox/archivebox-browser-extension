@@ -62,6 +62,10 @@ try {
   const context = browser.contexts()[0];
   const extensions = await context.newPage();
   await extensions.goto(`chrome://extensions/?id=${id}`);
+  // CDP can initially load an unpacked extension while Developer mode is off,
+  // but Canary disables it on reload. Perform the same UI setup a user needs
+  // before testing the extension, rather than changing profile security prefs.
+  await extensions.getByRole('switch', { name: 'Developer mode', exact: true }).check();
   await extensions.getByRole('button', { name: 'Reload', exact: true }).click();
   await expect.poll(async () => (await fetch('http://127.0.0.1:' + port + '/json/list').then(r => r.json())).some(t => t.url === `chrome-extension://${id}/background.js`)).toBe(true);
   await extensions.close();
@@ -89,6 +93,10 @@ try {
   await options.getByPlaceholder('... abcexamplekey1234 ...').blur();
   await expect.poll(() => options.evaluate(async () => ((r) => Boolean(r?.servers.find(s => s.id === r.active_server_id)?.token))((await chrome.storage.local.get('server_registry')).server_registry))).toBe(true);
   await options.bringToFront();
+  // Saving the server URL can open a native origin-permission sheet. Accept
+  // that prompt, then the all-permissions prompt below, in the browser UI.
+  // The sheet takes focus away from this window; that is not a server timeout.
+  // Keep real consent in this live test rather than editing permission prefs.
   const optionsWindowId = await options.evaluate(async () => { const tab = await chrome.tabs.getCurrent(); await chrome.windows.update(tab.windowId, { focused: true }); return tab.windowId; });
   await expect.poll(() => options.evaluate(async id => (await chrome.windows.get(id)).focused, optionsWindowId), { timeout: 60000 }).toBe(true);
   if (!await options.evaluate(async () => chrome.permissions.contains({ origins: ['<all_urls>'], permissions: ['tabs'] }))) await options.getByRole('button', { name: 'Request all permissions', exact: true }).click();
