@@ -1039,9 +1039,11 @@ function ArchiveBoxOverlay() {
           <button
             className="archivebox-overlay__crawl-button"
             title={currentDepthLabel}
+            aria-label={crawlButtonLabel}
             onClick={() => setCrawlMenuOpen((open) => !open)}
           >
-            {crawlButtonLabel}
+            <span className="archivebox-overlay__crawl-label">{crawlButtonLabel}</span>
+            <span className="archivebox-overlay__crawl-label--compact" aria-hidden="true">{t("Crawl")}{depth > 0 ? `: ${depth}` : ''}</span>
           </button>
           {crawlMenuOpen && (
             <div className="archivebox-overlay__crawl-menu" role="menu">
@@ -1085,7 +1087,7 @@ function ArchiveBoxOverlay() {
             👁
           </button>
         </div>
-        <div className="archivebox-overlay__state-row archivebox-overlay__state-row--status-only">
+        <div className="archivebox-overlay__state-row">
           <span className="archivebox-overlay__state-label">{t("Server")}</span>
           <span
             className={`archivebox-overlay__pill archivebox-overlay__pill--${remoteStatus}`}
@@ -1100,25 +1102,29 @@ function ArchiveBoxOverlay() {
               : remoteStatus === 'sync_failed'
                 ? t("Sync failed")
                 : t("Not yet archived")}</span>
-            {remoteStatus !== 'archived' ? (
+            {remoteStatus === 'archived'
+              && confirmedRemoteId === snapshot?.remote_copies?.[server_id]?.snapshot_id
+              && now - Date.parse(snapshot?.remote_copies?.[server_id]?.submitted_at || '') >= 120_000 && <button className="archivebox-overlay__resubmit" onClick={() => snapshot && sendToArchiveBox(snapshot.url, snapshot.tags, depth, snapshot.id, true, false)}>
+              {t("Re-submit")}
+            </button>}
+          </span>
+          {remoteStatus !== 'archived' ? (
+            <>
               <button className="archivebox-overlay__action" onClick={syncRemoteSnapshot} disabled={remoteStatus === 'checking'} title={t("Sync to ArchiveBox server")}>
                 ↑
               </button>
-            ) : (
-              <>
-                <button className="archivebox-overlay__action" onClick={removeRemoteSnapshot} title={t("Remove from ArchiveBox server")}>
-                  🗑
-                </button>
-                <button className="archivebox-overlay__action" onClick={viewRemoteSnapshot} title={t("View archived copy on server")}>
-                  👁
-                </button>
-                {confirmedRemoteId === snapshot?.remote_copies?.[server_id]?.snapshot_id
-                  && now - Date.parse(snapshot?.remote_copies?.[server_id]?.submitted_at || '') >= 120_000 && <button className="archivebox-overlay__resubmit" onClick={() => snapshot && sendToArchiveBox(snapshot.url, snapshot.tags, depth, snapshot.id, true, false)}>
-                  {t("Re-submit")}
-                </button>}
-              </>
-            )}
-          </span>
+              <span />
+            </>
+          ) : (
+            <>
+              <button className="archivebox-overlay__action" onClick={removeRemoteSnapshot} title={t("Remove from ArchiveBox server")}>
+                🗑
+              </button>
+              <button className="archivebox-overlay__action" onClick={viewRemoteSnapshot} title={t("View archived copy on server")}>
+                👁
+              </button>
+            </>
+          )}
         </div>
       </div>
 

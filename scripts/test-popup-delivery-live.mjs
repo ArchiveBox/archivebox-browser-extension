@@ -378,6 +378,40 @@ try {
       expect(reusedCrawlSnapshots.items.filter(item => item.crawl_id === reusedReceipt.crawl_id)).toHaveLength(0);
     }
   }
+  if (process.env.RESPONSIVE && lastPopup) {
+    // Touch popups use the browser's sheet width; desktop popups request 560px.
+    // Chromium's native action target cannot resize, so load the same extension
+    // page in a tab for device emulation, using its existing real saved state.
+    const responsivePage = await context.newPage();
+    const responsiveSession = await context.newCDPSession(responsivePage);
+    await responsivePage.goto(`chrome-extension://${id}/popup.html`);
+    await expect(responsivePage.locator('.archivebox-overlay__pill-text')).toContainText('Submitted');
+    for (const width of [320, 390, 560]) {
+      await responsiveSession.send('Emulation.setDeviceMetricsOverride', { width, height: 550, deviceScaleFactor: 2, mobile: true });
+      await responsiveSession.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+      const layout = await responsivePage.evaluate(() => new Promise(resolve => requestAnimationFrame(() => resolve({
+        width: innerWidth, content: document.documentElement.scrollWidth,
+        buttons: [...document.querySelectorAll('.archivebox-overlay__header > div > button')].map(el => ({
+          label: el.textContent, scroll: el.scrollWidth, client: el.clientWidth, ...el.getBoundingClientRect().toJSON()
+        })),
+        rows: [...document.querySelectorAll('.archivebox-overlay__state-row')].map(el => ({
+          badgeRight: el.querySelector('.archivebox-overlay__pill').getBoundingClientRect().right,
+          actions: [...el.querySelectorAll('.archivebox-overlay__action')].map(button => button.getBoundingClientRect().x)
+        }))
+      }))));
+      expect(layout.width).toBe(width);
+      expect(layout.content).toBeLessThanOrEqual(width);
+      for (const button of layout.buttons) {
+        expect(button.scroll, button.label).toBeLessThanOrEqual(button.client);
+        expect(button.right).toBeLessThanOrEqual(width);
+        expect(button.top).toBe(layout.buttons[0].top);
+      }
+      expect(layout.rows[0].actions).toEqual(layout.rows[1].actions);
+      for (const row of layout.rows) expect(row.badgeRight).toBeLessThan(row.actions[0]);
+      await responsivePage.screenshot({ path: path.join(evidence, `responsive-${width}.png`) });
+    }
+    await responsivePage.close();
+  }
   lastPopup?.close();
   const finalCrawls = () => fetch(server + '/api/v1/crawls/crawls', { headers: { Authorization: 'Bearer ' + key } }).then(r => r.json()).then(items => items.filter(c => c.urls.split('\n').includes(url)));
   if (!oldInterface) await expect.poll(async () => (await finalCrawls()).every(c => c.status === 'sealed'), { timeout: 90000, intervals: [1000] }).toBe(true);

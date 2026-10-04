@@ -12,7 +12,7 @@ body {
   width: 560px;
   min-height: 0;
   margin: 0;
-  background: #9f4e4e;
+  background: #f5f1ef;
   color-scheme: light;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -30,20 +30,27 @@ body {
 }
 
 .archivebox-overlay {
+  --popup-surface: #fffdfc;
+  --popup-border: #e0d7d4;
+  --popup-muted: #746663;
+  --popup-accent: #8b4242;
   position: relative;
   width: 100%;
   overflow: visible;
-  border: 1px solid #7f3838;
+  border: 1px solid var(--popup-border);
+  border-top: 3px solid var(--popup-accent);
   border-radius: 0;
-  background: #9f4e4e;
-  color: white;
+  background: #f5f1ef;
+  color: #302826;
+  font-size: 12px;
+  line-height: 1.4;
   padding: 10px;
   box-shadow: none;
   transition: opacity 240ms ease, transform 240ms ease;
 }
 
 .archivebox-overlay--leaving {
-    opacity: 0;
+  opacity: 0;
   transform: translateY(-6px) scale(0.98);
 }
 
@@ -53,9 +60,9 @@ body {
   gap: 9px;
   align-items: start;
   margin-bottom: 8px;
-  border: 0;
-  border-radius: 0;
-  background: #fffaf7;
+  border: 1px solid var(--popup-border);
+  border-radius: 8px;
+  background: var(--popup-surface);
   color: #241b1b;
   padding: 8px 68px 8px 8px;
 }
@@ -138,7 +145,7 @@ body {
 
 .archivebox-overlay__page code {
   margin-top: 3px;
-  color: #6f4b4b;
+  color: var(--popup-muted);
   background: transparent;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 11px;
@@ -150,7 +157,7 @@ body {
 .archivebox-overlay__page-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
 }
 
 .archivebox-overlay .archivebox-tag-chip,
@@ -160,8 +167,8 @@ body {
   height: 22px;
   min-height: 22px;
   font-family: inherit;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 550;
   line-height: 1;
 }
 
@@ -277,8 +284,10 @@ button.archivebox-overlay__tag-chip {
 
 .archivebox-overlay__header {
   display: grid;
+  /* Depth labels keep their intrinsic width; only the persona name truncates.
+     Fixed columns caused nonzero crawl depths to escape their button. */
   grid-template-columns: minmax(0, 1fr) max-content minmax(100px, 150px);
-  gap: 8px;
+  gap: 6px;
   align-items: center;
 }
 
@@ -293,11 +302,17 @@ button.archivebox-overlay__tag-chip {
   font: inherit;
 }
 
+.archivebox-overlay button:focus-visible,
+.archivebox-overlay input:focus-visible {
+  outline: 2px solid var(--popup-accent);
+  outline-offset: 2px;
+}
+
 .archivebox-overlay__settings,
 .archivebox-overlay__close {
   border: 0;
-  background: #c77979;
-  color: white;
+  background: transparent;
+  color: var(--popup-muted);
   border-radius: 6px;
   height: 32px;
   cursor: pointer;
@@ -305,13 +320,14 @@ button.archivebox-overlay__tag-chip {
 
 .archivebox-overlay__settings:hover,
 .archivebox-overlay__close:hover {
-  background: #d48a8a;
+  background: #eee5e2;
+  color: var(--popup-accent);
 }
 
 .archivebox-overlay__settings {
   position: absolute;
-  top: 8px;
-  right: 38px;
+  top: 17px;
+  right: 46px;
   width: 24px;
   height: 24px;
   z-index: 2;
@@ -324,8 +340,8 @@ button.archivebox-overlay__tag-chip {
 
 .archivebox-overlay__close {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 17px;
+  right: 18px;
   width: 24px;
   height: 24px;
   font-size: 22px;
@@ -338,14 +354,15 @@ button.archivebox-overlay__tag-chip {
 
 .archivebox-overlay input,
 .archivebox-overlay__crawl-button,
-.archivebox-overlay__capture-button {
+.archivebox-overlay__capture-button,
+.archivebox-overlay__persona > button {
   min-width: 0;
-  height: 32px;
-  border: 1px solid #d8bebe;
+  height: 30px;
+  border: 1px solid var(--popup-border);
   border-radius: 6px;
   padding: 0 10px;
   color: #1d1d1d;
-  background: #fff;
+  background: var(--popup-surface);
 }
 
 .archivebox-overlay__capture-button {
@@ -428,8 +445,8 @@ button.archivebox-overlay__tag-chip {
   color: #241b1b;
   padding: 0;
   box-shadow: none;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 550;
   outline: 0;
 }
 
@@ -467,6 +484,10 @@ button.archivebox-overlay__tag-chip {
   border-top: 5px solid currentColor;
 }
 
+.archivebox-overlay__crawl-label--compact {
+  display: none;
+}
+
 .archivebox-overlay__crawl-menu {
   position: absolute;
   top: calc(100% + 5px);
@@ -475,11 +496,11 @@ button.archivebox-overlay__tag-chip {
   display: grid;
   width: 250px;
   max-width: calc(100vw - 22px);
-  border: 1px solid #d8bebe;
-  border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22);
-  padding: 5px;
+  border: 1px solid var(--popup-border);
+  border-radius: 7px;
+  background: var(--popup-surface);
+  box-shadow: 0 6px 18px #30282620;
+  padding: 4px;
   color: #251919;
 }
 
@@ -487,7 +508,7 @@ button.archivebox-overlay__tag-chip {
   min-height: 28px;
   border: 0;
   border-radius: 4px;
-  background: #fff;
+  background: transparent;
   color: #251919;
   padding: 5px 8px;
   text-align: left;
@@ -497,7 +518,7 @@ button.archivebox-overlay__tag-chip {
 
 .archivebox-overlay__crawl-menu button:hover,
 .archivebox-overlay__crawl-menu button.selected {
-  background: #f0dfdf;
+  background: #f2eae7;
   color: #8b2a2a;
 }
 
@@ -530,7 +551,7 @@ button.archivebox-overlay__tag-chip {
 
 .archivebox-overlay__states {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 6px;
 }
 
@@ -539,21 +560,18 @@ button.archivebox-overlay__tag-chip {
   grid-template-columns: auto minmax(0, 1fr) 24px 24px;
   gap: 4px;
   align-items: center;
-  border: 1px solid #ead0d0;
-  border-radius: 5px;
-  background: #fffaf7;
+  border: 1px solid var(--popup-border);
+  border-radius: 7px;
+  background: var(--popup-surface);
   color: #2b1c1c;
-  padding: 5px;
-}
-
-.archivebox-overlay__state-row--status-only {
-  grid-template-columns: auto minmax(0, 1fr);
+  padding: 4px 6px;
 }
 
 .archivebox-overlay__state-label {
+  min-width: 34px;
   font-size: 11px;
   font-weight: 700;
-  color: #6b3a3a;
+  color: var(--popup-muted);
 }
 
 .archivebox-overlay__pill {
@@ -571,7 +589,8 @@ button.archivebox-overlay__tag-chip {
   background: #f5eeee;
   color: #5d3434;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .archivebox-overlay__pill-text {
@@ -583,12 +602,14 @@ button.archivebox-overlay__tag-chip {
 }
 .archivebox-overlay__pill > button {
   flex: 0 0 auto;
+  margin-left: 3px;
 }
 
 .archivebox-overlay__pill::before {
   content: "";
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
   margin-right: 5px;
   border-radius: 50%;
   background: currentColor;
@@ -636,17 +657,23 @@ button.archivebox-overlay__tag-chip {
   min-height: 22px;
   border: 0;
   border-radius: 4px;
-  background: #ead0d0;
-  color: #8b2a2a;
+  background: transparent;
+  color: var(--popup-accent);
   cursor: pointer;
   font-size: 12px;
   line-height: 1;
 }
 
+.archivebox-overlay__action:hover,
+.archivebox-overlay__resubmit:hover {
+  background: #e2eae3;
+}
+
 .archivebox-overlay__action:disabled {
   cursor: not-allowed;
-  background: #f2e4e4;
+  background: transparent;
   color: #8d6b6b;
+  opacity: 0.45;
 }
 
 .archivebox-overlay__status {
@@ -657,22 +684,22 @@ button.archivebox-overlay__tag-chip {
   justify-content: center;
   margin-top: 8px;
   border-radius: 5px;
-  background: #7f3838;
-  color: #fff;
+  background: transparent;
+  color: var(--popup-muted);
   padding: 4px 8px;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
 
 .archivebox-overlay__status a {
-  color: #fff;
+  color: var(--popup-accent);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .archivebox-overlay__status a:hover {
-  color: #f5d37a;
+  color: #602b2b;
 }
 
 .archivebox-overlay__status span {
@@ -686,33 +713,51 @@ button.archivebox-overlay__tag-chip {
   background: #ff4d4f;
 }
 
-@media (max-width: 620px) {
-  .archivebox-overlay__header {
-    grid-template-columns: minmax(0, 1fr) max-content minmax(100px, 150px);
-  }
-
-  .archivebox-overlay__states {
-    grid-template-columns: 1fr;
-  }
+.archivebox-overlay__status--error {
+  color: #9d2029;
 }
 
 @media (max-width: 480px) {
   .archivebox-overlay__header {
-    grid-template-columns: minmax(0, 1fr) max-content minmax(80px, 28%);
+    /* On narrow sheets reserve the capture/depth labels first, then give the
+       persona the remaining space; squeezing capture buttons hid their text. */
+    grid-template-columns: max-content max-content minmax(0, 1fr);
     gap: 4px;
+  }
+
+  .archivebox-overlay__header button {
+    font-size: 11px;
+    padding-inline: 5px;
+  }
+
+  .archivebox-overlay__capture-actions {
+    gap: 3px;
   }
 
   .archivebox-overlay__crawl-button {
     min-width: 64px;
   }
 
+  .archivebox-overlay__crawl-label {
+    display: none;
+  }
+
+  .archivebox-overlay__crawl-label--compact {
+    display: inline;
+  }
+
   .archivebox-overlay__capture-button {
     flex: 1 1 auto;
     max-width: 100%;
-    height: auto;
-    min-height: 32px;
+    min-height: 30px;
     white-space: nowrap;
     overflow: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .archivebox-overlay {
+    transition: none;
   }
 }
 
@@ -720,8 +765,8 @@ button.archivebox-overlay__tag-chip {
   padding: 3px 8px;
   border: 0;
   border-radius: 4px;
-  background: #ead0d0;
-  color: #8b2a2a;
+  background: #dcece2;
+  color: #17683a;
   cursor: pointer;
 }
 
@@ -739,14 +784,10 @@ button.archivebox-overlay__tag-chip {
   align-items: center;
   gap: 4px;
   width: 100%;
-  height: 32px;
   cursor: pointer;
   min-width: 0;
   max-width: 100%;
-  border: 1px solid #d8bebe;
-  border-radius: 5px;
   padding: 3px 6px;
-  background: #fffaf7;
   color: inherit;
 }
 
@@ -758,28 +799,30 @@ button.archivebox-overlay__tag-chip {
 .archivebox-overlay__persona-menu {
   position: absolute;
   z-index: 5;
-  top: 100%;
+  top: calc(100% + 5px);
   right: 0;
   width: 240px;
   max-width: calc(100vw - 22px);
   max-height: 180px;
   overflow: auto;
-  background: #fffaf7;
-  border: 1px solid #d8bebe;
-  border-radius: 5px;
-  box-shadow: 0 3px 9px #0003;
+  background: var(--popup-surface);
+  border: 1px solid var(--popup-border);
+  border-radius: 7px;
+  box-shadow: 0 6px 18px #30282620;
+  padding: 4px;
 }
 .archivebox-overlay__persona-menu button {
   display: block;
   width: 100%;
   border: 0;
-  padding: 7px 10px;
+  border-radius: 4px;
+  padding: 6px 8px;
   text-align: left;
   background: transparent;
   cursor: pointer;
 }
 .archivebox-overlay__persona-menu button:hover {
-  background: #f0dada;
+  background: #f2eae7;
 }
 
 .archivebox-overlay__persona-name {
