@@ -24,7 +24,7 @@ test('local retention defaults to 30 days and persists every choice', async ({},
     await page.goto(`chrome-extension://${id}/options.html`);
     await page.getByRole('button', { name: 'Configuration', exact: true }).click();
     await expect(page.getByRole('heading', {name:'Local archiving',exact:true})).toBeVisible();
-    await expect(page.getByText('WACZ files stay local until you delete them.', {exact:false})).toBeVisible();
+    await expect(page.getByText('Server Sync uploads each completed WACZ with all its capture records and outputs. Local WACZ files remain available until you delete them.', {exact:true})).toBeVisible();
     await expect(page.getByLabel('Save MHTML snapshots locally', {exact:true})).toHaveCount(0);
     const retention = page.getByLabel('After saving on server, remove legacy local copies after:');
     await expect(retention).toHaveValue('2592000000');
