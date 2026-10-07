@@ -1,22 +1,31 @@
 name: Resolve browser with ArchiveBox
-description: Let abx-dl and abxpkg install and cache the Chrome plugin runtime.
+description: Resolve and cache Chrome from the published ArchiveBox dependency declarations.
 runs:
   using: composite
   steps:
     - uses: astral-sh/setup-uv@v7
+      with:
+        cache-dependency-glob: .github/actions/setup-browser/action.yml
     - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
       with:
         path: ${{ runner.temp }}/extension-abx-lib
-        key: extension-abx-lib-${{ runner.os }}-${{ runner.arch }}-abx-dl-1.13.106
+        key: extension-abx-lib-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/actions/setup-browser/action.yml') }}
     - name: Resolve the Chrome plugin runtime
       shell: bash
       working-directory: ${{ runner.temp }}
       env:
         ABXPKG_LIB_DIR: ${{ runner.temp }}/extension-abx-lib
       run: |
-        uv run --no-project --with abx-dl==1.13.106 abx-dl install chrome
-        # env/bin is abxpkg's canonical projection of the resolved binary.
-        # Use the same runtime for all browser clients rather than letting
-        # Playwright install a second copy with different provider/version rules.
-        test -x "$ABXPKG_LIB_DIR/env/bin/chromium"
-        echo "CHROME_BIN=$ABXPKG_LIB_DIR/env/bin/chromium" >> "$GITHUB_ENV"
+        runtime=(uv run --no-project --with abx-dl==1.13.133)
+        schema="$("${runtime[@]}" python -c 'from importlib.resources import files; print(files("abx_plugins") / "plugins/chrome/config.json")')"
+        "${runtime[@]}" abxpkg env --install --json --deps-from="$schema:required_binaries" chromium > "$RUNNER_TEMP/chrome-env.json"
+        "${runtime[@]}" python - <<'PY' >> "$GITHUB_ENV"
+        import json
+        import os
+        from pathlib import Path
+
+        env = json.loads((Path(os.environ["RUNNER_TEMP"]) / "chrome-env.json").read_text())
+        binary = env["CHROME_BINARY"]
+        assert os.access(binary, os.X_OK), binary
+        print(f"CHROME_BIN={binary}")
+        PY
