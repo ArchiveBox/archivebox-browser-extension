@@ -7,14 +7,14 @@ runs:
     - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
       with:
         path: ${{ runner.temp }}/extension-abx-lib
-        key: extension-abx-lib-${{ runner.os }}-${{ runner.arch }}-abx-dl-1.13.106
+        key: extension-abx-lib-${{ runner.os }}-${{ runner.arch }}-abx-dl-1.13.133
     - name: Resolve the Chrome plugin runtime
       shell: bash
       working-directory: ${{ runner.temp }}
       env:
         ABXPKG_LIB_DIR: ${{ runner.temp }}/extension-abx-lib
       run: |
-        uv run --no-project --with abx-dl==1.13.106 abx-dl install chrome
+        uv run --no-project --with abx-dl==1.13.133 abx-dl install chrome
         # env/bin is abxpkg's canonical projection of the resolved binary.
         # Use the same runtime for all browser clients rather than letting
         # Playwright install a second copy with different provider/version rules.
