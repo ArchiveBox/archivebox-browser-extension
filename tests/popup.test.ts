@@ -969,8 +969,14 @@ async function waitForSavedEntry(
   timeoutMs = 5_000,
 ): Promise<Record<string, unknown>> {
   const started = Date.now();
+  let previous = '';
   while (Date.now() - started < timeoutMs) {
     const entry = (await savedEntries(harness)).find((item) => item.url === url);
+    const capture = entry?.wacz as {state:string;error?:string;hooks:{plugin:string;hook:string;status:string;summary?:string;logs:string[];started:number;ended?:number}[]} | undefined;
+    if (capture) {
+      const current = JSON.stringify({state:capture.state,error:capture.error,hooks:capture.hooks.map(hook=>({plugin:hook.plugin,hook:hook.hook,status:hook.status,summary:hook.summary,lastLog:hook.logs.at(-1),elapsed:hook.ended===undefined?undefined:hook.ended-hook.started}))});
+      if (current !== previous) { console.info(`Capture progress (${description}): ${current}`); previous=current; }
+    }
     if (entry && predicate(entry)) return entry;
     if ((entry?.wacz as {state?:string})?.state === 'failed') throw Error(`Capture failed: ${JSON.stringify(entry?.wacz)}`);
     await sleep();
