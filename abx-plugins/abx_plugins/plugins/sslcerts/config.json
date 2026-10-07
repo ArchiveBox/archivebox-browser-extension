@@ -1,0 +1,11 @@
+{
+  "title": "TLS certificates",
+  "description": "Preserve browser-observed TLS details and certificate chains.",
+  "category": "evidence",
+  "default_enabled": true,
+  "required_plugins": [
+    "chrome"
+  ],
+  "timeout": 300,
+  "shutdown_grace": 20
+}

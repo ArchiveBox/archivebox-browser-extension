@@ -1,0 +1,1 @@
+{"title":"Search archived text","description":"Index original responses, document exports, ZIP members, subtitles and saved OCR after acquisition finishes.","category":"metadata","default_enabled":true,"wait_for_background_cleanup":true,"timeout":120}

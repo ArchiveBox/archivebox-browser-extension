@@ -1,0 +1,1 @@
+{"title":"Feeds","description":"Preserve up to eight discovered RSS, Atom, or JSON Feed responses and read their entries offline.","category":"metadata","default_enabled":true,"required_plugins":["dom"],"timeout":45}

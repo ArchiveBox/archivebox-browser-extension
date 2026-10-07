@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["forum_dl", "forum_dl.extractors", "forum_dl.writers"]
+
+[project]
+name = "forum_dl"
+description = "Scrape posts and threads from forums, news aggregators, mail archives"
+readme = "README.md"
+authors = [
+    {name="Mikolaj Wielgus", email="wielgusmikolaj@gmail.com"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: System :: Archiving",
+]
+
+version = "0.3.0"
+license = {text = "MIT"}
+
+dependencies = ["pydantic<2", "beautifulsoup4", "lxml", "requests", "urllib3", "cchardet", "tenacity", "dateparser", "html2text", "warcio"]
+requires-python = ">=3.10.11"
+
+[project.urls]
+repository = "https://github.com/mikwielgus/forum-dl"
+
+[project.optional-dependencies]
+test = ["pytest"]
+#html2text = ["html2text"]
+#warcio = ["warcio"]
+
+[project.scripts]
+forum-dl = "forum_dl.__init__:main"

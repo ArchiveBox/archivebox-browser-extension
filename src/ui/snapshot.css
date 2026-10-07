@@ -1,0 +1,18 @@
+/* Host layout only. Cards, stacks and snapshot header use vendored ArchiveBox CSS. */
+.snapshot-detail{font-size:16px;color:#222;background:#ddd;display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.snapshot-detail>header{order:0}.snapshot-detail #main-frame-wrapper{order:1;min-height:70vh;background:white}.snapshot-detail .capture-diagnostics{order:2;padding:10px}
+.snapshot-detail .plugin-view{margin:0;min-width:0}.snapshot-detail .plugin-view>h2,.snapshot-detail .plugin-view>p,.snapshot-detail .plugin-view>.view-section{margin:16px}
+.plugin-view[hidden]{display:none!important}
+.lazy-pdf-preview{position:relative;width:100%;height:100%;min-height:320px}.lazy-pdf-preview>progress{position:absolute;top:0;left:0;width:100%;height:4px;border:0;z-index:1}.lazy-pdf-preview>.pdf-fullscreen{width:100%;height:100%;border:0;display:block}
+.plugin-embed,.plugin-embed>.plugin-view{height:100vh}
+.snapshot-detail .header-bottom{width:100%}
+.plugin-embed{margin:0;padding:0;background:white;color:#111}.plugin-embed .plugin-view{margin:0}.plugin-embed .plugin-view>h2{margin:12px}.plugin-embed .plugin-view>p{margin:12px}
+.plugin-embed .view-section{margin:0;padding:12px;border:0;border-radius:0}.plugin-embed .document-frame{margin:0;border:0;border-radius:0;min-height:100vh}.plugin-embed .replaywebpage-view{border:0}
+/* The host's form buttons are flex rows; ArchiveBox stack buttons use block flow. */
+.snapshot-detail .output-stack{display:block}
+.snapshot-detail #main-frame-wrapper>.plugin-view{flex:1;min-height:0;overflow:auto}.snapshot-detail #main-frame-wrapper>.plugin-view>.document-frame{height:100vh}
+.snapshot-detail.outputs-collapsed #main-frame-wrapper{height:calc(100svh - var(--snapshot-navbar-height,0px));min-height:0}
+.snapshot-detail.outputs-collapsed #main-frame-wrapper>.plugin-view>.document-frame{height:100%;min-height:0}
+.snapshot-detail .replaywebpage-view{height:100%}
+.snapshot-detail .replaywebpage-view>[aria-label="ReplayWeb.page archive viewer"]{height:100%!important;min-height:0!important}
+.plugin-files{width:100%;min-width:0}.plugin-files>p{padding:12px}

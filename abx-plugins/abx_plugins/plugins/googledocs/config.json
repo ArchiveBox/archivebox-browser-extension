@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Google Docs",
+  "description": "Export Google Docs, Sheets, Slides and Drawings using the existing Chrome session, without OAuth or API keys.",
+  "screenshot": "screenshot.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "chrome"
+  ],
+  "output_mimetypes": [
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.oasis.opendocument.text",
+    "application/vnd.oasis.opendocument.spreadsheet",
+    "application/vnd.oasis.opendocument.presentation",
+    "application/pdf",
+    "text/csv",
+    "text/tab-separated-values",
+    "text/plain",
+    "text/markdown",
+    "application/rtf",
+    "application/zip",
+    "application/epub+zip",
+    "image/svg+xml",
+    "image/png",
+    "image/jpeg",
+    "text/x-markdown"
+  ],
+  "properties": {
+    "GOOGLEDOCS_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "description": "Export supported Google Workspace documents",
+      "x-aliases": [
+        "SAVE_GOOGLEDOCS",
+        "USE_GOOGLEDOCS"
+      ]
+    },
+    "GOOGLEDOCS_TIMEOUT": {
+      "type": "integer",
+      "default": 120,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Total export timeout in seconds"
+    },
+    "GOOGLEDOCS_FORMATS": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "docx",
+          "xlsx",
+          "pptx",
+          "csv",
+          "tsv",
+          "pdf",
+          "odt",
+          "ods",
+          "odp",
+          "rtf",
+          "txt",
+          "md",
+          "zip",
+          "epub",
+          "svg",
+          "png",
+          "jpg"
+        ]
+      },
+      "default": [
+        "docx",
+        "xlsx",
+        "pptx",
+        "csv",
+        "pdf",
+        "svg"
+      ],
+      "description": "Export each requested format supported by the document type. CSV/TSV saves a separate file for every sheet; XLSX/ODS exports the whole workbook. ZIP exports HTML with assets."
+    }
+  },
+  "category": "text",
+  "display_order": 100,
+  "snapshot_output_group": "embedded_media",
+  "default_output_path": "exports.json",
+  "default_enabled": true,
+  "timeout": 140,
+  "shutdown_grace": 5
+}

@@ -1,0 +1,6 @@
+{
+  "title":"Cookie banner rejection", "description":"Reject optional cookies using a small explicit set of known consent controls.",
+  "category":"page_setup", "default_enabled":true, "required_plugins":["chrome"],
+  "timeout":180, "shutdown_grace":3,
+  "properties":{"COOKIE_BANNER_MAX_ACTIONS":{"type":"number","default":10,"minimum":0,"maximum":30}}
+}

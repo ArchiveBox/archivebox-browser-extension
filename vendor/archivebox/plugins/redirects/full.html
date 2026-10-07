@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Redirects</title>
+<style>
+:root{color-scheme:light;--ink:#202b36;--muted:#64748b;--line:#e2e6eb;--accent:#446b97;--paper:#fff;--bg:#f5f6f8;--http:#326da8;--js:#8b5aa7;--meta:#a56818}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,sans-serif}header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 20px;background:var(--paper);border-bottom:1px solid var(--line)}h1{font-size:17px;margin:0}nav{display:flex;gap:6px;margin-left:auto}nav a{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);border-radius:6px;background:white;color:var(--ink);padding:6px 9px;text-decoration:none}nav a:hover{background:#edf2f7}a{color:var(--accent);overflow-wrap:anywhere}main{max-width:1080px;margin:0 auto;padding:24px}.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:20px}.overview{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}.overview strong{font-size:17px}.badge{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:5px;background:#f1f5f9;padding:2px 7px;font-size:12px;color:#475569}.overview .badge:first-of-type{margin-left:auto}.chain{display:flex;align-items:center;gap:0;overflow-x:auto;padding:12px 0 20px}.node{flex:0 0 clamp(170px,24vw,240px);min-width:0;border:1px solid var(--line);border-top:4px solid #64748b;border-radius:9px;background:#fff;padding:14px}.node.start{border-top-color:#16805b}.node.end{border-top-color:#8b5aa7}.node-label{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}.node a{display:block;font:13px/1.45 ui-monospace,SFMono-Regular,monospace;overflow-wrap:anywhere}.edge{flex:0 0 clamp(110px,16vw,180px);min-width:0;align-self:stretch;display:flex;flex-direction:column;justify-content:center;gap:5px;text-align:center;padding:0 8px}.edge-line{position:relative;height:2px;background:#94a3b8;margin:4px -8px}.edge-line::after{content:'';position:absolute;right:0;top:-4px;border-left:8px solid #94a3b8;border-top:5px solid transparent;border-bottom:5px solid transparent}.cause{font-size:12px;font-weight:600}.cause.http{color:var(--http)}.cause.javascript{color:var(--js)}.cause.meta_refresh{color:var(--meta)}.detail{display:block;color:var(--muted);font:11px/1.4 ui-monospace,SFMono-Regular,monospace;overflow-wrap:anywhere}.origin{font-size:10px;color:var(--muted)}.muted{color:var(--muted)}@media(max-width:600px){header{padding:10px;gap:8px}nav .label{display:none}nav a{min-width:40px;min-height:40px}main{padding:12px}.panel{padding:14px}.overview .badge:first-of-type{margin-left:0}.chain{flex-direction:column;overflow:visible;padding:0}.node{flex:none;width:100%}.edge{flex:none;width:100%;min-height:88px;align-items:center;padding:8px}.edge-line{height:24px;width:2px;margin:2px}.edge-line::after{right:-4px;top:auto;bottom:0;border-top:8px solid #94a3b8;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:0}.detail{max-width:100%}}
+</style></head><body>
+<header><h1>{{ plugin_icon }} Redirect Chain</h1><nav aria-label="Output actions"><a id="files" title="View all files" aria-label="View all files">📁<span class="label">View all files</span></a><a id="download" download title="Download" aria-label="Download">⤓<span class="label">Download</span></a><a id="raw" title="View raw" aria-label="View raw">&lt;/&gt;<span class="label">View raw</span></a></nav></header>
+<main id="content"></main>
+<script>
+(() => {
+  const output=new URL('{{ output_path|escapejs }}',location.href);output.search='';output.hash='';const folder=new URL('./',output);
+  document.getElementById('files').href=folder.href+'?files=1';document.getElementById('download').href=output.href;document.getElementById('raw').href=output.href+'?preview=1&raw=1';
+  const el=(tag,text,cls)=>{const node=document.createElement(tag);if(text!=null)node.textContent=String(text);if(cls)node.className=cls;return node};
+  const safeLink=(value,label)=>{const a=el('a',label||value);try{const u=new URL(value);if(['https:','http:'].includes(u.protocol)){a.href=u.href;a.target='_blank';a.rel='noopener noreferrer'}}catch{}return a};
+  const parseJsonl=text=>text.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).flatMap(line=>{try{return[JSON.parse(line)]}catch{return[]}});
+  const typeLabel=type=>({http:['↳','HTTP'],javascript:['⚡','JavaScript / navigation'],meta_refresh:['⏱','Meta refresh']}[type]||['↪',String(type||'Redirect').replaceAll('_',' ')]);const content=document.getElementById('content');
+  const urlNode=(url,label,cls)=>{const node=el('div',null,'node '+(cls||''));node.append(el('span',label,'node-label'));if(url)node.append(safeLink(url,url));else node.append(el('span','Unknown URL','url muted'));return node};
+  fetch(output).then(r=>{if(!r.ok)throw new Error(r.status);return r.text()}).then(text=>{
+    const records=parseJsonl(text),initial=records.find(r=>r.type==='initial'),transitions=records.filter(r=>r.type!=='initial'&&r.to_url),start=initial?.to_url||transitions[0]?.from_url,final=transitions.at(-1)?.to_url||start;
+    const panel=el('section',null,'panel'),overview=el('div',null,'overview');overview.append(el('strong','🧭 Navigation path'),el('span',transitions.length+' hop'+(transitions.length===1?'':'s'),'badge'));if(transitions.some(r=>r.type==='http'))overview.append(el('span','HTTP','badge'));if(transitions.some(r=>r.type==='javascript'))overview.append(el('span','⚡ Script / navigation','badge'));if(transitions.some(r=>r.type==='meta_refresh'))overview.append(el('span','⏱ Meta','badge'));panel.append(overview);
+    const chain=el('div',null,'chain');
+    const edgeFor = (record, isInitial = false) => {
+      const info = isInitial ? ['↗', 'Initial navigation'] : typeLabel(record.type);
+      const edge = el('div', null, 'edge');
+      if (isInitial) edge.append(el('span', record.from_url || 'about:blank', 'origin'));
+      const cause = el('span', info[0] + ' ' + info[1], 'cause ' + (record.type || ''));
+      if (record.status) cause.append(el('span', ' ' + record.status, 'badge'));
+      edge.append(cause);
+      if (record.content) edge.append(el('span', record.content, 'detail'));
+      if (record.timestamp) edge.append(el('time', record.timestamp, 'detail'));
+      edge.append(el('span', null, 'edge-line'));
+      return edge;
+    };
+    chain.append(edgeFor(initial || {}, true), urlNode(start, transitions.length ? '1 · Initial page' : '1 · Final page', 'start'));
+    transitions.forEach((record, index) => {
+      let destination = record.to_url;
+      try { destination = new URL(record.to_url, record.from_url || start).href; } catch {}
+      chain.append(edgeFor(record), urlNode(destination, (index + 2) + (index === transitions.length - 1 ? ' · Final page' : ' · Redirected page'), index === transitions.length - 1 ? 'end' : ''));
+    });
+    panel.append(chain);content.append(panel);
+  }).catch(()=>content.append(el('div','Unable to read redirect data.','panel muted')));
+})();
+</script></body></html>

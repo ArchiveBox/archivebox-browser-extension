@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Defuddle",
+  "description": "Extract cleaned article HTML, text, and metadata from archived HTML using Defuddle.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": ["dom"],
+  "required_binaries": [
+    {
+      "name": "{DEFUDDLE_BINARY}",
+      "binproviders": "env,pnpm",
+      "min_version": null,
+      "overrides": {
+        "pnpm": {
+          "install_root": "{ABXPKG_LIB_DIR}/pnpm/packages/defuddle",
+          "install_args": [
+            "defuddle@0.14.0"
+          ],
+          "version": "0.14.0"
+        }
+      }
+    }
+  ],
+  "output_mimetypes": [
+    "text/html",
+    "text/plain",
+    "application/json"
+  ],
+  "properties": {
+    "DEFUDDLE_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_DEFUDDLE",
+        "USE_DEFUDDLE"
+      ],
+      "description": "Enable Defuddle text extraction"
+    },
+    "DEFUDDLE_BINARY": {
+      "type": "string",
+      "default": "defuddle",
+      "description": "Path to defuddle binary"
+    },
+    "DEFUDDLE_TIMEOUT": {
+      "type": "integer",
+      "default": 30,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for Defuddle in seconds"
+    },
+    "DEFUDDLE_ARGS": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "x-aliases": [
+        "DEFUDDLE_DEFAULT_ARGS"
+      ],
+      "description": "Default Defuddle arguments"
+    },
+    "DEFUDDLE_ARGS_EXTRA": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "x-aliases": [
+        "DEFUDDLE_EXTRA_ARGS"
+      ],
+      "description": "Extra arguments to append to Defuddle command"
+    }
+  },
+  "category": "text",
+  "display_order": 30,
+  "snapshot_output_group": "article_text",
+  "snapshot_output_order": 1
+}

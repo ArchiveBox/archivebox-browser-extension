@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SSL",
+  "description": "Utility plugin namespace reserved for SSL-related integration points and metadata.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [],
+  "required_binaries": [],
+  "output_mimetypes": [],
+  "properties": {},
+  "hidden": true,
+  "snapshot_output_group": "metadata"
+}

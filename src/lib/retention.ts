@@ -24,6 +24,7 @@ export async function cleanupExpiredSnapshots(): Promise<void> {
     const config = await getConfig();
     if (config.local_retention_ms === 'never') return;
     for (const candidate of await getSnapshots()) {
+      if (candidate.wacz) continue; // URL acceptance does not prove the WACZ is backed up.
       if (candidate.unassigned_remote_copy) continue;
       const ids = Object.keys(candidate.remote_copies || {});
       const servers = ids.map((id) => config.servers.find((server) => server.id === id));

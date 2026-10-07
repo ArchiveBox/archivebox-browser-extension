@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Parse DOM Outlinks",
+  "description": "Extract crawlable links from the rendered DOM and emit them as JSONL records.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "chrome"
+  ],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "application/x-ndjson"
+  ],
+  "properties": {
+    "PARSE_DOM_OUTLINKS_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_DOM_OUTLINKS",
+        "USE_PARSE_DOM_OUTLINKS"
+      ],
+      "description": "Enable DOM outlinks parsing from archived pages"
+    },
+    "PARSE_DOM_OUTLINKS_TIMEOUT": {
+      "type": "integer",
+      "default": 30,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for DOM outlinks parsing in seconds"
+    }
+  },
+  "category": "postprocessing",
+  "display_order": 10,
+  "snapshot_output_group": "metadata"
+}

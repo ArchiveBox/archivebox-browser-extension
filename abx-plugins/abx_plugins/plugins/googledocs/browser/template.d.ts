@@ -1,0 +1,1 @@
+export function initializeGoogleDocs(document:Document,manifest:unknown,options:{rawURL:string;url:(item:any)=>string;pdf:(item:any)=>Promise<string>;download:(item:any)=>Promise<void>}):Promise<void>;

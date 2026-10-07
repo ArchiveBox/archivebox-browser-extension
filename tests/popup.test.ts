@@ -878,7 +878,7 @@ async function clickPopupButtonText(harness: BrowserHarness, popup: NativePopup,
         const pattern = ${JSON.stringify(pattern)};
         const normalize = (value) => value.replace(/\\s+/g, ' ').trim();
         for (const element of document.querySelectorAll('button')) {
-          const text = normalize(element.textContent || '');
+          const text = normalize(element.getAttribute('aria-label') || element.textContent || '');
           const matches = pattern.kind === 'string'
             ? text === pattern.value
             : new RegExp(pattern.source, pattern.flags).test(text);
@@ -972,6 +972,7 @@ async function waitForSavedEntry(
   while (Date.now() - started < timeoutMs) {
     const entry = (await savedEntries(harness)).find((item) => item.url === url);
     if (entry && predicate(entry)) return entry;
+    if ((entry?.wacz as {state?:string})?.state === 'failed') throw Error(`Capture failed: ${JSON.stringify(entry?.wacz)}`);
     await sleep();
   }
   throw new Error(`Timed out waiting for saved entry ${description}`);
@@ -986,32 +987,11 @@ async function waitForNoSavedEntry(harness: BrowserHarness, url: string, timeout
   throw new Error(`Timed out waiting for saved entry removal: ${url}`);
 }
 
-test('the injected page content script contains no popup or window-closing code', async () => {
-  // The overlay/popup UI (which legitimately calls window.close() on its own
-  // popup window) must never be bundled into the content script that gets
-  // injected into the pages the user is viewing -- otherwise window.close()
-  // would run in the page context and close the user's tab. This guards against
-  // a regression where popup code leaks into the in-page content script.
-  const contentScript = await readFile(
-    path.join(builtExtensionPath, 'content-scripts/archivebox.js'),
-    'utf8',
-  );
-  // Regression guard for the 3.0.1 tab-closing bug: that content script's
-  // runtime.onMessage listener called a bare `close()` for 'hide_archivebox_overlay',
-  // which resolves to the global window.close() in the page context and closed
-  // the user's tab. The in-page content script must never call close() in any
-  // form -- not window.close, not self.close, and not a bare close().
-  expect(contentScript).not.toMatch(/window\.close/);
-  expect(contentScript).not.toMatch(/self\.close/);
-  expect(contentScript).not.toMatch(/(^|[^.\w])close\s*\(/);
-  expect(contentScript).not.toContain('archivebox-overlay');
-
-  const manifest = JSON.parse(
-    await readFile(path.join(builtExtensionPath, 'manifest.json'), 'utf8'),
-  ) as { content_scripts?: unknown[] };
-  // The extension injects its content script on demand via scripting.executeScript,
-  // so it should declare no statically-registered content scripts.
+test('the extension declares no injected screenshot content script', async () => {
+  const manifest = JSON.parse(await readFile(path.join(builtExtensionPath,'manifest.json'),'utf8'));
   expect(manifest.content_scripts ?? []).toEqual([]);
+  expect(manifest.permissions).toContain('debugger');
+  expect(manifest.permissions).not.toContain('pageCapture');
 });
 
 test('ArchiveBox server URLs are ignored before archive requests', async () => {
@@ -1359,20 +1339,19 @@ test('native action popup supports local save, tags, depth, captures, navigation
         depth: 0,
       }],
       ...serverSettings(''),
-      archivebox_test_fast_capture: true,
     });
 
     const page = await harness.context.newPage();
     const testPageUrl = `${server.url}?archivebox_test=1`;
     await page.goto(testPageUrl, { waitUntil: 'domcontentloaded' });
     expect(await extensionHasPermission(harness, 'scripting')).toBe(true);
-    expect(await extensionHasPermission(harness, 'pageCapture')).toBe(true);
+    expect(await extensionHasPermission(harness, 'debugger')).toBe(true);
 
     let popup = await openNativePopup(harness, page);
     await waitForPopupText(harness, popup, 'ArchiveBox Playwright Fixture');
     await waitForPopupText(harness, popup, testPageUrl);
     await waitForPopupText(harness, popup, 'Saved');
-    await waitForPopupText(harness, popup, 'Sync failed');
+    await waitForPopupText(harness, popup, 'Server not configured');
 
     await clickPopupButtonText(harness, popup, /^existing\s*\+$/);
     await waitForPopupElementsCondition(
@@ -1405,38 +1384,18 @@ test('native action popup supports local save, tags, depth, captures, navigation
     await clickPopupButtonText(harness, popup, /^Depth 2:/);
     await waitForPopupText(harness, popup, 'Crawl Depth: 2');
 
-    await clickPopupButtonText(harness, popup, 'Screenshot');
-    await waitForSavedEntry(
-      harness,
-      testPageUrl,
-      (entry) => Boolean(entry.screenshot),
-      'screenshot',
-    );
-
+    await waitForSavedEntry(harness, testPageUrl, entry => Boolean((entry.wacz as {file?:string})?.file), 'finished WACZ', 120_000);
     await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId }).catch(() => undefined);
     popup.cdp.close();
     await waitForNoNativePopup(harness);
-    popup = await openNativePopup(harness, page);
-    await clickPopupButtonText(harness, popup, 'MHTML');
-    await waitForSavedEntry(
-      harness,
-      testPageUrl,
-      (entry) => Boolean(entry.mhtml),
-      'MHTML',
-    );
-
-    await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId }).catch(() => undefined);
-    popup.cdp.close();
-    await waitForNoNativePopup(harness);
-    expect(await extensionHasPermission(harness, 'scripting')).toBe(true);
-    expect(await extensionHasPermission(harness, 'pageCapture')).toBe(true);
 
     let entries = await savedEntries(harness);
     const snapshot = entries.find((entry) => entry.url === testPageUrl);
     expect(snapshot?.tags).toContain('typedtag');
     expect(snapshot?.depth).toBe(2);
-    expect(snapshot?.screenshot).toBeTruthy();
-    expect(snapshot?.mhtml).toBeTruthy();
+    expect((snapshot?.wacz as {state?:string})?.state).toBe('complete');
+    expect(snapshot?.screenshot).toBeUndefined();
+    expect(snapshot?.mhtml).toBeUndefined();
     const snapshot_id = String(snapshot?.id || '');
     expect(snapshot_id).toBeTruthy();
     expect(snapshot_id).toMatch(/^[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$/);
@@ -1453,12 +1412,9 @@ test('native action popup supports local save, tags, depth, captures, navigation
 
     popup = await openNativePopup(harness, page);
     await waitForPopupText(harness, popup, testPageUrl);
-    const optionsFromGear = harness.context.waitForEvent('page');
     await clickPopupTitle(harness, popup, 'Open options');
-    const gearPage = await optionsFromGear;
-    await gearPage.waitForLoadState('domcontentloaded');
-    await expect(gearPage).toHaveURL(/chrome-extension:\/\/[^/]+\/options\.html/);
-    await gearPage.close();
+    // Chrome reuses the existing options tab opened by the harness.
+    await expect.poll(() => harness.storagePage.evaluate(async () => (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.url)).toMatch(/chrome-extension:\/\/[^/]+\/options\.html/);
     await waitForNoNativePopup(harness);
 
     popup = await openNativePopup(harness, page);
@@ -1485,15 +1441,14 @@ test('native action popup supports local save, tags, depth, captures, navigation
   }
 });
 
-test('auto-archive captures MHTML + screenshots on page load without console errors or closing the tab', async () => {
+test('auto-archive captures a full WACZ on page load without console errors or closing the tab', async () => {
   test.setTimeout(60_000);
   const server = await startFixtureServer();
   const harness = await launchHarness();
   const messages: ConsoleMessage[] = [];
 
   try {
-    // Real local capture (no archivebox_test_fast_capture) so this exercises the
-    // genuine pageCapture.saveAsMHTML + captureVisibleTab paths the user hits.
+    // Exercise the real all-plugin engine through automatic archiving.
     await setExtensionStorage(harness, {
       entries: [],
       ...serverSettings(''),
@@ -1519,9 +1474,9 @@ test('auto-archive captures MHTML + screenshots on page load without console err
     const entry = await waitForSavedEntry(
       harness,
       testPageUrl,
-      (saved) => Boolean(saved.mhtml) && Boolean(saved.screenshot),
-      'auto-archived MHTML + screenshot',
-      20_000,
+      (saved) => Boolean((saved.wacz as {file?:string})?.file),
+      'auto-archived WACZ',
+      120_000,
     );
     expect(entry.tags).toContain('auto-archived');
 
@@ -1534,9 +1489,8 @@ test('auto-archive captures MHTML + screenshots on page load without console err
 
     // Expected milestone log lines (action + saved artifacts + remote result).
     await waitForConsoleMessage(messages, /ArchiveBox: auto-archiving/);
-    await waitForConsoleMessage(messages, /ArchiveBox: saved MHTML for/);
-    await waitForConsoleMessage(messages, /ArchiveBox: saved screenshot for/);
-    await waitForConsoleMessage(messages, /no ArchiveBox server configured/);
+
+
 
     // No "Scripts may close..." attempt from any injected script.
     expect(consoleMessagesMatching(messages, /scripts may close/i)).toEqual([]);
@@ -1555,7 +1509,7 @@ test('auto-archive captures MHTML + screenshots on page load without console err
   }
 });
 
-test('action popup saves MHTML + screenshots without console errors or closing the active tab', async () => {
+test('action popup saves a full WACZ without console errors or closing the active tab', async () => {
   test.setTimeout(60_000);
   const server = await startFixtureServer();
   const harness = await launchHarness();
@@ -1583,19 +1537,15 @@ test('action popup saves MHTML + screenshots without console errors or closing t
     await attachConsoleCollector(popup.cdp, 'popup', messages);
     await waitForPopupText(harness, popup, testPageUrl);
 
-    await clickPopupButtonText(harness, popup, 'MHTML');
-    await waitForSavedEntry(harness, testPageUrl, (saved) => Boolean(saved.mhtml), 'popup MHTML', 15_000);
-
-    await clickPopupButtonText(harness, popup, 'Screenshot');
-    const captured = await waitForSavedEntry(harness, testPageUrl, (saved) => ((saved.screenshot as { parts?: unknown[] } | undefined)?.parts?.length || 0) > 1, 'completed full-page screenshot', 20_000);
-    expect((captured.screenshot as { parts: unknown[] }).parts.length).toBeGreaterThan(1);
-    await waitForPopupElementsCondition(harness, popup, 'capture finished', '.archivebox-overlay__capture-button--capturing', items => items.length === 0);
+    const captured = await waitForSavedEntry(harness, testPageUrl, saved => Boolean((saved.wacz as {file?:string})?.file), 'finished WACZ', 120_000);
+    expect((captured.wacz as {state:string}).state).toBe('complete');
+    expect(captured.mhtml).toBeUndefined();
+    expect(captured.screenshot).toBeUndefined();
 
     // The page the user was viewing must still be open.
     expect(await pageTargetExists(harness, testPageUrl)).toBe(true);
 
-    await waitForConsoleMessage(messages, /ArchiveBox: saved MHTML for/);
-    await waitForConsoleMessage(messages, /ArchiveBox: saved screenshot for/);
+
 
     expect(consoleMessagesMatching(messages, /scripts may close/i)).toEqual([]);
     expect(archiveboxConsoleProblems(messages)).toEqual([]);

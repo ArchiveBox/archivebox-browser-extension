@@ -1,0 +1,9 @@
+{
+  "title": "HTTP responses",
+  "description": "Browse shared response bytes already stored in the archive.",
+  "category": "view",
+  "default_enabled": true,
+  "required_plugins": [
+    "chrome"
+  ]
+}

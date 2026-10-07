@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LiteParse</title>
+<style>
+:root{color-scheme:light;--ink:#202b36;--muted:#64748b;--line:#e2e6eb}*{box-sizing:border-box}body{margin:0;background:#f5f6f8;color:var(--ink);font:14px/1.5 system-ui,-apple-system,sans-serif}header{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 16px;background:white;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2}h1{font-size:17px;margin:0;white-space:nowrap}#count{color:var(--muted);font-size:12px}nav{display:flex;gap:6px;margin-left:auto}nav a,button{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 9px;min-height:36px;border:1px solid var(--line);border-radius:6px;background:white;color:var(--ink);text-decoration:none;font:inherit;cursor:pointer}a{color:inherit}a:hover,button:hover{color:#9e1950}a:focus-visible,button:focus-visible,pre:focus-visible{outline:2px solid #9e1950;outline-offset:-2px}#search{flex:1 1 150px;min-width:100px;max-width:300px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:12px}#filters{display:flex;gap:4px}#filters button{min-height:28px;padding:3px 7px;font-size:12px}#filters button[aria-pressed=true]{background:#9e1950;color:white;border-color:#9e1950}main{padding:16px}.gallery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.tile{min-width:0;margin:0;background:white;border:1px solid var(--line);border-radius:8px;overflow:hidden}.tile[hidden],.empty[hidden]{display:none}.comparison{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.pane{min-width:0;display:flex;flex-direction:column}.pane+.pane{border-left:1px solid var(--line)}.pane-label{padding:5px 9px;color:var(--muted);font-size:10px;border-bottom:1px solid var(--line);text-transform:uppercase;letter-spacing:.05em}.original{display:flex;align-items:center;justify-content:center;height:260px;min-width:0;overflow:hidden;background:#eceff3;text-decoration:none}.original>a{display:flex;align-items:center;justify-content:center;width:100%;height:100%;text-decoration:none}.original iframe{display:block;width:100%;height:100%;border:0;background:white}.original img{display:block;width:100%;height:100%;object-fit:contain}.placeholder{padding:16px;color:var(--muted);text-align:center;font-size:12px;overflow-wrap:anywhere}.file-icon{display:block;font-size:40px;margin-bottom:8px}.text-preview{height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:10px;font:12px/1.5 ui-monospace,SFMono-Regular,monospace}.tile figcaption{padding:7px 9px;font-size:11px;color:var(--muted);border-top:1px solid var(--line)}.filename{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--ink)}.source{display:flex;align-items:center;flex-wrap:wrap;justify-content:space-between;gap:6px;margin-top:3px}.file-actions{display:flex;gap:10px;margin-left:auto}.file-actions a{text-decoration:none}.dimensions{font-size:10px;color:var(--muted)}.empty{color:var(--muted);padding:24px;text-align:center}@media(min-width:1800px){.gallery{grid-template-columns:repeat(4,minmax(0,1fr))}}@media(max-width:1100px){.gallery{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.gallery{grid-template-columns:minmax(0,1fr);gap:10px}nav .label{display:none}header{padding:8px;gap:5px}nav{gap:3px}nav a{min-width:36px;padding:5px}main{padding:10px}h1{font-size:14px}#search{max-width:none}#filters{order:3;flex-basis:100%}.text-preview{font-size:11px}}
+.source-url{display:flex;width:100%;min-height:0;padding:0;border:0;border-radius:0;background:none;text-align:left;justify-content:flex-start;gap:0;font:inherit;color:var(--muted)}.source-url .url-domain{color:#202124;font-weight:600}.url-start{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto}.url-end{flex:0 0 auto;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.source-url:hover{color:#202124}.source-url:focus-visible{outline:2px solid #9e1950;outline-offset:2px}
+</style></head><body>
+<header><h1>{{ plugin_icon }} LiteParse</h1><span id="count" aria-live="polite"></span><input id="search" type="search" placeholder="Search files…" aria-label="Search filenames or original URLs"><div id="filters" role="group" aria-label="File types"></div><nav aria-label="Output actions"><a id="files" title="View all files" aria-label="View all files">📁<span class="label">View all files</span></a><a id="download" download title="Download" aria-label="Download">⤓<span class="label">Download</span></a><a id="raw" title="View raw" aria-label="View raw">&lt;/&gt;<span class="label">View raw</span></a></nav></header>
+<main><div id="gallery" class="gallery"></div><p id="empty" class="empty" hidden>No matching files</p></main>
+<script>
+(() => {
+  const output=new URL('{{ output_path|escapejs }}',location.href);output.search='';output.hash='';
+  const rawPath='{{ output_path_raw|escapejs }}',plugin='{{ plugin|default:"liteparse"|escapejs }}';
+  const rawParts=rawPath.split('/').filter(Boolean),pluginIndex=rawParts.lastIndexOf(plugin),trailing=pluginIndex>=0?rawParts.length-pluginIndex-1:1;
+  let pluginRoot=new URL('./',output);for(let i=1;i<trailing;i++)pluginRoot=new URL('../',pluginRoot);
+  const snapshotRoot=new URL('../',pluginRoot);
+  const raw=url=>{const value=new URL(url);value.searchParams.set('raw','1');return value.href};
+  document.getElementById('files').href=pluginRoot.href+'?files=1';
+  document.getElementById('download').href=raw(output);
+  document.getElementById('raw').href=raw(output);
+  const knownFiles=[{% for file_path, file_info in result.output_files.items %}'{{ file_path|escapejs }}',{% endfor %}];
+  const sources=[{% for capture in snapshot.archiveresult_set.all %}{% if capture.plugin == 'responses' or capture.plugin == 'staticfile' or capture.plugin == 'papersdl' %}{% for path, info in capture.output_files.items %}{path:'{{ path|escapejs }}',plugin:'{{ capture.plugin|escapejs }}',root:{{ info.root_relative|yesno:'true,false' }},mime:'{{ info.mimetype|escapejs }}',size:'{{ info.size|escapejs }}'},{% endfor %}{% endif %}{% endfor %}];
+  const el=(tag,text,cls)=>{const node=document.createElement(tag);if(text!=null)node.textContent=String(text);if(cls)node.className=cls;return node};
+  const safeFile=(path,root)=>{if(typeof path!=='string'||!path||path.startsWith('/')||path.includes('\\')||/^[a-z]+:/i.test(path))return null;const parts=path.split('/').filter(part=>part&&part!=='.');if(!parts.length||parts.includes('..'))return null;return new URL(parts.map(encodeURIComponent).join('/'),root)};
+  const basename=path=>path.split('/').pop();
+  const normalize=path=>path.replace(/^\.\//,'').replace(new RegExp('^'+plugin+'/'),'');
+  const sanitized=name=>name.replace(/[^A-Za-z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,96)||'source';
+  const isImage=name=>/\.(png|jpe?g|gif|bmp|tiff?|webp)$/i.test(name);
+  const sourceFiles=new Map(),metadata=new Map();
+  let snapshotHost='';try{snapshotHost=new URL('{{ snapshot.url|escapejs }}').hostname}catch{}
+  for(const file of sources){
+    const path=file.path.replace(/^\.\//,'');
+    // responses/all contains the originals; MIME buckets are duplicate links.
+    if(file.plugin==='responses'&&!path.replace(/^responses\//,'').startsWith('all/'))continue;
+    const url=safeFile(file.root?path:file.plugin+'/'+path,snapshotRoot);
+    if(url)sourceFiles.set(url.href,{...file,name:basename(path),url});
+  }
+  function findSource(name,hint){
+    const candidates=[...sourceFiles.values()];
+    const named=hint?candidates.filter(file=>file.name===hint):[];
+    const matches=named.length?named:candidates.filter(file=>sanitized(file.name)===name);
+    // Never put an unrelated image beside OCR text when a name is ambiguous.
+    return matches.length===1?matches[0]:null;
+  }
+  const documents=new Map();
+  const primary=normalize(rawPath)||decodeURIComponent(basename(output.pathname));
+  for(const path of [...knownFiles,primary]){
+    const relative=normalize(path);if(!/\.(txt|json)$/i.test(relative))continue;
+    const url=safeFile(relative,pluginRoot);if(!url)continue;
+    const name=relative.replace(/\.(txt|json)$/i,'');
+    if(!documents.has(name))documents.set(name,{name,formats:{}});
+    documents.get(name).formats[relative.split('.').pop().toLowerCase()]=url;
+  }
+  const gallery=document.getElementById('gallery'),search=document.getElementById('search'),count=document.getElementById('count'),empty=document.getElementById('empty');
+  const entries=[];let selected='All';
+  const chips=['All','Images','Documents'].map(group=>{const button=el('button',group);button.type='button';button.addEventListener('click',()=>{selected=group;filter()});document.getElementById('filters').append(button);return {group,button}});
+  function filter(){
+    const query=search.value.trim().toLowerCase();let visible=0;
+    for(const entry of entries){entry.tile.hidden=!(entry.search.toLowerCase().includes(query)&&(selected==='All'||entry.group===selected));if(!entry.tile.hidden)visible++}
+    for(const {group,button} of chips){button.setAttribute('aria-pressed',String(group===selected));button.textContent=group+' '+entries.filter(entry=>(group==='All'||entry.group===group)&&entry.search.toLowerCase().includes(query)).length}
+    count.textContent=visible+' / '+entries.length;empty.hidden=visible>0;
+  }
+  const jsonText=text=>{const data=JSON.parse(text);if(Array.isArray(data.pages))return data.pages.map((page,index)=>{const rawItems=page.text_items||page.textItems,items=Array.isArray(rawItems)?rawItems.map(item=>item&&item.text).filter(Boolean):[];const body=page.text||items.join('\n');return body?'Page '+(page.page_number||page.page||index+1)+'\n'+body:''}).filter(Boolean).join('\n\n');return [data.text,data.content,data.body].find(value=>typeof value==='string')||JSON.stringify(data,null,2)};
+  const previews=new IntersectionObserver(items=>{for(const item of items){if(item.isIntersecting){previews.unobserve(item.target);load(item.target.entry)}}},{rootMargin:'200px'});
+  function showFilename(entry){
+    const path=entry.source?.path.replace(/^\.\//,'').replace(/^responses\//,'');
+    const source=entry.source?.plugin==='responses'?metadata.get(path)?.url:'';
+    entry.search=[entry.name,entry.document.name,source||''].join(' ');
+    const filename=el(source?'button':'span',source?null:entry.name,source?'filename source-url':'filename');
+    filename.title=source||entry.name;
+    if(source){
+      filename.type='button';filename.setAttribute('aria-label','Copy URL: '+source);
+      let pathname=source,domain='';try{const original=new URL(source);if(original.hostname!==snapshotHost)domain=original.host;pathname=original.pathname}catch{}
+      const split=pathname.lastIndexOf('/'),start=el('span',null,'url-start'),tail=pathname.slice(split+1);
+      if(domain)start.append(el('span',domain,'url-domain'));
+      start.append(document.createTextNode(pathname.slice(0,split+1)));filename.append(start,el('span',tail,'url-end'));
+      filename.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(source);filename.title='Copied! '+source;filename.setAttribute('aria-label','Copied URL: '+source);setTimeout(()=>{filename.title=source;filename.setAttribute('aria-label','Copy URL: '+source)},1500)}catch{filename.title='Could not copy URL: '+source}});
+    }
+    entry.filename.replaceWith(filename);entry.filename=filename;
+  }
+  function showSource(entry,hint){
+    const source=findSource(entry.document.name,hint);entry.original.replaceChildren();entry.originalLink.hidden=true;
+    entry.source=source;entry.name=hint||basename(entry.document.name);showFilename(entry);
+    if(!source){entry.original.append(el('span','Original file unavailable','placeholder'));filter();return}
+    entry.originalLink.hidden=false;entry.originalLink.href=raw(source.url);entry.originalLink.title='Open original: '+source.name;
+    const link=el('a');link.href=raw(source.url);link.setAttribute('aria-label',entry.originalLink.title);entry.original.append(link);
+    if(isImage(source.name)||source.mime.startsWith('image/')){
+      const img=el('img');img.alt=source.name;img.loading='lazy';img.decoding='async';
+      img.addEventListener('load',()=>{entry.dimensions.textContent=img.naturalWidth+' × '+img.naturalHeight});
+      img.addEventListener('error',()=>{link.replaceChildren(el('span','Image preview unavailable — open original','placeholder'))});
+      img.src=raw(source.url);link.append(img);
+    }else if(/\.pdf$/i.test(source.name)||source.mime==='application/pdf'){
+      const frame=el('iframe');frame.title='Original PDF: '+source.name;frame.loading='lazy';frame.src=raw(source.url)+'#toolbar=0&navpanes=0';entry.original.replaceChildren(frame);
+    }else{const placeholder=el('span',null,'placeholder');placeholder.append(el('span',/\.pdf$/i.test(source.name)?'📕':'📄','file-icon'),el('span','Open original document'));link.append(placeholder)}
+    filter();
+  }
+  async function load(entry){
+    try{
+      const format=entry.document.formats.txt?'txt':'json';
+      const response=await fetch(raw(entry.document.formats[format]));if(!response.ok)throw new Error('Unavailable');
+      let text=await response.text();
+      if(format==='json')text=jsonText(text);
+      else{const source=text.match(/^\uFEFF?<!-- source: ([^\r\n]+) -->\r?\n/);if(source){text=text.slice(source[0].length);showSource(entry,source[1])}}
+      entry.preview.textContent=text.trim()?text:'No text detected.';
+    }catch{entry.preview.textContent='Unable to read parsed text. Open the saved file below.'}
+  }
+  // Match the responses gallery: type, original bytes descending, then path.
+  const sourceRank=file=>{
+    const mime=file.mime.toLowerCase().split(';')[0],ext=file.path.split('.').pop().toLowerCase();
+    if(mime.startsWith('video/'))return 0;
+    if(mime.startsWith('audio/'))return 1;
+    if(mime==='application/pdf'||mime==='application/epub+zip'||/officedocument|opendocument|msword|ms-excel|ms-powerpoint/.test(mime)||['pdf','epub','doc','docx','ppt','pptx','xls','xlsx','odt','ods','odp','rtf','md','markdown'].includes(ext)||['text/markdown','text/x-markdown'].includes(mime))return 2;
+    if(mime.startsWith('image/')||isImage(file.path))return 3;
+    if(mime==='text/html'||mime==='application/xhtml+xml'||['html','htm'].includes(ext))return 4;
+    if(mime.startsWith('font/')||/font|woff/.test(mime)||['woff','woff2','ttf','otf','eot','ttc'].includes(ext))return 6;
+    if((mime.startsWith('application/')&&!/json|xml|javascript|ecmascript|sql|yaml|toml|graphql/.test(mime))||/zip|compressed|archive|wasm|executable/.test(mime))return 5;
+    return 7;
+  };
+  const ordered=[...documents.values()].map(document=>({document,source:findSource(document.name)||{path:document.name,mime:'',size:0}})).sort((a,b)=>sourceRank(a.source)-sourceRank(b.source)||(Number(b.source.size)||0)-(Number(a.source.size)||0)||a.source.path.localeCompare(b.source.path));
+  for(const {document} of ordered){
+    const tile=el('figure',null,'tile'),comparison=el('div',null,'comparison');
+    const left=el('div',null,'pane'),right=el('div',null,'pane'),original=el('div',null,'original'),preview=el('pre','Loading parsed text…','text-preview');
+    preview.tabIndex=0;preview.setAttribute('aria-label','Parsed text: '+basename(document.name));
+    left.append(el('span','Original','pane-label'),original);right.append(el('span','Parsed text','pane-label'),preview);comparison.append(left,right);
+    const caption=el('figcaption'),filename=el('span',basename(document.name),'filename'),meta=el('span',null,'source'),dimensions=el('span','','dimensions'),actions=el('span',null,'file-actions');
+    for(const [format,url] of Object.entries(document.formats)){const link=el('a',format.toUpperCase());link.href=raw(url);link.title='Open '+format.toUpperCase();actions.append(link)}
+    const originalLink=el('a','Original');originalLink.hidden=true;actions.prepend(originalLink);
+    const download=el('a','⤓');download.href=raw(document.formats.txt||document.formats.json);download.download=basename(document.name)+(document.formats.txt?'.txt':'.json');download.setAttribute('aria-label','Download parsed text: '+basename(document.name));download.title='Download parsed text';actions.append(download);
+    meta.append(dimensions,actions);caption.append(filename,meta);tile.append(comparison,caption);gallery.append(tile);
+    const entry={document,tile,original,originalLink,preview,filename,dimensions,name:basename(document.name),search:document.name,group:isImage(document.name)?'Images':'Documents'};
+    entries.push(entry);showSource(entry);preview.entry=entry;previews.observe(preview);
+  }
+  search.addEventListener('input',filter);filter();
+  const refreshNames=()=>{for(const entry of entries)showFilename(entry);filter()};
+  fetch(raw(new URL('responses/index.jsonl',snapshotRoot))).then(response=>{if(!response.ok)throw new Error('Response index unavailable');return response.text()}).then(text=>{for(const line of text.split('\n')){try{const item=JSON.parse(line);if(item.path&&typeof item.url==='string')metadata.set(item.path.replace(/^\.\//,'').replace(/^responses\//,''),item)}catch{}}refreshNames()}).catch(()=>{});
+  fetch(raw(new URL('chrome/navigation.json',snapshotRoot))).then(response=>response.ok?response.json():null).then(nav=>{if(nav?.finalUrl){snapshotHost=new URL(nav.finalUrl).hostname;refreshNames()}}).catch(()=>{});
+})();
+</script></body></html>

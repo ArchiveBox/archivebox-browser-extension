@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PDF",
+  "description": "Render the current page to PDF using the shared Chrome session.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "chrome"
+  ],
+  "required_binaries": [
+    {
+      "name": "{PDFTOPPM_BINARY}",
+      "binproviders": "env,apt,brew",
+      "min_version": null,
+      "overrides": {
+        "apt": {"install_args": ["poppler-utils"]},
+        "brew": {"install_args": ["poppler"]}
+      }
+    }
+  ],
+  "output_mimetypes": [
+    "application/pdf",
+    "image/png"
+  ],
+  "properties": {
+    "PDF_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_PDF",
+        "USE_PDF"
+      ],
+      "description": "Enable PDF generation"
+    },
+    "PDF_TIMEOUT": {
+      "type": "integer",
+      "default": 60,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for PDF generation in seconds"
+    },
+    "PDFTOPPM_BINARY": {
+      "type": "string",
+      "default": "pdftoppm",
+      "description": "Poppler PDF renderer used for the first-page card thumbnail."
+    },
+    "PDF_RESOLUTION": {
+      "type": "string",
+      "default": "1440,2000",
+      "pattern": "^\\d+,\\d+$",
+      "x-fallback": "RESOLUTION",
+      "description": "PDF page resolution (width,height)"
+    }
+  },
+  "category": "main",
+  "display_order": 30,
+  "snapshot_output_group": "raster",
+  "snapshot_output_order": 1
+}

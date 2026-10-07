@@ -1,0 +1,9 @@
+{
+  "title": "Redirects",
+  "description": "Read recorded HTTP redirect hops and destinations.",
+  "category": "view",
+  "default_enabled": true,
+  "required_plugins": [
+    "chrome"
+  ]
+}

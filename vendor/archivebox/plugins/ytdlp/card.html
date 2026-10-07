@@ -1,0 +1,32 @@
+<!-- One badge per archived media file, shared by stack and tray. -->
+<style>
+        .ytdlp-file-list { box-sizing: border-box; padding: 6px; overflow: auto; min-width: 0; width: 100%; }
+        .ytdlp-file-badge { display: flex; align-items: center; gap: 5px; box-sizing: border-box; width: 100%; min-width: 0; margin-bottom: 4px; padding: 5px 7px; border: 1px solid #ddd; border-radius: 5px; background: #f8f8fa; color: #333; font: 12px/1.4 system-ui, sans-serif; }
+        .ytdlp-file-icon { flex: 0 0 auto; }
+        .ytdlp-file-name { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+{% if media_files %}
+        <div class="ytdlp-file-list">
+            {% for file in media_files %}
+                <div class="ytdlp-file-badge" title="{{ file.name }}">
+                    <span class="ytdlp-file-icon" aria-hidden="true">{% if file.is_video %}🎬{% elif file.is_audio %}🎧{% else %}📄{% endif %}</span>
+                    <span class="ytdlp-file-name">{{ file.name }}</span>
+                </div>
+            {% endfor %}
+        </div>
+{% else %}
+    <div class="ytdlp-file-list">
+        <p style="margin:0 0 6px;color:#666;font:12px/1.4 system-ui,sans-serif">No video or audio identified. Saved files:</p>
+        {% for name in result.output_files %}
+            <div class="ytdlp-file-badge" title="{{ name }}">
+                <span class="ytdlp-file-icon" aria-hidden="true">📄</span>
+                <span class="ytdlp-file-name">{{ name }}</span>
+            </div>
+        {% empty %}
+            <div class="ytdlp-file-badge" title="{{ output_path_raw }}">
+                <span class="ytdlp-file-icon" aria-hidden="true">📄</span>
+                <span class="ytdlp-file-name">{{ output_path_raw }}</span>
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}

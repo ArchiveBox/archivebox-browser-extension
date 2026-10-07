@@ -1,0 +1,1 @@
+{"title":"Mercury article","description":"Run the actual Postlight Parser browser build on the saved DOM, with network fetching and multipage collection disabled.","category":"content","default_enabled":true,"required_plugins":["dom"]}

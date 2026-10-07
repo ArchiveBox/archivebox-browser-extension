@@ -4,5 +4,10 @@
     "jsx": "react-jsx",
     "strict": true,
     "noUncheckedIndexedAccess": true
-  }
+  },
+  "exclude": [
+    ".output",
+    "node_modules",
+    "vendor/browsertrix-behaviors/src"
+  ]
 }

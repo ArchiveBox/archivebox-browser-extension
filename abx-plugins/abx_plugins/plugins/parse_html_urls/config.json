@@ -1,0 +1,1 @@
+{"title":"HTML URLs","description":"Extract anchor targets and literal HTTP URLs from captured source HTML.","category":"links","default_enabled":true,"required_plugins":["dom"]}

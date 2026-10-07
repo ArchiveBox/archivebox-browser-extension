@@ -1,0 +1,1 @@
+{"title":"SingleFile","description":"Run the upstream SingleFile engine over the saved DOM and WACZ resources to generate self-contained HTML on demand.","category":"view","default_enabled":true,"required_plugins":["dom"]}

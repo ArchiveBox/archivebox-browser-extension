@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Static File",
+  "screenshot": "screenshot.json",
+  "description": "Download static-file responses when a URL resolves to a non-HTML asset (e.g. direct PDF, image, mp4, etc. URLs).",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "chrome"
+  ],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "application/pdf",
+    "application/epub+zip",
+    "image/",
+    "audio/",
+    "video/",
+    "application/json",
+    "application/xml",
+    "text/csv",
+    "text/xml",
+    "application/zip",
+    "application/octet-stream",
+    "application/x-"
+  ],
+  "properties": {
+    "STATICFILE_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_STATICFILE",
+        "USE_STATICFILE"
+      ],
+      "description": "Enable static file detection"
+    },
+    "STATICFILE_TIMEOUT": {
+      "type": "integer",
+      "default": 30,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for static file detection in seconds"
+    }
+  },
+  "category": "media",
+  "display_order": 10
+}

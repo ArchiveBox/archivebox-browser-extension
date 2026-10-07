@@ -1,0 +1,1 @@
+{"title":"SEO metadata","description":"Inspect metadata, headings, structured data, canonical links and archived social images.","category":"metadata","default_enabled":true,"required_plugins":["dom"],"timeout":30}

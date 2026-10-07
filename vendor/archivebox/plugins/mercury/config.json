@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Mercury",
+  "description": "Extract article HTML, text, and metadata using the Postlight Mercury parser.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": ["dom"],
+  "required_binaries": [
+    {
+      "name": "{MERCURY_BINARY}",
+      "binproviders": "env,npm",
+      "min_version": null,
+      "overrides": {
+        "env": {
+          "version": "2.2.3"
+        },
+        "npm": {
+          "install_root": "{ABXPKG_LIB_DIR}/npm/packages/mercury",
+          "install_args": [
+            "@postlight/parser@2.2.3"
+          ],
+          "postinstall_scripts": true,
+          "version": "2.2.3"
+        }
+      }
+    }
+  ],
+  "output_mimetypes": [
+    "text/html",
+    "text/plain",
+    "application/json"
+  ],
+  "properties": {
+    "MERCURY_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_MERCURY",
+        "USE_MERCURY"
+      ],
+      "description": "Enable Mercury text extraction"
+    },
+    "MERCURY_BINARY": {
+      "type": "string",
+      "default": "postlight-parser",
+      "description": "Path to Mercury/Postlight parser binary"
+    },
+    "MERCURY_TIMEOUT": {
+      "type": "integer",
+      "default": 30,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for Mercury in seconds"
+    },
+    "MERCURY_ARGS": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "x-aliases": [
+        "MERCURY_DEFAULT_ARGS"
+      ],
+      "description": "Default Mercury parser arguments"
+    },
+    "MERCURY_ARGS_EXTRA": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "x-aliases": [
+        "MERCURY_EXTRA_ARGS"
+      ],
+      "description": "Extra arguments to append to Mercury parser command"
+    }
+  },
+  "category": "text",
+  "display_order": 50,
+  "snapshot_output_group": "article_text",
+  "snapshot_output_order": 2
+}

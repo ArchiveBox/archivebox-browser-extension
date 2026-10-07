@@ -1,3 +1,4 @@
+import type { Capture } from '../capture/types';
 export type ArchiveDepth = 0 | 1 | 2 | 3 | 4;
 
 export type ServerConfiguration = {
@@ -47,6 +48,7 @@ export type Snapshot = {
   remote_copies?: Record<string, RemoteCopy>;
   persona_overrides?: Record<string, string>;
   unassigned_remote_copy?: RemoteCopy;
+  wacz?: Capture;
   screenshot?: SnapshotScreenshot;
   viewport_screenshot?: SnapshotScreenshot;
   mhtml?: SnapshotMhtml;
@@ -136,11 +138,6 @@ export type ConfigState = ServerRegistry & {
   exclude_urls: string;
   local_retention_ms: 60000 | 86400000 | 2592000000 | 7776000000 | 'never';
   enable_auto_archive: boolean;
-  save_screenshots_locally: boolean;
-  save_viewport_screenshots_locally: boolean;
-  save_mhtml_locally: boolean;
-  save_singlefile_locally: boolean;
-  singlefile_extension_id: string;
   tab_manager_plus_extension_id: string;
 };
 
@@ -189,78 +186,16 @@ export type OpenArchiveBoxSnapshotMessage = {
   url: string;
 };
 
-export type CaptureSnapshotScreenshotMessage = {
-  type: 'capture_snapshot_screenshot';
-  snapshot_id: string;
-  tabId: number;
-  windowId: number;
-  fullPage?: boolean;
-};
-
-export type CancelSnapshotScreenshotMessage = {
-  type: 'cancel_snapshot_screenshot';
-  snapshot_id: string;
-};
-
-export type ScreenshotCaptureProgressMessage = {
-  type: 'screenshot_capture_progress';
-  snapshot_id: string;
-  captured: number;
-  total: number;
-  phase: 'visible' | 'scrolling' | 'done' | 'canceled';
-};
-
-export type MeasureScreenshotPageMessage = {
-  type: 'measure_screenshot_page';
-  tabId: number;
-};
-
-export type CaptureSnapshotMhtmlMessage = {
-  type: 'capture_snapshot_mhtml';
-  snapshot_id: string;
-  tabId: number;
-  windowId: number;
-};
-
-export type CaptureSnapshotSingleFileMessage = {
-  type: 'capture_snapshot_singlefile';
-  snapshot_id: string;
-  tabId: number;
-  windowId: number;
-};
-
-export type ScreenshotGetMetricsMessage = {
-  type: 'screenshot_get_metrics';
-};
-
-export type ScreenshotScrollMessage = {
-  type: 'screenshot_scroll';
-  x: number;
-  y: number;
-};
-
-export type ScreenshotRestoreScrollMessage = {
-  type: 'screenshot_restore_scroll';
-  x: number;
-  y: number;
-};
-
 export type RuntimeMessage =
+  | { type: 'capture_snapshot_wacz'; snapshot_id: string; tabId: number }
+  | { type: 'open_snapshot_wacz'; snapshot_id: string }
+
   | ArchiveboxAddMessage
   | ArchiveboxRemoveMessage
   | TestServerMessage
   | TestApiKeyMessage
   | OpenOptionsMessage
-  | OpenArchiveBoxSnapshotMessage
-  | CaptureSnapshotScreenshotMessage
-  | CancelSnapshotScreenshotMessage
-  | ScreenshotCaptureProgressMessage
-  | MeasureScreenshotPageMessage
-  | CaptureSnapshotMhtmlMessage
-  | CaptureSnapshotSingleFileMessage
-  | ScreenshotGetMetricsMessage
-  | ScreenshotScrollMessage
-  | ScreenshotRestoreScrollMessage;
+  | OpenArchiveBoxSnapshotMessage;
 
 export type RuntimeResponse = {
   ok: boolean;
@@ -268,11 +203,6 @@ export type RuntimeResponse = {
   error?: string;
   errorMessage?: string;
   user_id?: string | number;
-  screenshotNeedsScroll?: boolean;
-  screenshotCanceled?: boolean;
-  screenshot?: SnapshotScreenshot;
-  mhtml?: SnapshotMhtml;
-  singlefile?: SnapshotSingleFile;
 };
 
 export type SubmissionReceipt = {

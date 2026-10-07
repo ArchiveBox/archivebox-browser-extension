@@ -1,3 +1,4 @@
+import { readArchive, deleteCapture } from '@/src/archive/storage';
 import { activeServer, requireServer } from '@/src/lib/server_registry';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -20,7 +21,7 @@ import {
 import { strToU8, zipSync } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { getServerPersonas, submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotTags, testApiKey, testServerUrl } from '@/src/lib/archivebox';
-import { defaultSingleFileExtensionId, defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture, supportsDirectBrowserImport } from '@/src/lib/browserCapabilities';
+import { defaultTabManagerPlusExtensionId, supportsDirectBrowserImport } from '@/src/lib/browserCapabilities';
 import { loadBookmarkSnapshots, loadHistorySnapshots, loadSafariExportSnapshots, type SafariImportSource } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
 import {
@@ -31,7 +32,6 @@ import {
   snapshotJsonContent,
 } from '@/src/lib/downloads';
 import {
-  assertLocalCaptureStorageAvailable,
   readSnapshotSingleFileBlob,
   readSnapshotMhtmlBlob,
   readSnapshotScreenshotBlob,
@@ -80,7 +80,6 @@ type EditablePersonaSettingKey = Exclude<PersonaSettingKey, 'geolocation'>;
 type SavedUrlSortKey = 'date' | 'url' | 'tags' | 'sync';
 type SortDirection = 'asc' | 'desc';
 type OptionTab = { id: Tab; label: string; Icon: LucideIcon };
-type LocalCaptureConfigKey = 'save_viewport_screenshots_locally' | 'save_screenshots_locally' | 'save_mhtml_locally' | 'save_singlefile_locally';
 type TabManagerPlusTab = {
   favIconUrl?: string;
   title?: string;
@@ -331,6 +330,7 @@ function SnapshotScreenshotThumb({ snapshot }: { snapshot: Snapshot }) {
 function SnapshotArchiveTitleLink({ snapshot }: { snapshot: Snapshot }) {
   const title = snapshot.title || t("Untitled page");
 
+  if (snapshot.wacz) return <a className="saved-url-mhtml-link" href={extensionUrl(`/studio.html?id=${encodeURIComponent(snapshot.id)}`)} target="_blank" rel="noopener noreferrer"><strong>{title}</strong><small> · {snapshot.wacz.state === 'complete' ? 'WACZ' : snapshot.wacz.state}</small></a>;
   const capture = snapshot.singlefile?.path
     ? { view: 'singlefile', label: t("SingleFile HTML"), path: snapshot.singlefile.path }
     : snapshot.mhtml?.path
@@ -783,7 +783,6 @@ function OptionsMain() {
   const [serverStatus, setServerStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [apiStatus, setApiStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [testStatus, setTestStatus] = useState<Status>({ kind: 'idle', text: '' });
-  const [localCaptureStatus, setLocalCaptureStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [permissionsStatus, setPermissionsStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [requestingPermissions, setRequestingPermissions] = useState(false);
   const [savedUrlStatus, setSavedUrlStatus] = useState<Status>({ kind: 'idle', text: '' });
@@ -1129,6 +1128,13 @@ function OptionsMain() {
     );
   }
 
+  async function exportSelectedWacz() {
+    setExportMenuOpen(false);
+    for (const snapshot of selectedSnapshotList) if (snapshot.wacz?.state === 'complete' && snapshot.wacz.file) {
+      downloadBlob(await readArchive(snapshot.id), `${snapshot.id}.wacz`);
+    }
+  }
+
   async function exportSelectedZip() {
     if (!selectedSnapshotList.length) return;
     setExportMenuOpen(false);
@@ -1361,74 +1367,6 @@ function OptionsMain() {
       if (!granted && !(await browser.permissions.contains({ permissions: ['tabs'], origins: ['<all_urls>'] }).catch(() => false))) return;
     }
     await saveConfig({ enable_auto_archive: enabled });
-  }
-
-  async function requestLocalCaptureStorage(): Promise<boolean> {
-    const storageManager = navigator.storage as StorageManager & {
-      persist?: () => Promise<boolean>;
-    };
-    const persistentStorage = await storageManager.persist?.().catch(() => false) || false;
-    try {
-      await assertLocalCaptureStorageAvailable();
-    } catch (error) {
-      setLocalCaptureStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
-      return false;
-    }
-
-    setLocalCaptureStatus({
-      kind: 'success',
-      text: persistentStorage
-          ? t("Local capture saving enabled with persistent storage")
-          : t("Local capture storage enabled"),
-    });
-    return true;
-  }
-
-  async function requestMhtmlCapturePermission(): Promise<boolean> {
-    if (!supportsMhtmlCapture) {
-      setLocalCaptureStatus({ kind: 'warning', text: mhtmlUnsupportedMessage() });
-      return false;
-    }
-
-    setLocalCaptureStatus({ kind: 'idle', text: t("MHTML capture needs permission to save the current tab as a browser-generated MHTML file.") });
-    const granted = await browser.permissions.request({ permissions: ['pageCapture'] }).catch(() => false);
-    if (!granted && !(await browser.permissions.contains({ permissions: ['pageCapture'] }).catch(() => false))) {
-      setLocalCaptureStatus({ kind: 'error', text: t("MHTML capture permission denied") });
-      return false;
-    }
-    return true;
-  }
-
-  async function requestScreenshotCapturePermission(): Promise<boolean> {
-    setLocalCaptureStatus({ kind: 'idle', text: t("Full-page screenshots need scripting permission only to scroll the current tab and restore it after capture.") });
-    const granted = await browser.permissions.request({ permissions: ['scripting'] }).catch(() => false);
-    if (!granted && !(await browser.permissions.contains({ permissions: ['scripting'] }).catch(() => false))) {
-      setLocalCaptureStatus({ kind: 'error', text: t("Screenshot capture permission denied") });
-      return false;
-    }
-    return true;
-  }
-
-  async function updateLocalCaptureSetting(key: LocalCaptureConfigKey, enabled: boolean) {
-    if (enabled && key === 'save_screenshots_locally' && !(await requestScreenshotCapturePermission())) return;
-    if (enabled && key === 'save_mhtml_locally' && !(await requestMhtmlCapturePermission())) return;
-
-    await saveConfig({ [key]: enabled });
-    if (enabled) {
-      if (!(await requestLocalCaptureStorage())) {
-        await saveConfig({ [key]: false });
-      }
-      return;
-    }
-
-    if (!enabled) {
-      if (key === 'save_screenshots_locally') {
-        await browser.permissions.remove({ permissions: ['scripting'] }).catch(() => false);
-      }
-      setLocalCaptureStatus({ kind: 'idle', text: '' });
-    } else {
-      setLocalCaptureStatus({ kind: 'success', text: t("Local capture storage enabled") });
-    }
   }
 
   async function loadCookies() {
@@ -1804,7 +1742,8 @@ function OptionsMain() {
     if (!confirm(t("Delete $1 snapshots?", selectedIds.size))) return;
 
     const snapshotsToDelete = snapshots.filter((snapshot) => selectedIds.has(snapshot.id));
-    await persistSnapshots((snapshots) => snapshots.filter((snapshot) => !selectedIds.has(snapshot.id)));
+    for (const snapshot of snapshotsToDelete) await deleteCapture(snapshot.id);
+    setSnapshotsState(await getSnapshots());
     setSelectedSnapshots(new Set());
 
     const serverErrors: string[] = [];
@@ -1916,6 +1855,7 @@ function OptionsMain() {
                   <div className="export-menu__items" role="menu">
                     <button onClick={() => exportSelectedSnapshots('csv')} role="menuitem">{t("CSV")}</button>
                     <button onClick={() => exportSelectedSnapshots('json')} role="menuitem">{t("JSON")}</button>
+                    <button onClick={exportSelectedWacz} role="menuitem">WACZ</button>
                     <button onClick={exportSelectedScreenshots} role="menuitem">{t("PNG")}</button>
                     <button onClick={exportSelectedMhtml} role="menuitem">{t("MHTML")}</button>
                     <button onClick={exportSelectedSingleFile} role="menuitem">{t("SingleFile HTML")}</button>
@@ -2118,100 +2058,13 @@ function OptionsMain() {
             <a href="https://demo.archivebox.io/api/v1/docs" target="_blank" rel="noopener noreferrer">{t("REST API docs")}</a>
           </div>
           <div className="section-divider" />
-          <SectionHeader title={t("Advanced Archiving")} detail={t("Control local captures and automatic archiving behavior.")} />
-          <div className="capture-options-row">
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={config.save_viewport_screenshots_locally}
-                onChange={(event) => updateLocalCaptureSetting('save_viewport_screenshots_locally', event.currentTarget.checked)}
-              />
-              {t("Save viewport screenshots locally")}
-            </label>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                aria-label={t("Upload viewport screenshots to server")}
-                checked={Boolean(server?.policy.upload_viewport_screenshots_to_server)}
-                onChange={(event) => saveServer({ policy: { upload_viewport_screenshots_to_server: event.currentTarget.checked } })}
-              />
-              {t("Upload to server")}
-            </label>
-          </div>
-          <div className="capture-options-row">
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={config.save_screenshots_locally}
-                onChange={(event) => updateLocalCaptureSetting('save_screenshots_locally', event.currentTarget.checked)}
-              />
-              {t("Save full-page screenshots locally")}
-            </label>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                aria-label={t("Upload full-page screenshots to server")}
-                checked={Boolean(server?.policy.upload_screenshots_to_server)}
-                onChange={(event) => saveServer({ policy: { upload_screenshots_to_server: event.currentTarget.checked } })}
-              />
-              {t("Upload to server")}
-            </label>
-          </div>
-          <div className="capture-options-row">
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={supportsMhtmlCapture && config.save_mhtml_locally}
-                disabled={!supportsMhtmlCapture}
-                onChange={(event) => updateLocalCaptureSetting('save_mhtml_locally', event.currentTarget.checked)}
-              />
-              {t("Save MHTML snapshots locally")}
-            </label>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                aria-label={t("Upload MHTML snapshots to server")}
-                checked={supportsMhtmlCapture && Boolean(server?.policy.upload_mhtml_to_server)}
-                disabled={!supportsMhtmlCapture}
-                onChange={(event) => saveServer({ policy: { upload_mhtml_to_server: event.currentTarget.checked } })}
-              />
-              {t("Upload to server")}
-            </label>
-          </div>
-          {!supportsMhtmlCapture ? (
-            <p className="help-text">{mhtmlUnsupportedMessage()}</p>
-          ) : null}
-          {/* Unfinished SingleFile and Tab Manager Plus controls.
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={config.save_singlefile_locally}
-              onChange={(event) => updateLocalCaptureSetting('save_singlefile_locally', event.currentTarget.checked)}
-            />
-            {t("Save SingleFile HTML snapshots locally")}
-          </label>
-          <Field label={t("SingleFile extension ID")}>
-            <input
-              value={config.singlefile_extension_id || ''}
-              onChange={(event) => saveConfig({ singlefile_extension_id: event.currentTarget.value.trim() })}
-              placeholder={defaultSingleFileExtensionId}
-            />
-          </Field>
-          <Field label={t("Tab Manager Plus extension ID")}>
-            <input
-              value={config.tab_manager_plus_extension_id || ''}
-              onChange={(event) => saveConfig({ tab_manager_plus_extension_id: event.currentTarget.value.trim() })}
-              placeholder={defaultTabManagerPlusExtensionId}
-            />
-          </Field>
-          <p className="help-text">{t("Leave the Tab Manager Plus extension ID blank to use the default Chrome Web Store ID.")}</p>
-          <p className="help-text">{t("$1 Leave the extension ID blank to use the default SingleFile Web Store / Add-ons ID.", singleFileCaptureUnavailableMessage())}</p>
-          */}
-          <StatusBadge status={localCaptureStatus} />
+          <SectionHeader title="Local archiving" detail="Every capture runs the full ArchiveBox JS/WASM plugin flow and saves one WACZ in this browser." />
+          <p className="help-text">Open a page and click the toolbar button to archive it. Finished archives are available from Saved URLs, including screenshots, SingleFile, document extraction, media, search, and replay. Full capture requires Chrome or Edge.</p>
+          <p className="help-text">WACZ files stay local until you delete them. Server Sync currently submits URLs; it does not back up the local WACZ.</p>
           <div className="section-divider" />
-          <Field label={t("After saving on server, remove local copies after:")}>
+          <Field label={t("After saving on server, remove legacy local copies after:")}>
             <select
-              aria-label={t("After saving on server, remove local copies after:")}
+              aria-label={t("After saving on server, remove legacy local copies after:")}
               value={config.local_retention_ms}
               onChange={(event) => saveConfig({ local_retention_ms: event.currentTarget.value === 'never'
                 ? 'never' : Number(event.currentTarget.value) as ConfigState['local_retention_ms'] })}

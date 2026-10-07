@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "gallery-dl",
+  "description": "Download image and media galleries along with metadata sidecars from supported sites.",
+  "screenshot": "screenshot.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [],
+  "required_binaries": [
+    {
+      "name": "{GALLERYDL_BINARY}",
+      "binproviders": "env,uv,apt,brew",
+      "min_version": null,
+      "overrides": {
+        "uv": {
+          "postinstall_scripts": true
+        }
+      }
+    }
+  ],
+  "output_mimetypes": [
+    "image/",
+    "video/",
+    "application/json",
+    "text/plain",
+    "application/zip"
+  ],
+  "properties": {
+    "GALLERYDL_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_GALLERYDL",
+        "USE_GALLERYDL"
+      ],
+      "description": "Enable gallery downloading with gallery-dl"
+    },
+    "GALLERYDL_BINARY": {
+      "type": "string",
+      "default": "gallery-dl",
+      "description": "Path to gallery-dl binary"
+    },
+    "GALLERYDL_TIMEOUT": {
+      "type": "integer",
+      "default": 120,
+      "minimum": 10,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for gallery downloads in seconds"
+    },
+    "GALLERYDL_COOKIES_FILE": {
+      "type": "string",
+      "default": "",
+      "x-fallback": "COOKIES_FILE",
+      "description": "Path to cookies file"
+    },
+    "GALLERYDL_CHECK_SSL_VALIDITY": {
+      "type": "boolean",
+      "default": true,
+      "x-fallback": "CHECK_SSL_VALIDITY",
+      "description": "Whether to verify SSL certificates"
+    },
+    "GALLERYDL_ARGS": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "--http-timeout=5",
+        "--retries=0",
+        "--write-metadata",
+        "--write-info-json"
+      ],
+      "x-aliases": [
+        "GALLERYDL_DEFAULT_ARGS"
+      ],
+      "description": "Default gallery-dl arguments"
+    },
+    "GALLERYDL_ARGS_EXTRA": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "x-aliases": [
+        "GALLERYDL_EXTRA_ARGS"
+      ],
+      "description": "Extra arguments to append to gallery-dl command"
+    }
+  },
+  "category": "media",
+  "display_order": 50,
+  "snapshot_output_group": "embedded_media",
+  "snapshot_display_name": "Gallery-DL"
+}

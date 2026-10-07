@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Directory</title>
+<style>
+      :root { color-scheme: light; --line: #dfe4eb; --text: #253247; --muted: #667085; --accent: #245dc1; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; min-height: 100%; background: white; color: var(--text); font: 13px/1.4 system-ui, sans-serif; }
+      main { width: 100%; }
+      a { color: inherit; text-decoration: none; }
+      .directory-toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+      .toolbar-link, .entry-download { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 30px; padding: 4px 9px; border: 1px solid var(--line); border-radius: 4px; background: white; }
+      .toolbar-link:hover, .entry-download:hover { background: #f0f5ff; }
+      .directory-header { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: #f8fafc; }
+      .directory-title { margin: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+      .directory-meta { margin-left: auto; color: var(--muted); white-space: nowrap; }
+      #filter-files { min-width: 0; width: 180px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 4px; font: inherit; }
+      .directory-list { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th { height: 30px; padding: 0; text-align: left; background: #f8fafc; border-bottom: 1px solid var(--line); }
+      th:first-child button { padding-left: 72px; }
+      th button { width: 100%; height: 30px; padding: 0 8px; border: 0; background: none; color: var(--muted); text-align: left; font: inherit; cursor: pointer; }
+      th[aria-sort="ascending"] button::after { content: " ↑"; }
+      th[aria-sort="descending"] button::after { content: " ↓"; }
+      .size-column { width: 90px; }
+      .type-column { width: 220px; }
+      .download-column { width: 50px; }
+      td { padding: 0; }
+      .entry-size, .entry-type { padding: 0 8px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .entry-size { font-variant-numeric: tabular-nums; }
+      .directory-entry { height: 50px; border-bottom: 1px solid var(--line); }
+      .directory-entry[hidden] { display: none; }
+      .directory-entry:hover { background: #f8fafc; }
+      .directory-link { display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: center; gap: 12px; min-width: 0; height: 49px; padding: 6px 12px; }
+      a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+      .entry-icon, .entry-preview { width: 48px; height: 36px; margin: 0; overflow: hidden; border-radius: 3px; }
+      .entry-icon { display: grid; place-items: center; font-size: 20px; }
+      .entry-preview { border: 1px solid var(--line); background: white; }
+      img.entry-preview { object-fit: contain; }
+      pre.entry-preview { padding: 3px; white-space: pre-wrap; overflow-wrap: anywhere; font: 7px/1.2 ui-monospace, monospace; color: var(--muted); }
+      .entry-label { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+      .entry-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+      .entry-kind { color: var(--muted); font-size: 11px; }
+      .entry-download { flex-shrink: 0; color: var(--accent); }
+      .empty-state { padding: 24px; text-align: center; color: var(--muted); }
+      .archivebox-zip-spinner { display: none; width: 12px; height: 12px; border: 2px solid var(--accent); border-right-color: transparent; border-radius: 50%; animation: archivebox-zip-spin .75s linear infinite; }
+      .archivebox-zip-button.is-loading { pointer-events: none; opacity: .7; }
+      .archivebox-zip-button.is-loading .archivebox-zip-spinner { display: inline-block; }
+      @keyframes archivebox-zip-spin { to { transform: rotate(360deg); } }
+      @media (max-width: 640px) { .size-column { width: 65px; } .type-column { width: 100px; } .download-column { width: 40px; } #filter-files { width: 130px; } }
+    </style>
+</head><body>
+<main>
+  <nav class="directory-toolbar" aria-label="Directory navigation"></nav>
+  <section>
+    <header class="directory-header">
+          <h1 class="directory-title"></h1>
+          <div class="directory-meta" id="file-count" aria-live="polite">
+            Items: <span id="visible-file-count"></span>
+          </div>
+          <input id="filter-files" type="search" aria-label="Filter files" placeholder="Filter files">
+        </header>
+    <table class="directory-list">
+            <colgroup><col><col class="size-column"><col class="type-column"><col class="download-column"></colgroup>
+            <thead><tr>
+              <th scope="col" aria-sort="ascending"><button type="button" data-sort="name" aria-label="Name">Name</button></th>
+              <th scope="col" aria-sort="none"><button type="button" data-sort="size" aria-label="Size">Size</button></th>
+              <th scope="col" aria-sort="none"><button type="button" data-sort="type" aria-label="Type">Type</button></th>
+              <th scope="col" aria-label="Download"></th>
+            </tr></thead>
+            <tbody></tbody></table>
+    <div class="empty-state" hidden>This directory is empty.</div>
+    <div class="directory-error" role="alert" hidden></div>
+  </section>
+</main>
+</body></html>

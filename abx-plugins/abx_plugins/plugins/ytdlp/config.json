@@ -1,0 +1,46 @@
+{
+  "title": "yt-dlp",
+  "description": "Run upstream yt-dlp in bundled CPython WebAssembly. Archive extractor HTTP responses and all manual and automatic subtitle languages in their preferred original format.",
+  "category": "supplement",
+  "default_enabled": true,
+  "required_plugins": [
+    "chrome"
+  ],
+  "timeout": 240,
+  "shutdown_grace": 5,
+  "properties": {
+    "YTDLP_FORMAT": {
+      "type": "string",
+      "default": "bv*+ba/b",
+      "description": "Upstream yt-dlp format selector. Defaults to best video plus audio, falling back to a combined original."
+    },
+    "YTDLP_FETCH_MEDIA": {
+      "type": "boolean",
+      "default": true,
+      "description": "Fetch upstream-selected video/audio originals and HLS/DASH dependencies. Separate tracks merge without re-encoding when opened or downloaded; DRM is unsupported."
+    },
+    "YTDLP_MAX_MB": {
+      "type": "integer",
+      "default": 256,
+      "minimum": 1,
+      "maximum": 4096
+    },
+    "YTDLP_MAX_REQUESTS": {
+      "type": "integer",
+      "default": 1000,
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "YTDLP_PLAYLIST_LIMIT": {
+      "type": "integer",
+      "default": 20,
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "YTDLP_ALL_SUBTITLE_FORMATS": {
+      "type": "boolean",
+      "default": false,
+      "description": "Fetch every original representation per language rather than upstream best (can multiply requests sevenfold)."
+    }
+  }
+}

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SSL Certificates</title>
+<style>
+:root{color-scheme:light;--ink:#202b36;--muted:#64748b;--line:#e2e6eb;--accent:#446b97;--paper:#fff;--bg:#f5f6f8;--green:#16805b;--amber:#a45d08;--blue:#326da8}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,sans-serif}header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 20px;background:var(--paper);border-bottom:1px solid var(--line)}h1{font-size:17px;margin:0}h2{font-size:15px;margin:0 0 12px}h3{font-size:14px;margin:0}nav,.actions{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}nav a,.button,button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);border-radius:6px;background:white;color:var(--ink);padding:6px 9px;text-decoration:none;font:inherit;cursor:pointer}nav a:hover,.button:hover,button:hover{background:#edf2f7}a{color:var(--accent);overflow-wrap:anywhere}main{max-width:1080px;margin:0 auto;padding:24px}.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:20px;margin-bottom:16px}.badges{display:flex;gap:6px;flex-wrap:wrap}.badge{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:5px;background:#f1f5f9;padding:2px 7px;font-size:12px;color:#475569}.muted{color:var(--muted)}.mono,code{font:12px/1.5 ui-monospace,SFMono-Regular,monospace;overflow-wrap:anywhere}.request{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;font-size:12px}.request-url{min-width:0;font-weight:600;overflow-wrap:anywhere}.session{padding:3px 8px;border-radius:8px;background:#edf8f3;border:1px solid #c8e8da;color:#176b50}.chain{margin:0 0 20px}.cert-tree{list-style:none;margin:0;padding:0}.cert-tree .cert-tree{margin-left:20px;padding-left:20px;padding-top:16px;border-left:1px solid #cbd5e1}.cert-tree .cert-tree>li{position:relative}.cert-tree .cert-tree>li::before{content:"";position:absolute;left:-20px;top:40px;width:20px;border-top:1px solid #cbd5e1}.cert-tree .cert{margin-bottom:0}.cert{position:relative;border-left:5px solid var(--blue)}.cert.leaf{border-left-color:var(--green)}.cert.intermediate{border-left-color:var(--amber)}.cert.root{border-left-color:#7c5caf}.cert-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:14px}.cert-icon{font-size:24px;line-height:1}.cert-title{min-width:0;flex:1}.cert-title strong{display:block;font-size:16px;overflow-wrap:anywhere}.cert dl{display:grid;grid-template-columns:120px minmax(0,1fr);gap:7px 14px;margin:0}.cert dt{color:var(--muted)}.cert dd{margin:0;min-width:0;overflow-wrap:anywhere}.hash-row{display:flex;align-items:center;gap:7px;min-width:0}.hash-row code{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.copy{padding:2px 6px;font-size:11px;flex:none}.sans{display:flex;gap:5px;flex-wrap:wrap;margin-top:12px}.empty{padding:40px;text-align:center;color:var(--muted)}@media(max-width:620px){header{padding:10px;gap:8px}nav .label{display:none}main{padding:12px}.panel{padding:14px}.cert-tree .cert-tree{margin-left:6px;padding-left:10px}.cert-tree .cert-tree>li::before{left:-10px;width:10px}.cert dl{grid-template-columns:minmax(0,1fr)}.cert dd{margin-bottom:5px}.cert-head{flex-wrap:wrap}.actions{width:100%;margin-left:34px}}
+@media(max-width:600px){nav a{min-width:40px;min-height:40px}header{flex-wrap:wrap}nav{flex-shrink:0}main{min-width:0}}
+</style></head><body>
+<header><h1>{{ plugin_icon }} SSL Certificates</h1><nav aria-label="Output actions"><a id="files" title="View all files" aria-label="View all files">📁<span class="label">View all files</span></a><a id="download" download title="Download" aria-label="Download">⤓<span class="label">Download</span></a><a id="raw" title="View raw" aria-label="View raw">&lt;/&gt;<span class="label">View raw</span></a></nav></header>
+<main id="content"></main>
+<script>
+(() => {
+  const output = new URL('{{ output_path|escapejs }}', location.href); output.search=''; output.hash='';
+  const folder = new URL('./', output), snapshotRoot = new URL('../', folder);
+  document.getElementById('files').href = folder.href + '?files=1';
+  document.getElementById('download').href = output.href;
+  document.getElementById('raw').href = output.href + '?preview=1&raw=1';
+  const el=(tag,text,cls)=>{const node=document.createElement(tag);if(text!=null)node.textContent=String(text);if(cls)node.className=cls;return node};
+  const safeLink=(value,label)=>{const a=el('a',label||value);try{const u=new URL(value);if(['https:','http:'].includes(u.protocol)){a.href=u.href;a.target='_blank';a.rel='noopener noreferrer'}}catch{}return a};
+  const fmtDate=value=>{const n=Number(value);const date=new Date(Number.isFinite(n)&&n<1e12?n*1000:value);return Number.isNaN(date.valueOf())?String(value||'—'):date.toLocaleString()};
+  const parseJsonl=text=>text.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).flatMap(line=>{try{return[JSON.parse(line)]}catch{return[]}});
+  const pathLink=value=>{if(!value||typeof value!=='string'||value.includes('..')||/^[a-z]+:/i.test(value))return null;const clean=value.replace(/^\/+/, '');return clean.startsWith('sslcerts/')?new URL(clean,snapshotRoot):new URL(clean,folder)};
+  const roleInfo=role=>({leaf:['🔐','Website certificate'],intermediate:['🔗','Intermediate certificate'],root:['⚓','Root certificate']}[role]||['📜','Certificate']);const content=document.getElementById('content');
+  const appendCopy=(parent,value)=>{const row=el('span',null,'hash-row'),code=el('code',value),button=el('button','Copy','copy');button.type='button';button.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(String(value));button.textContent='Copied'}catch{button.textContent='Select';const selection=getSelection();const range=document.createRange();range.selectNodeContents(code);selection.removeAllRanges();selection.addRange(range)}});row.append(code,button);parent.append(row)};
+  fetch(output).then(r=>{if(!r.ok)throw new Error(r.status);return r.text()}).then(text=>{
+    const records=parseJsonl(text);const first=records[0]||{};const chains=records.reduce((n,r)=>n+(Array.isArray(r.certificateChain)?r.certificateChain.length:0),0);
+    records.forEach((record,recordIndex)=>{
+      const top=el('div',null,'request');
+      const request=el('div');request.append(safeLink(record.url,'🌐 '+(record.url||'Captured request')));request.lastElementChild.classList.add('request-url');
+      const session=el('div',null,'session');session.append(el('strong','🔒 '+(record.protocol||record.securityState||'Secure session')));if(record.cipher)session.append(el('div',record.cipher,'mono'));if(record.keyExchangeGroup||record.keyExchange)session.append(el('div',record.keyExchangeGroup||record.keyExchange,'muted'));
+      top.append(request,session);content.append(top);
+      const chain=Array.isArray(record.certificateChain)&&record.certificateChain.length?record.certificateChain:[{position:'leaf',commonName:record.subjectName,issuerText:record.issuer,validFrom:record.validFrom,validTo:record.validTo,fingerprint256:record.leafFingerprint256,pemPath:record.leafPemPath,ctSearchUrl:record.leafCtSearchUrl,subjectAltName:Array.isArray(record.subjectAlternativeNames)?record.subjectAlternativeNames.join(', '):''}];
+      const chainWrap=el('section',null,'chain'),tree=el('ol',null,'cert-tree');chainWrap.append(tree);let level=tree;
+      const ordered=chain.map((cert,index)=>({cert,role:cert.position||(index===0?'leaf':index===chain.length-1?'root':'intermediate')})).reverse();
+      ordered.forEach(({cert,role},index)=>{
+        const info=roleInfo(role);
+        const card=el('article',null,'panel cert '+role),head=el('div',null,'cert-head'),icon=el('span',info[0],'cert-icon'),title=el('div',null,'cert-title');
+        title.append(el('strong',cert.commonName||cert.subjectText||record.subjectName||'Unnamed certificate'),el('span',info[1],'muted'));
+        const actions=el('div',null,'actions'),pem=pathLink(cert.pemPath);
+        if(pem){const link=el('a','⤓ PEM','button');link.href=pem.href;link.download='';actions.append(link)}
+        let ct=cert.ctSearchUrl;const fingerprint=String(cert.fingerprint256||'').replace(/:/g,'').trim().toLowerCase();if(/^[a-f0-9]{64}$/.test(fingerprint))ct='https://ctlogs.dev/search?q='+encodeURIComponent(fingerprint);
+        if(ct)actions.append(safeLink(ct,'◫ CT logs'));head.append(icon,title,actions);card.append(head);
+        const fields=el('dl');
+        const add=(label,value,kind)=>{if(value===undefined||value===null||value==='')return;fields.append(el('dt',label));const dd=el('dd');if(kind==='hash')appendCopy(dd,value);else dd.textContent=kind==='date'?fmtDate(value):String(value);fields.append(dd)};
+        add('Subject',cert.subjectText||cert.commonName);add('Issuer',cert.issuerText||cert.issuerCommonName||record.issuer);add('Valid from',cert.validFrom,'date');add('Valid until',cert.validTo,'date');add('Serial',cert.serialNumber,'hash');add('SHA-256',cert.fingerprint256||(role==='leaf'&&record.leafFingerprint256),'hash');fields.childElementCount&&card.append(fields);
+        const sans=String(cert.subjectAltName||'').replace(/^DNS:/,'').split(/,\s*DNS:/).filter(Boolean);if(!sans.length&&role==='leaf'&&Array.isArray(record.subjectAlternativeNames))sans.push(...record.subjectAlternativeNames);if(sans.length){const list=el('div',null,'sans');sans.forEach(name=>list.append(el('span','⌁ '+name,'badge')));card.append(list)}
+        const branch=el('li');branch.append(card);level.append(branch);if(index<ordered.length-1){const children=el('ol',null,'cert-tree');branch.append(children);level=children;}
+      });content.append(chainWrap);
+      const facts=el('div',null,'badges');[['CT',record.certificateTransparencyCompliance],['Signature',record.serverSignatureAlgorithm],['ECH',typeof record.encryptedClientHello==='boolean'?(record.encryptedClientHello?'yes':'no'):'']].forEach(([label,value])=>{if(value!==''&&value!=null)facts.append(el('span',label+' · '+value,'badge'))});if(facts.childElementCount)content.append(facts);
+      if(recordIndex<records.length-1)content.append(el('hr'));
+    });
+  }).catch(()=>content.append(el('div','Unable to read certificate data.','panel empty')));
+})();
+</script></body></html>

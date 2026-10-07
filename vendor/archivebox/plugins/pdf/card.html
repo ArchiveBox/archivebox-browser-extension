@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden}
+body{position:relative;display:grid;place-items:center;background:#f3f4f6;color:#475569;font:12px/1.4 system-ui,sans-serif}
+img{display:none;width:100%;height:100%;object-fit:contain;object-position:top center;background:#fff}
+#fallback{display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px;text-align:center}
+#fallback[hidden]{display:none}
+#fallback .icon{font-size:30px;line-height:1}
+</style></head><body data-output="{{ output_path }}">
+<img id="preview" alt="Preview of archived PDF"><span id="fallback"><span class="icon" aria-hidden="true">📄</span><span>PDF saved</span></span>
+<script>
+const output=new URL(document.body.dataset.output,document.baseURI);
+const image=document.getElementById('preview'),fallback=document.getElementById('fallback');
+const sources=[
+  new URL('preview.png',output),
+  new URL('../screenshot/screenshot.png',output),
+];
+let index=0;
+image.onload=()=>{image.style.display='block';fallback.hidden=true};
+image.onerror=()=>{index+=1;if(index<sources.length)image.src=sources[index].href};
+image.src=sources[0].href;
+</script></body></html>

@@ -4,7 +4,11 @@ ArchiveBox Browser Extension helps you save URLs and related page metadata to yo
 
 ## Data Stored Locally
 
-The extension may store saved URLs, page titles, favicons, tags, crawl depth, sync status, extension settings, and optional local capture files such as screenshots and MHTML snapshots in browser-local extension storage.
+The extension may store saved URLs, page titles, favicons, tags, crawl depth, sync status, extension settings, and local WACZ archives containing original responses, screenshots, HTTP metadata, browser logs, downloaded documents, and extracted text in browser-local extension storage.
+
+Capture reloads the chosen tab and may scroll, expand content, dismiss modals, and fetch additional page resources, documents, and media using the browser session. Authenticated page contents can be preserved. The engine bundles its executable JS, Python, OCR models, and WASM locally. Responses are staged in IndexedDB and a finished, verified WACZ is saved in OPFS. Interrupted attempts are discarded rather than resumed. WACZ replay and derivations use recorded resources.
+
+Closing the popup does not stop its capture tab. Deleting a capture removes its OPFS archive and disposable replay data. Browser uninstall removes local extension data; downloaded exports remain where you saved them.
 
 ## Optional Browser Data Access
 
@@ -16,7 +20,7 @@ Persona settings can include your browser's user agent, language, timezone, disp
 
 When you save or sync a page, the extension sends the selected URL and related metadata to the ArchiveBox server URL you configure. If you choose to export cookies or use an authorization profile, selected cookies may also be sent to your configured ArchiveBox server.
 
-After you sync cookies for a domain, the extension automatically syncs subsequent cookie changes for that domain to the same server. Remove the domain from the persona or clear its cookies and sync to stop syncing those cookies. Persona settings, including location if you grant access and include it, are sent when you sync the persona. Optional page captures are sent when you enable their upload.
+After you sync cookies for a domain, the extension automatically syncs subsequent cookie changes for that domain to the same server. Remove the domain from the persona or clear its cookies and sync to stop syncing those cookies. Persona settings, including location if you grant access and include it, are sent when you sync the persona. Legacy standalone captures may still be uploaded under existing settings. New WACZ captures remain local; URL submission does not upload the WACZ or authorize its automatic deletion.
 
 ## Third Parties
 

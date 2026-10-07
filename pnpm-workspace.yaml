@@ -1,0 +1,9 @@
+overrides:
+  # tslib 1.x's default-import browser entry breaks tsyringe's X.509 bundle.
+  # Use the same upstream ESM helpers as @peculiar/x509 and its ASN.1 packages.
+  'tsyringe>tslib': 2.8.1
+patchedDependencies:
+  '@webrecorder/wabac@2.27.3': patches/@webrecorder__wabac@2.27.3.patch
+  '@webrecorder/wombat@3.10.8': patches/@webrecorder__wombat@3.10.8.patch
+  officeparser@8.1.0: patches/officeparser@8.1.0.patch
+  single-file-core@1.6.24: patches/single-file-core@1.6.24.patch

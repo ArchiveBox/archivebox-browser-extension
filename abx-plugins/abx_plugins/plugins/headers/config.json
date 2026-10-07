@@ -1,0 +1,9 @@
+{
+  "title": "HTTP headers",
+  "description": "Inspect original recorded response headers.",
+  "category": "view",
+  "default_enabled": true,
+  "required_plugins": [
+    "chrome"
+  ]
+}

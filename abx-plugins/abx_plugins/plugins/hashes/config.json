@@ -1,0 +1,1 @@
+{"title":"Integrity and duplicates","description":"Verify WACZ package members and indexed payload digests, and identify identical payloads without writing redundant manifests.","category":"metadata","default_enabled":true}

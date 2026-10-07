@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Title",
+  "description": "Capture the final document title from the rendered page.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "chrome"
+  ],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "text/plain"
+  ],
+  "properties": {
+    "TITLE_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_TITLE",
+        "USE_TITLE"
+      ],
+      "description": "Enable title extraction"
+    },
+    "TITLE_TIMEOUT": {
+      "type": "integer",
+      "default": 30,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for title extraction in seconds"
+    }
+  },
+  "category": "metadata",
+  "display_order": 10,
+  "snapshot_output_group": "metadata",
+  "snapshot_title_source": true
+}

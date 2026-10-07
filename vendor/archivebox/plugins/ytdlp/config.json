@@ -1,0 +1,174 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "yt-dlp",
+  "description": "Download video and audio media with metadata, subtitles, thumbnails, and description sidecars.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [],
+  "required_binaries": [
+    {
+      "name": "{YTDLP_BINARY}",
+      "binproviders": "env,uv,apt,brew",
+      "min_version": "2026.08.19",
+      "overrides": {
+        "uv": {
+          "postinstall_scripts": true,
+          "install_args": [
+            "yt-dlp[default]>=2026.8.19"
+          ]
+        }
+      }
+    },
+    {
+      "name": "{NODE_BINARY}",
+      "binproviders": "env,node,apt,brew",
+      "min_version": null,
+      "overrides": {
+        "apt": {
+          "install_args": [
+            "nodejs"
+          ]
+        }
+      }
+    },
+    {
+      "name": "{FFMPEG_BINARY}",
+      "binproviders": "env,apt,brew",
+      "min_version": null
+    }
+  ],
+  "output_mimetypes": [
+    "audio/",
+    "video/",
+    "image/",
+    "application/x-subrip",
+    "text/vtt",
+    "application/json",
+    "text/plain"
+  ],
+  "properties": {
+    "YTDLP_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "MEDIA_ENABLED",
+        "SAVE_MEDIA",
+        "USE_MEDIA",
+        "USE_YTDLP",
+        "FETCH_MEDIA",
+        "SAVE_YTDLP"
+      ],
+      "description": "Enable video/audio downloading with yt-dlp"
+    },
+    "YTDLP_BINARY": {
+      "type": "string",
+      "default": "yt-dlp",
+      "x-aliases": [
+        "YOUTUBEDL_BINARY",
+        "YOUTUBE_DL_BINARY"
+      ],
+      "description": "Path to yt-dlp binary"
+    },
+    "NODE_BINARY": {
+      "type": "string",
+      "default": "node",
+      "description": "Path to Node.js binary for yt-dlp JS runtime"
+    },
+    "FFMPEG_BINARY": {
+      "type": "string",
+      "default": "ffmpeg",
+      "description": "Path to ffmpeg binary for yt-dlp media remuxing and downloads"
+    },
+    "YTDLP_TIMEOUT": {
+      "type": "integer",
+      "default": 120,
+      "minimum": 10,
+      "x-fallback": "TIMEOUT",
+      "x-aliases": [
+        "MEDIA_TIMEOUT"
+      ],
+      "description": "Timeout for yt-dlp downloads in seconds"
+    },
+    "YTDLP_COOKIES_FILE": {
+      "type": "string",
+      "default": "",
+      "x-fallback": "COOKIES_FILE",
+      "description": "Path to cookies file"
+    },
+    "YTDLP_MAX_SIZE": {
+      "type": "string",
+      "default": "750m",
+      "pattern": "^\\d+[kmgKMG]?$",
+      "x-aliases": [
+        "MEDIA_MAX_SIZE"
+      ],
+      "description": "Maximum file size for yt-dlp downloads"
+    },
+    "YTDLP_CHECK_SSL_VALIDITY": {
+      "type": "boolean",
+      "default": true,
+      "x-fallback": "CHECK_SSL_VALIDITY",
+      "description": "Whether to verify SSL certificates"
+    },
+    "YTDLP_ARGS": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "--socket-timeout=5",
+        "--retries=0",
+        "--fragment-retries=0",
+        "--extractor-retries=0",
+        "--file-access-retries=0",
+        "--restrict-filenames",
+        "--trim-filenames=128",
+        "--write-description",
+        "--write-info-json",
+        "--write-thumbnail",
+        "--write-sub",
+        "--write-auto-subs",
+        "--convert-subs=srt",
+        "--yes-playlist",
+        "--continue",
+        "--no-abort-on-error",
+        "--ignore-errors",
+        "--geo-bypass",
+        "--add-metadata",
+        "--no-progress",
+        "--remote-components=ejs:github",
+        "-o",
+        "%(title)s.%(ext)s"
+      ],
+      "x-aliases": [
+        "YTDLP_DEFAULT_ARGS"
+      ],
+      "description": "Default yt-dlp arguments"
+    },
+    "YTDLP_ARGS_EXTRA": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "x-aliases": [
+        "YTDLP_EXTRA_ARGS"
+      ],
+      "description": "Extra arguments to append to yt-dlp command"
+    }
+  },
+  "category": "media",
+  "display_order": 40,
+  "snapshot_output_group": "embedded_media",
+  "snapshot_display_name": "YouTube-DL",
+  "archive_result_aliases": ["yt-dlp", "youtube-dl"],
+  "card_interactive": true,
+  "output_extension_preference": [
+    [".mp4", ".webm", ".m4v", ".ogv"],
+    [".mp3", ".m4a", ".aac", ".opus", ".ogg", ".wav", ".flac"],
+    [".mkv", ".mov", ".avi", ".flv", ".wmv", ".mpg", ".mpeg", ".ts", ".m2ts", ".mts", ".3gp", ".3g2"],
+    [".html", ".htm", ".mhtml", ".mht", ".pdf"],
+    [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico"],
+    [".json", ".jsonl", ".txt", ".md", ".csv", ".tsv", ".srt", ".vtt"]
+  ]
+}

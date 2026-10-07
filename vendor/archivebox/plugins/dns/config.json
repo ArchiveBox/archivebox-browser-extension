@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DNS",
+  "description": "Record DNS activity observed while loading the page in Chrome.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "chrome"
+  ],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "application/x-ndjson"
+  ],
+  "properties": {
+    "DNS_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_DNS",
+        "USE_DNS"
+      ],
+      "description": "Enable DNS traffic recording during page load"
+    },
+    "DNS_TIMEOUT": {
+      "type": "integer",
+      "default": 30,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for DNS recording in seconds"
+    }
+  },
+  "category": "metadata",
+  "display_order": 80,
+  "snapshot_output_group": "metadata"
+}

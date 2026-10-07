@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      body {
+        padding: 6px 8px;
+        background: #fff;
+        color: #334155;
+        font: 10px/1.35 system-ui, sans-serif;
+      }
+      header {
+        display: block;
+        border-bottom: 1px solid #e8edf2;
+        padding-bottom: 6px;
+        color: #64748b;
+        font-size: 10px;
+      }
+      h1 {
+        font-size: 11px;
+        font-weight: 600;
+        margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #334155;
+      }
+      #summary {
+        display: block;
+        white-space: nowrap;
+      }
+      ul {
+        padding: 0;
+        margin: 4px 0;
+        list-style: none;
+      }
+      li {
+        display: grid;
+        grid-template-columns: 16px minmax(0, 1fr) max-content;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 0;
+        border-bottom: 1px solid #f0f3f6;
+      }
+      .icon {
+        width: 16px;
+        text-align: center;
+      }
+      .name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+      }
+      .size {
+        color: #64748b;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      #more {
+        color: #64748b;
+        font-size: 10px;
+        margin: 4px 0;
+      }
+    </style>
+  </head>
+  <body data-output="{{ output_path }}">
+    <header>
+      <h1 id="title">Saved files</h1>
+      <span id="summary"></span>
+    </header>
+    <ul id="files"></ul>
+    <p id="more"></p>
+    <script>
+      const output = new URL(document.body.dataset.output, document.baseURI);
+      output.search = "";
+      output.hash = "";
+      output.searchParams.set("raw", "1");
+      const bytes = (n) =>
+        n < 1024
+          ? n + " B"
+          : n < 1048576
+          ? (n / 1024).toFixed(1) + " KB"
+          : (n / 1048576).toFixed(1) + " MB";
+      const icon = (name) => {
+        const ext = name.split(".").pop().toLowerCase();
+        return /^(png|jpe?g|gif|webp|svg|avif)$/.test(ext)
+          ? "🖼️"
+          : /^(csv|tsv|xlsx?|ods)$/.test(ext)
+          ? "▦"
+          : /^(pptx?|odp)$/.test(ext)
+          ? "▣"
+          : ext === "pdf"
+          ? "📕"
+          : ext === "zip"
+          ? "📦"
+          : "📄";
+      };
+      fetch(output, { cache: "no-store" })
+        .then((r) => {
+          if (!r.ok) throw Error("Unavailable");
+          return r.json();
+        })
+        .then((manifest) => {
+          const files = manifest.files || manifest.exports || [];
+          document.getElementById("title").textContent =
+            manifest.title || "Saved files";
+          document.getElementById("summary").textContent =
+            files.length +
+            " files · " +
+            bytes(files.reduce((n, f) => n + (Number(f.size) || 0), 0));
+          for (const file of files.slice(0, 3)) {
+            const row = document.createElement("li"),
+              name = file.filename || file.path;
+            for (const [cls, text] of [
+              ["icon", icon(name)],
+              ["name", name],
+              ["size", bytes(file.size || 0)],
+            ]) {
+              const span = document.createElement("span");
+              span.className = cls;
+              span.textContent = text;
+              if (cls === "name") span.title = name;
+              row.append(span);
+            }
+            document.getElementById("files").append(row);
+          }
+          if (files.length > 3)
+            document.getElementById("more").textContent =
+              "+" + (files.length - 3) + " more files";
+        })
+        .catch(() => {
+          document.getElementById("more").textContent = "File list unavailable";
+        });
+    </script>
+  </body>
+</html>

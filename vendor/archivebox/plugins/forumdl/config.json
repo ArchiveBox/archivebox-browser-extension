@@ -1,0 +1,115 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "forum-dl",
+  "description": "Download forum threads and exports in JSONL, WARC, and mailbox-style archive formats.",
+  "screenshot": "screenshot.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [],
+  "required_binaries": [
+    {
+      "name": "{FORUMDL_BINARY}",
+      "binproviders": "env,uv",
+      "min_version": null,
+      "overrides": {
+        "uv": {
+          "postinstall_scripts": true,
+          "install_args": [
+            "--no-deps",
+            "forum-dl",
+            "chardet==5.2.0",
+            "pydantic==2.12.3",
+            "pydantic-core==2.41.4",
+            "typing-extensions>=4.14.1",
+            "annotated-types>=0.6.0",
+            "typing-inspection>=0.4.2",
+            "beautifulsoup4",
+            "soupsieve",
+            "lxml",
+            "requests",
+            "urllib3",
+            "certifi",
+            "idna",
+            "charset-normalizer",
+            "tenacity",
+            "python-dateutil",
+            "six",
+            "html2text",
+            "warcio"
+          ]
+        }
+      }
+    }
+  ],
+  "output_mimetypes": [
+    "application/x-ndjson",
+    "application/warc",
+    "message/rfc822"
+  ],
+  "properties": {
+    "FORUMDL_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_FORUMDL",
+        "USE_FORUMDL"
+      ],
+      "description": "Enable forum downloading with forum-dl"
+    },
+    "FORUMDL_BINARY": {
+      "type": "string",
+      "default": "forum-dl",
+      "description": "Path to forum-dl binary"
+    },
+    "FORUMDL_TIMEOUT": {
+      "type": "integer",
+      "default": 3600,
+      "minimum": 10,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for forum downloads in seconds"
+    },
+    "FORUMDL_OUTPUT_FORMAT": {
+      "type": "string",
+      "default": "jsonl",
+      "enum": [
+        "jsonl",
+        "warc",
+        "mbox",
+        "maildir",
+        "mh",
+        "mmdf",
+        "babyl"
+      ],
+      "description": "Output format for forum downloads"
+    },
+    "FORUMDL_ARGS": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "--timeout=5",
+        "--retries=0"
+      ],
+      "x-aliases": [
+        "FORUMDL_DEFAULT_ARGS"
+      ],
+      "description": "Default forum-dl arguments. Keep autodetection deterministic by disabling forum-dl's retry loop unless explicitly overridden."
+    },
+    "FORUMDL_ARGS_EXTRA": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "x-aliases": [
+        "FORUMDL_EXTRA_ARGS"
+      ],
+      "description": "Extra arguments to append to forum-dl command"
+    }
+  },
+  "category": "text",
+  "display_order": 40,
+  "snapshot_output_group": "embedded_media",
+  "snapshot_display_name": "Forum-DL"
+}

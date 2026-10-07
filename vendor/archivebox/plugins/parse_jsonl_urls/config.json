@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Parse JSONL URLs",
+  "description": "Parse JSONL bookmark exports and emit discovered URLs as JSONL snapshot records.",
+  "screenshot": "screenshot.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "application/x-ndjson"
+  ],
+  "properties": {
+    "PARSE_JSONL_URLS_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "USE_PARSE_JSONL_URLS"
+      ],
+      "description": "Enable JSON Lines URL parsing"
+    }
+  },
+  "x-accepts-internal-input": true,
+  "category": "postprocessing",
+  "display_order": 30,
+  "snapshot_output_group": "metadata"
+}

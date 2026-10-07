@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>{{ output_path_raw }}</title>
+    <style>
+        html, body { margin: 0; padding: 0; height: 100%; background: #fff; }
+        #replay-root, replay-web-page { display: block; width: 100%; height: 100%; }
+        #replay-root.replay-unavailable { box-sizing:border-box;min-height:100vh;display:grid;place-items:center;padding:24px; }
+        .replay-error { box-sizing:border-box;width:100%;max-width:640px;margin:0 auto;padding:24px;font:15px/1.5 system-ui,sans-serif;color:#334155;overflow-wrap:anywhere;text-align:center; }
+        .replay-error h1 { font-size:20px; }
+        .replay-error a { color:#315c83; }
+        .replay-open-browser { display:inline-flex;align-items:center;justify-content:center;margin:12px 0 16px;padding:16px 30px;border-radius:8px;background:#315c83;color:#fff!important;font-size:19px;font-weight:650;text-decoration:none; }
+        .replay-open-browser:hover { background:#244867; }
+    </style>
+    <script>
+    async function activateReplayWorker() {
+        if (!('serviceWorker' in navigator)) {
+            throw new Error('Service workers are required for WACZ replay');
+        }
+        const registration = await navigator.serviceWorker.register(
+            '{{ replay_base }}sw.js?serveIndex=1',
+            { scope: '{{ replay_base }}' },
+        );
+        if (registration.active && registration.active.state === 'activated') return;
+
+        const worker = registration.installing || registration.waiting || registration.active;
+        if (!worker) throw new Error('Replay service worker was not created');
+        await new Promise((resolve, reject) => {
+            function onStateChange() {
+                if (worker.state === 'activated') {
+                    worker.removeEventListener('statechange', onStateChange);
+                    resolve();
+                } else if (worker.state === 'redundant') {
+                    worker.removeEventListener('statechange', onStateChange);
+                    reject(new Error('Replay service worker became redundant'));
+                }
+            }
+            worker.addEventListener('statechange', onStateChange);
+            onStateChange();
+        });
+    }
+
+    function mountReplay() {
+        const root = document.getElementById('replay-root');
+        const replayElement = document.getElementById('replay-template').content.firstElementChild.cloneNode(true);
+        replayElement.addEventListener('rwp-page-loading', (event) => {
+            if (event.detail && event.detail.loading === false) {
+                window.archiveboxReplayReady = event.detail;
+                window.dispatchEvent(new CustomEvent('archivebox-replay-ready', {detail: event.detail}));
+            }
+        });
+        root.replaceChildren(replayElement);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        activateReplayWorker()
+            .then(() => customElements.whenDefined('replay-web-page'))
+            .then(mountReplay)
+            .catch((error) => {
+                window.archiveboxReplayError = String(error);
+                const root = document.getElementById('replay-root');
+                root.classList.add('replay-unavailable');
+                const message = document.createElement('section');
+                message.className = 'replay-error';
+                message.setAttribute('role', 'alert');
+                const title = document.createElement('h1');
+                title.textContent = 'You must view this snapshot in a browser.';
+                const openBrowser = document.createElement('a');
+                openBrowser.className = 'replay-open-browser';
+                openBrowser.href = window.location.href;
+                openBrowser.target = '_blank';
+                openBrowser.rel = 'external noopener';
+                openBrowser.textContent = 'Open in browser';
+                const detail = document.createElement('p');
+                detail.textContent = 'For technical reasons, WACZ requires service workers to view, and some platforms limit where service workers are available. You may need to make sure your ArchiveBox server is hosted with HTTPS and open this output in your default browser instead of within this app.';
+                const download = document.createElement('a');
+                download.href = root.dataset.source;
+                download.download = '';
+                download.textContent = 'Download WACZ';
+                message.append(title, openBrowser, detail, download);
+                root.replaceChildren(message);
+                window.dispatchEvent(new CustomEvent('archivebox-replay-error', {detail: String(error)}));
+            });
+    }, {once: true});
+    </script>
+    <script src="{{ replay_base }}ui.js"></script>
+</head>
+<body>
+    <div id="replay-root"
+         data-source="{{ output_path }}"
+         data-url="{{ archived_url }}"
+         data-replaybase="{{ replay_base }}"></div>
+    <template id="replay-template">
+        <replay-web-page
+            source="{{ output_path }}"
+            {% if archived_url %}url="{{ archived_url }}"{% endif %}
+            embed="replayonly"
+            replaybase="{{ replay_base }}"></replay-web-page>
+    </template>
+</body>
+</html>

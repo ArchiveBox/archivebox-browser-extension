@@ -1,0 +1,24 @@
+{
+  "title": "Web archive",
+  "description": "Capture and replay original page responses in one WACZ using ArchiveWeb.page and Browsertrix resource discovery.",
+  "category": "capture",
+  "default_enabled": true,
+  "required_plugins": [
+    "chrome"
+  ],
+  "timeout": 60,
+  "properties": {
+    "ARCHIVEWEBPAGE_MAX_REQUISITES": {
+      "type": "integer",
+      "default": 100,
+      "minimum": 0,
+      "maximum": 500,
+      "description": "Maximum discovered URLs to preserve; already recorded responses are reused."
+    },
+    "ARCHIVEWEBPAGE_DATA_ATTRIBUTES": {
+      "type": "boolean",
+      "default": false,
+      "description": "Also use Browsertrix's broad data-attribute URL discovery."
+    }
+  }
+}

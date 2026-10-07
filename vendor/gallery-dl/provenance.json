@@ -1,0 +1,47 @@
+{
+  "engine": "unchanged upstream Python wheel",
+  "distributions": [
+    {
+      "package": "gallery-dl",
+      "version": "1.32.15",
+      "filename": "gallery_dl-1.32.15-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/2c/e9/5bac9bb4e3cf3883b0f8517059a5b9b5aba4f7d5263a7c926b970a1fc80e/gallery_dl-1.32.15-py3-none-any.whl",
+      "sha256": "e8fc03eebddcd4ba816ae7a9c42548a68e7ae8a01e7c5a83d6f591e253f092a6"
+    },
+    {
+      "package": "requests",
+      "version": "2.32.5",
+      "filename": "requests-2.32.5-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl",
+      "sha256": "2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6"
+    },
+    {
+      "package": "urllib3",
+      "version": "2.6.3",
+      "filename": "urllib3-2.6.3-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/39/08/aaaad47bc4e9dc8c725e68f9d04865dbcb2052843ff09c97b08904852d84/urllib3-2.6.3-py3-none-any.whl",
+      "sha256": "bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4"
+    },
+    {
+      "package": "certifi",
+      "version": "2026.1.4",
+      "filename": "certifi-2026.1.4-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/e6/ad/3cc14f097111b4de0040c83a525973216457bbeeb63739ef1ed275c1c021/certifi-2026.1.4-py3-none-any.whl",
+      "sha256": "9943707519e4add1115f44c2bc244f782c0249876bf51b6599fee1ffbedd685c"
+    },
+    {
+      "package": "idna",
+      "version": "3.11",
+      "filename": "idna-3.11-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/0e/61/66938bbb5fc52dbdf84594873d5b51fb1f7c7794e9c0f5bd885f30bc507b/idna-3.11-py3-none-any.whl",
+      "sha256": "771a87f49d9defaf64091e6e6fe9c18d4833f140bd19464795bc32d966ca37ea"
+    },
+    {
+      "package": "charset-normalizer",
+      "version": "3.4.4",
+      "filename": "charset_normalizer-3.4.4-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/0a/4c/925909008ed5a988ccbb72dcc897407e5d6d3bd72410d69e051fc0c14647/charset_normalizer-3.4.4-py3-none-any.whl",
+      "sha256": "7a32c560861a02ff789ad905a2fe94e3f840803362c84fecf1851cb4cf3dc37f"
+    }
+  ]
+}

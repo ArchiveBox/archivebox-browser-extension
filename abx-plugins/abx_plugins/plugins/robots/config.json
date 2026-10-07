@@ -1,0 +1,1 @@
+{"title":"Robots.txt","description":"Preserve the site's robots.txt response and inspect directives at view time.","category":"metadata","default_enabled":true,"required_plugins":["chrome"],"timeout":20}

@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ArchiveWeb.page",
+  "description": "Record a high-fidelity WACZ web archive of the page using the Webrecorder ArchiveWeb.page Chrome extension.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "chrome"
+  ],
+  "required_binaries": [
+    {
+      "name": "archivewebpage",
+      "binproviders": "env,chromewebstore",
+      "min_version": null,
+      "overrides": {
+        "chromewebstore": {
+          "install_args": [
+            "fpeoodllldobpkbkabpblcfaogecpndd",
+            "--name=archivewebpage",
+            "--url=https://github.com/webrecorder/archiveweb.page/releases/download/v0.17.0/ArchiveWeb.page-0.17.0-extension.zip",
+            "--sha256=4354a632ba1be7345f7fc8d1b0a8275c16c0f0ba9ae56394ac1e82266bc999af"
+          ]
+        }
+      }
+    }
+  ],
+  "output_mimetypes": [
+    "application/wacz+zip",
+    "application/wacz"
+  ],
+  "properties": {
+    "ARCHIVEWEBPAGE_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "USE_ARCHIVEWEBPAGE",
+        "SAVE_ARCHIVEWEBPAGE",
+        "SAVE_WACZ",
+        "USE_WACZ"
+      ],
+      "description": "Enable ArchiveWeb.page WACZ recording during archiving"
+    },
+    "ARCHIVEWEBPAGE_TIMEOUT": {
+      "type": "integer",
+      "default": 60,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Maximum seconds to wait for the WACZ download after stopping recording"
+    },
+    "ARCHIVEWEBPAGE_HOOK_BUDGET_MS": {
+      "type": "integer",
+      "default": 2000,
+      "minimum": 250,
+      "description": "Soft per-hook latency budget in ms (start/stop hooks try to finish within this; not a hard cutoff for large captures)"
+    },
+    "ARCHIVEWEBPAGE_AUTORUN_BEHAVIORS": {
+      "type": "boolean",
+      "default": false,
+      "x-aliases": [
+        "ARCHIVEWEBPAGE_AUTOPILOT"
+      ],
+      "description": "Run AWP behaviors (autopilot) during recording. Off by default since infiniscroll/other plugins drive page actions."
+    },
+    "ARCHIVEWEBPAGE_COLLECTION_TITLE": {
+      "type": "string",
+      "default": "abx-dl",
+      "description": "Collection title to use when AWP has no default collection yet"
+    }
+  },
+  "category": "main",
+  "display_order": 80,
+  "snapshot_output_group": "html",
+  "snapshot_output_order": 0,
+  "snapshot_display_name": "ArchiveWebpage",
+  "presentation_module": "abx_plugins.plugins.archivewebpage.presentation"
+}

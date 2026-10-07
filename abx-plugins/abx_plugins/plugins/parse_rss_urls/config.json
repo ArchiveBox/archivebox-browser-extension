@@ -1,0 +1,1 @@
+{"title":"Feed URLs","description":"Extract article URLs, titles, dates and tags from archived RSS, Atom and JSON Feed responses.","category":"metadata","default_enabled":true,"required_plugins":["rss"]}

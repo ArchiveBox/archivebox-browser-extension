@@ -1,0 +1,79 @@
+<div class="liteparse-thumbnail" aria-label="Original files and parsed text" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));gap:3px;width:100%;height:100%;overflow:hidden;background:#f5f6f8;"></div>
+<script>
+(() => {
+    const grid = document.currentScript.previousElementSibling;
+    const output = new URL('{{ output_path|escapejs }}', location.href);
+    output.search = ''; output.hash = '';
+    const rawPath = '{{ output_path_raw|escapejs }}';
+    const parts = rawPath.split('/').filter(Boolean), index = parts.lastIndexOf('liteparse');
+    let pluginRoot = new URL('./', output);
+    for (let i = 1; i < (index >= 0 ? parts.length - index - 1 : 1); i++) pluginRoot = new URL('../', pluginRoot);
+    const snapshotRoot = new URL('../', pluginRoot);
+    const files = [{% for path, info in result.output_files.items %}'{{ path|escapejs }}',{% endfor %}];
+    const sources = [{% for capture in snapshot.archiveresult_set.all %}{% if capture.plugin == 'responses' or capture.plugin == 'staticfile' or capture.plugin == 'papersdl' %}{% for path, info in capture.output_files.items %}{path:'{{ path|escapejs }}',plugin:'{{ capture.plugin|escapejs }}',root:{{ info.root_relative|yesno:'true,false' }},mime:'{{ info.mimetype|escapejs }}',size:{{ info.size|default:0 }}},{% endfor %}{% endif %}{% endfor %}];
+    const raw = url => { const value = new URL(url); value.searchParams.set('raw', '1'); return value.href; };
+    const safeFile = (path, root) => {
+        if (!path || path.startsWith('/') || path.includes('\\') || /^[a-z]+:/i.test(path)) return null;
+        const parts = path.split('/').filter(part => part && part !== '.');
+        return parts.length && !parts.includes('..') ? new URL(parts.map(encodeURIComponent).join('/'), root) : null;
+    };
+    const basename = path => path.split('/').pop();
+    const sanitized = name => name.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 96) || 'source';
+    const originals = new Map();
+    for (const source of sources) {
+        const path = source.path.replace(/^\.\//, '');
+        if (source.plugin === 'responses' && !path.replace(/^responses\//, '').startsWith('all/')) continue;
+        const url = safeFile(source.root ? path : source.plugin + '/' + path, snapshotRoot);
+        if (url) originals.set(url.href, {...source, name: basename(path), url});
+    }
+    const match = (name, hint) => {
+        const candidates = [...originals.values()];
+        const named = hint ? candidates.filter(file => file.name === hint) : [];
+        const matches = named.length ? named : candidates.filter(file => sanitized(file.name) === name);
+        return matches.length === 1 ? matches[0] : null;
+    };
+    const documents = new Map();
+    for (const path of files) {
+        const relative = path.replace(/^\.\//, '').replace(/^liteparse\//, '');
+        if (!/\.(txt|json)$/i.test(relative)) continue;
+        const url = safeFile(relative, pluginRoot), name = relative.replace(/\.(txt|json)$/i, '');
+        if (!url) continue;
+        if (!documents.has(name) || /\.txt$/i.test(relative)) documents.set(name, {name, url, json: /\.json$/i.test(relative)});
+    }
+    const ordered = [...documents.values()].sort((a, b) => (Number(match(b.name)?.size) || 0) - (Number(match(a.name)?.size) || 0) || a.name.localeCompare(b.name));
+    for (const document of ordered.slice(0, 9)) {
+        const tile = window.document.createElement('div');
+        tile.className = 'liteparse-thumbnail-tile';
+        tile.title = basename(document.name);
+        tile.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-width:0;min-height:0;overflow:hidden;background:white;';
+        const original = window.document.createElement('div'), text = window.document.createElement('pre');
+        original.style.cssText = 'display:flex;align-items:center;justify-content:center;min-width:0;min-height:0;overflow:hidden;background:#eceff3;font:12px system-ui;';
+        text.style.cssText = 'margin:0;padding:2px;min-width:0;min-height:0;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;border-left:1px solid #e2e6eb;color:#475569;font:5px/1.3 ui-monospace,monospace;';
+        const showOriginal = hint => {
+            const source = match(document.name, hint);
+            original.replaceChildren();
+            if (source && (source.mime.startsWith('image/') || /\.(png|jpe?g|gif|bmp|tiff?|webp)$/i.test(source.name))) {
+                const image = window.document.createElement('img');
+                image.alt = source.name; image.loading = 'lazy'; image.decoding = 'async';
+                image.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;';
+                image.src = raw(source.url); original.append(image);
+            } else {
+                original.textContent = source ? '📄' : '▧';
+                original.title = source ? source.name : 'Original file unavailable';
+            }
+        };
+        showOriginal(); tile.append(original, text); grid.append(tile);
+        fetch(raw(document.url)).then(response => { if (!response.ok) throw new Error(response.status); return response.text(); }).then(value => {
+            if (document.json) {
+                const data = JSON.parse(value);
+                value = Array.isArray(data.pages) ? data.pages.map(page => page.text || (page.text_items || page.textItems || []).map(item => item?.text || '').join('\n')).join('\n\n') : [data.text, data.content, data.body].find(item => typeof item === 'string') || '';
+            } else {
+                const source = value.match(/^\uFEFF?<!-- source: ([^\r\n]+) -->\r?\n/);
+                if (source) { value = value.slice(source[0].length); showOriginal(source[1]); }
+            }
+            text.textContent = value.trim() ? value.slice(0, 2000) : 'No text detected';
+        }).catch(() => { text.textContent = 'Text unavailable'; });
+    }
+    if (!documents.size) grid.textContent = 'No parsed files';
+})();
+</script>

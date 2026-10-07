@@ -170,6 +170,7 @@ async function uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked(server: Server
   const opfsFiles = getOpfsFilesForSnapshot(snapshot, await readSnapshotOpfsFiles(snapshot));
 
   for (const group of buildSnapshotArtifactGroups(snapshot, opfsFiles)) {
+    if (group.plugin === 'archivebox_js') continue; // Complete capture import is a separate server contract.
     if (group.plugin === 'chrome_extension_viewport' && !server.policy.upload_viewport_screenshots_to_server) continue;
     if (group.plugin === 'chrome_extension_screenshot' && !server.policy.upload_screenshots_to_server) continue;
     if (group.plugin === 'chrome_extension_mhtml' && !server.policy.upload_mhtml_to_server) continue;

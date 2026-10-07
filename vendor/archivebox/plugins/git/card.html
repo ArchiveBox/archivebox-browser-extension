@@ -1,0 +1,22 @@
+<iframe title="Archived repository" loading="lazy" sandbox="allow-scripts allow-same-origin"
+  style="width:100% !important;height:100% !important;transform:none !important;border:0;pointer-events:none"
+  srcdoc="{% filter force_escape %}<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}body{padding:8px 10px;background:#f8fafc;color:#243443;font:11px/1.5 system-ui,sans-serif}.status{margin:0;padding:5px 8px;border-radius:7px;background:#edf1f5}.success{background:#e4f5e9;color:#176335}.failed{background:#ffe8e8;color:#8b2424}.hash{display:block;margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:10px/1.6 ui-monospace,monospace}h1{font-size:13px;margin:0 0 4px;overflow-wrap:anywhere}p{margin:4px 0}#count{color:#59636e}#description{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}#topics{display:flex;flex-wrap:wrap;gap:4px}.topic{background:#ddf4ff;color:#0969da;border-radius:12px;padding:1px 6px;font-size:10px}
+</style></head><body><h1 id="name">Git repository</h1><p id="count"></p><p id="description">Archived Git repository</p><div id="topics"></div><div id="stars" hidden></div><script type="module">
+
+const output=new URL('{{ output_path|escapejs }}',document.baseURI);output.search='';output.hash='';
+const root=new URL(output),boundary=root.pathname.search(/\/git(?:\/|$)/);root.pathname=boundary>=0?root.pathname.slice(0,boundary+1):new URL('../',output).pathname;
+const byId=id=>document.getElementById(id),el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n};
+ const captures=[{% for capture in snapshot.archiveresult_set.all %}{% if capture.plugin == 'git' or capture.plugin == 'dom' or capture.plugin == 'singlefile' %}{% for path, info in capture.output_files.items %}{path:'{{ path|escapejs }}',plugin:'{{ capture.plugin|escapejs }}',root:{{ info.root_relative|yesno:'true,false' }},size:{{ info.size|default:0 }}},{% endfor %}{% endif %}{% endfor %}];
+ const relative=file=>file.root?file.path:file.plugin+'/'+file.path;
+ const valid=path=>!path.startsWith('/')&&!path.split('/').some(part=>part==='..'||part==='.'||part==='');
+ const fileURL=path=>new URL(path.split('/').map(encodeURIComponent).join('/'),root);
+ const files=[...new Map(captures.filter(f=>f.plugin==='git').map(f=>({...f,path:relative(f).replace(/^git\//,'')})).filter(f=>valid(f.path)&&!f.path.split('/').includes('.git')&&!/^on_Snapshot__|^git\.jsonl$/.test(f.path)).map(f=>[f.path,f])).values()];
+
+byId('count').textContent=files.length+' captured files';
+try{const url=new URL('{{ snapshot.url|escapejs }}');byId('name').textContent=url.pathname.split('/').filter(Boolean).slice(0,2).join(' / ').replace(/\.git$/,'')||url.hostname}catch{}
+ // Parse one already-captured page inertly; never run its scripts or load its assets.
+ const page=['dom','singlefile'].map(plugin=>captures.find(f=>f.plugin===plugin&&/\.html?$/i.test(f.path)&&valid(relative(f)))).find(Boolean);
+ if(page){const url=fileURL(relative(page));url.searchParams.set('raw','1');fetch(url).then(r=>{if(!r.ok)throw Error(r.status);return r.text()}).then(text=>{const doc=new DOMParser().parseFromString(text,'text/html');const description=doc.querySelector('.f4.my-3')?.textContent.trim()||doc.querySelector('meta[name="description"]')?.content||doc.querySelector('meta[property="og:description"]')?.content;if(description)byId('description').textContent=description;const star=doc.querySelector('#repo-stars-counter-star, [href$="/stargazers"] .Counter, [href$="/stargazers"] strong');if(star){byId('stars').textContent='☆ '+(star.getAttribute('title')||star.textContent).trim()+' stars';byId('stars').hidden=false}const topics=new Set([...doc.querySelectorAll('a.topic-tag, a[data-octo-click="topic_click"]')].map(n=>n.textContent.trim()).filter(Boolean));for(const topic of [...topics].slice(0,20))byId('topics').append(el('span',topic,'topic'))}).catch(()=>{})}
+
+</script></body></html>{% endfilter %}"></iframe>

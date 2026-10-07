@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Screenshot",
+  "description": "Capture a PNG screenshot of the rendered page.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "chrome"
+  ],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "image/png"
+  ],
+  "properties": {
+    "SCREENSHOT_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_SCREENSHOT",
+        "USE_SCREENSHOT"
+      ],
+      "description": "Enable screenshot capture"
+    },
+    "SCREENSHOT_TIMEOUT": {
+      "type": "integer",
+      "default": 60,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for screenshot capture in seconds"
+    },
+    "SCREENSHOT_WAIT_FOR_TEXT": {
+      "type": "string",
+      "default": "",
+      "description": "Wait for text to appear in the page or one of its child frames before capture"
+    },
+    "SCREENSHOT_WAIT_FOR_FRAME_URL": {
+      "type": "string",
+      "default": "",
+      "description": "When waiting for text, only inspect frames whose URL contains this value"
+    },
+    "SCREENSHOT_RESOLUTION": {
+      "type": "string",
+      "default": "1440,2000",
+      "pattern": "^\\d+,\\d+$",
+      "x-fallback": "RESOLUTION",
+      "description": "Screenshot resolution (width,height)"
+    }
+  },
+  "category": "main",
+  "display_order": 20,
+  "snapshot_output_group": "raster",
+  "snapshot_output_order": 0,
+  "default_output_path": "screenshot.png",
+  "snapshot_primary_preview": true,
+  "archive_result_aliases": ["chrome_extension_screenshot"],
+  "snapshot_thumbnail_cards": [
+    {"archive_result_name": "screenshot", "order": 0},
+    {"archive_result_name": "chrome_extension_screenshot", "order": 1}
+  ]
+}
