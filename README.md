@@ -57,7 +57,7 @@ Finished, verified packages are stored in extension-local OPFS:
 
 Open them from **Saved URLs** or the popup's **Open archive** button. The shared viewer provides replay, plugin outputs, search, download, and deletion. Export offers WACZ and includes finished archives in ZIP exports. Stopping or interrupting a capture does not publish a partial WACZ. **Archive again** creates a new snapshot and starts from scratch.
 
-Server Sync continues to submit URLs and metadata through the existing API. This PR does not implement server-side WACZ import; WACZ files are therefore retained locally regardless of legacy upload receipts or retention settings. Export or delete them explicitly. Existing screenshot/MHTML/HTML files remain readable and exportable.
+Server Sync submits URLs and metadata, then uploads the completed package through the existing ArchiveResult API as `wacz/capture.wacz`. If capture finishes after URL submission, delivery continues with the popup closed. The server stores one placeholder `wacz` result; the per-hook records remain inside the package's `index.jsonl`. No server filesystem changes or record import are needed. Local WACZ files remain available until you explicitly delete them. Existing screenshot/MHTML/HTML files remain readable and exportable.
 
 Firefox and Safari retain URL collection, server submission, and persona features. The full local engine requires Chromium's debugger API; there is no reduced legacy capture fallback.
 
@@ -121,7 +121,17 @@ pnpm exec playwright test tests/wacz-capture.test.ts
 pnpm exec playwright test tests/popup.test.ts --grep 'native action popup|auto-archive captures a full WACZ|action popup saves a full WACZ'
 ```
 
-These tests load the unpacked extension through CDP, archive real documents through the toolbar, verify the exported WACZ hashes and Snapshot records, replay SingleFile after shutting down the source server, and check interruption, fresh recapture, and OPFS deletion. The old `scripts/test-popup-delivery-live.mjs` targets the retired per-artifact capture UI and is not an acceptance test for WACZ delivery. Server-side WACZ import is a separate follow-up.
+These tests load the unpacked extension through CDP, archive real documents through the toolbar, verify the exported WACZ hashes and Snapshot records, replay SingleFile after shutting down the source server, and check interruption, fresh recapture, and OPFS deletion.
+
+To verify outbound WACZ delivery, start a disposable ArchiveBox server without archive workers, build the extension, and run:
+
+```bash
+ARCHIVEBOX_TEST_SERVER=http://127.0.0.1:5899 \
+ARCHIVEBOX_TEST_KEY_FILE=/path/to/disposable-server-api-key \
+node scripts/test-wacz-delivery-live.mjs
+```
+
+The test configures the extension through its UI, captures a real document, closes the popup after URL acceptance, and verifies the server's `wacz` result contains exactly the same bytes as the local export. The old `scripts/test-popup-delivery-live.mjs` targets the retired per-artifact capture UI. Server-side import of the embedded result records is a separate follow-up.
 
 ## Changelog
 

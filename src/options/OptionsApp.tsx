@@ -2060,7 +2060,7 @@ function OptionsMain() {
           <div className="section-divider" />
           <SectionHeader title="Local archiving" detail="Every capture runs the full ArchiveBox JS/WASM plugin flow and saves one WACZ in this browser." />
           <p className="help-text">Open a page and click the toolbar button to archive it. Finished archives are available from Saved URLs, including screenshots, SingleFile, document extraction, media, search, and replay. Full capture requires Chrome or Edge.</p>
-          <p className="help-text">WACZ files stay local until you delete them. Server Sync currently submits URLs; it does not back up the local WACZ.</p>
+          <p className="help-text">Server Sync uploads each completed WACZ with all its capture records and outputs. Local WACZ files remain available until you delete them.</p>
           <div className="section-divider" />
           <Field label={t("After saving on server, remove legacy local copies after:")}>
             <select

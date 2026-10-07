@@ -31,6 +31,8 @@ include failed or inapplicable plugins. A recorder failure, interruption, or inv
 export fails the entire attempt. There is no partial WACZ export or recovery UI.
 
 Full acquisition currently requires Chrome/Edge's debugger API. Firefox/Safari retain
-URL, server, and persona features. Server submission remains separate from local
-archiving: existing URL receipts never authorize deleting a WACZ. Upload/import of
-the completed WACZ is a subsequent server integration.
+URL, server, and persona features. Server submission uploads the finished package
+through the existing ArchiveResult API as `wacz/capture.wacz`. This single placeholder
+result contains every hook record and payload; the server does not import its JSONL
+records yet. Upload completion uses the normal API response, with no additional
+checksum protocol. URL receipts never authorize deleting a local WACZ.

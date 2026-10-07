@@ -4,6 +4,7 @@ import { configureCookieSync } from '@/src/lib/cookieSync';
 import { findSubmittedSnapshot, removeFreshOwnedCapture, submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, supportsArchiveBoxApi, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { supportsWaczCapture } from '@/src/lib/browserCapabilities';
 import { openCapture, configureCaptureRuntime } from '@/src/capture/background';
+import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { createSnapshot } from '@/src/lib/snapshots';
 import { getArchiveBoxServerUrl, getConfig, getPersonas, getSnapshots, mutateSnapshots } from '@/src/lib/storage';
@@ -162,6 +163,31 @@ export default defineBackground(() => {
   });
 
   browser.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.entries) {
+      const previous = changes.entries.oldValue as Snapshot[] | undefined;
+      const completed = (changes.entries.newValue as Snapshot[] || []).filter(snapshot =>
+        snapshot.wacz?.state === 'complete' && snapshot.wacz.file
+        && previous?.find(item => item.id === snapshot.id)?.wacz?.state !== 'complete');
+      // URL acceptance can precede capture startup. Deliver the finished package
+      // even when the popup has closed; the existing artifact lock serializes uploads.
+      if (completed.length) void getConfig().then(async config => {
+        for (const snapshot of completed) for (const [serverId, copy] of Object.entries(snapshot.remote_copies || {})) {
+          const configured = config.servers.find(server => server.id === serverId);
+          if (!configured || !copy.snapshot_id || copy.submitted_to !== new URL(configured.server).toString().replace(/\/$/, '')) continue;
+          // ONLY_NEW may have selected an older capture that this submission does not own.
+          if (copy.crawl_id && copy.snapshot_crawl_id && copy.crawl_id.replaceAll('-', '') !== copy.snapshot_crawl_id.replaceAll('-', '')) continue;
+          try {
+            await uploadSnapshotCaptureArtifactsToArchiveBox(requireServer(config, serverId), snapshot, copy.snapshot_id);
+          } catch (error) {
+            await mutateSnapshots(entries => entries.map(item => {
+              const latest = item.remote_copies?.[serverId];
+              if (item.id !== snapshot.id || !latest || latest.snapshot_id !== copy.snapshot_id || latest.crawl_id !== copy.crawl_id) return item;
+              return {...item, remote_copies: {...item.remote_copies, [serverId]: {...latest, status:'accepted', delivery_error:errorMessage(error)}}};
+            }));
+          }
+        }
+      }).catch(error => console.warn('ArchiveBox: capture delivery failed:', errorMessage(error)));
+    }
     if (area === 'local' && changes.enable_auto_archive) {
       configureAutoArchiving();
     }
