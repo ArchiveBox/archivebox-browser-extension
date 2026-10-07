@@ -4,6 +4,8 @@ runs:
   using: composite
   steps:
     - uses: astral-sh/setup-uv@v7
+      with:
+        cache-dependency-glob: .github/actions/setup-browser/action.yml
     - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
       with:
         path: ${{ runner.temp }}/extension-abx-lib
