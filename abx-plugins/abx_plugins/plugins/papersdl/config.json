@@ -1,0 +1,39 @@
+{
+  "title": "Academic papers",
+  "description": "Run actual papers-dl 0.0.25 and pdf2doi 1.5.1 in bundled Python/WASM. DOI, arXiv, publisher and PDF URLs use original provider logic; original requests are archived for offline identifier/title inference.",
+  "category": "text",
+  "default_enabled": true,
+  "required_plugins": [
+    "chrome"
+  ],
+  "timeout": 300,
+  "properties": {
+    "PAPERSDL_QUERY": {
+      "type": "string",
+      "default": "",
+      "description": "Optional upstream fetch query: DOI, arXiv identifier, PMID or URL. Empty uses the captured URL with ArchiveBox DOI/arXiv normalization. Upstream errors, including its PMID enum bug, remain explicit."
+    },
+    "PAPERSDL_PROVIDERS": {
+      "type": "string",
+      "default": "all",
+      "description": "Upstream selection: all, arxiv, scidb, scihub or comma-separated provider names/mirrors. Provider discovery and pdf2doi validation/search HTTP responses are archived."
+    },
+    "PAPERSDL_MAX_REQUESTS": {
+      "type": "number",
+      "default": 100,
+      "minimum": 1,
+      "description": "Maximum upstream requests, including PDF identifier/title inference."
+    },
+    "PAPERSDL_MAX_BYTES": {
+      "type": "number",
+      "default": 100000000,
+      "minimum": 1,
+      "description": "Maximum original response bytes acquired by papers-dl."
+    },
+    "PAPERSDL_USER_AGENT": {
+      "type": "string",
+      "default": "",
+      "description": "Optional upstream fetch --user-agent value for provider requests."
+    }
+  }
+}

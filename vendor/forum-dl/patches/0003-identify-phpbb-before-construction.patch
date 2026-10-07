@@ -1,0 +1,18 @@
+--- a/forum_dl/extractors/phpbb.py
++++ b/forum_dl/extractors/phpbb.py
+@@ -216,9 +216,14 @@
+             should_retry=False,
+         )
+ 
+-        # A rather crude way to detect: we look for a <html> tag with "dir" attribute.
++        # Directionality alone also matches unrelated sites and their 404 pages.
++        # Confirm phpBB before constructing an extractor that resolves its root.
+         soup = Soup(response.text)
+         soup.find("html", attrs={"dir": True})
++        if not soup.try_find("body", id="phpbb"):
++            soup.find("a", attrs={"href": re.compile(
++                r"^https?://(?:www\.)?phpbb\.com(?:/|$)"
++            )})
+ 
+         return PhpbbExtractor(
+             session,

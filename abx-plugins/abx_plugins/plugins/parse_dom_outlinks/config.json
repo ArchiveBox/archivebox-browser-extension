@@ -1,0 +1,1 @@
+{"title":"DOM links","description":"Categorize links, media, scripts, stylesheets, frames, forms, and inline CSS URLs from the archived DOM.","category":"links","default_enabled":true,"required_plugins":["dom"]}

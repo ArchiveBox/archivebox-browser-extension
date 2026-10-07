@@ -1,0 +1,57 @@
+{
+  "title": "LiteParse",
+  "description": "Save original PDF text/layout and image/scanned-PDF OCR during capture with LiteParse WASM and PaddleOCR. Office conversion is not available.",
+  "category": "text",
+  "default_enabled": true,
+  "required_plugins": ["chrome"],
+  "wait_for_background_cleanup": true,
+  "timeout": 180,
+  "properties": {
+    "LITEPARSE_OCR_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "description": "Run bundled PaddleOCR on original images and PDF regions selected by LiteParse. No cloud service or model download is used."
+    },
+    "LITEPARSE_TIMEOUT": {
+      "type": "integer",
+      "default": 180,
+      "minimum": 10,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for LiteParse extraction in seconds"
+    },
+    "LITEPARSE_MAX_PAGES": {
+      "type": "integer",
+      "default": 1000,
+      "minimum": 1,
+      "description": "Maximum pages to parse per document"
+    },
+    "LITEPARSE_TARGET_PAGES": {
+      "type": "string",
+      "default": "",
+      "description": "Page range to parse, e.g. '1-5,10,15-20'. Empty means all pages."
+    },
+    "LITEPARSE_DPI": {
+      "type": "integer",
+      "default": 150,
+      "minimum": 50,
+      "description": "Rendering DPI used when rasterising pages for OCR / images"
+    },
+    "LITEPARSE_PASSWORD": {
+      "type": "string",
+      "default": "",
+      "description": "Password for encrypted PDFs"
+    },
+    "LITEPARSE_MIN_IMAGE_DIMENSION": {
+      "type": "integer",
+      "default": 128,
+      "minimum": 0,
+      "description": "Skip image files (PNG/JPG/etc.) smaller than this many pixels in both width AND height. Avoids wasting OCR time on favicons, sprite thumbnails, and tracking pixels. Set to 0 to disable filtering."
+    },
+    "LITEPARSE_MAX_SOURCES": {
+      "type": "integer",
+      "default": 100,
+      "minimum": 0,
+      "description": "Hard cap on number of documents to process per snapshot, applied after size-desc sort so the largest files always make it. Set to 0 for no cap."
+    }
+  }
+}

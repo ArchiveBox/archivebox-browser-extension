@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Discovered URLs</title>
+<style>
+:root{color-scheme:light;--ink:#202b36;--muted:#64748b;--line:#e2e6eb;--accent:#446b97;--paper:#fff;--bg:#f5f6f8;--soft:#eef3f8}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,sans-serif}header{display:flex;align-items:center;gap:16px;padding:12px 20px;background:var(--paper);border-bottom:1px solid var(--line)}h1{font-size:17px;margin:0;font-weight:650}nav{display:flex;gap:6px;margin-left:auto}nav a,button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);padding:6px 9px;text-decoration:none;font:inherit;cursor:pointer}nav a:hover,button:hover{background:var(--soft)}main{max-width:1100px;margin:0 auto;padding:20px}.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}.stats{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.badge{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:5px;background:var(--soft);padding:3px 8px;font-size:12px;color:#475569}.muted{color:var(--muted)}.filter{width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 10px;font:inherit;margin-bottom:12px}.rows{display:grid;gap:8px}.row{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px 12px}.number{color:var(--muted);font:12px ui-monospace,SFMono-Regular,monospace;padding-top:2px;text-align:center}.url{display:block;color:var(--accent);font-weight:600;overflow-wrap:anywhere;text-decoration:none}.url:hover{text-decoration:underline}.title{font-weight:600;overflow-wrap:anywhere}.meta{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}.meta .badge{font-size:11px;padding:2px 6px;max-width:100%;overflow-wrap:anywhere}.empty{color:var(--muted);padding:18px;text-align:center}@media(max-width:600px){header{padding:10px 12px}main{padding:12px}.panel{padding:12px}nav .label{display:none}}
+</style></head><body>
+<header><h1>{{ plugin_icon }} Discovered URLs</h1><nav aria-label="Output actions"><a id="files" title="View all files" aria-label="View all files">📁<span class="label">View all files</span></a><a id="download" download title="Download" aria-label="Download">⤓<span class="label">Download</span></a><a id="raw" title="View raw" aria-label="View raw">&lt;/&gt;<span class="label">View raw</span></a></nav></header>
+<main id="content"></main>
+<script>
+(() => {
+  const output = new URL('{{ output_path|escapejs }}', location.href);
+  output.search = ''; output.hash = '';
+  const folder = new URL('./', output);
+  document.getElementById('files').href = folder.href + '?files=1';
+  document.getElementById('download').href = output.href;
+  document.getElementById('raw').href = output.href + '?preview=1&raw=1';
+
+  const el = (tag, text, cls) => { const node = document.createElement(tag); if (text != null) node.textContent = String(text); if (cls) node.className = cls; return node; };
+  const safeLink = (value, label) => {
+    const a = el('a', label || value, 'url');
+    try {
+      const u = new URL(String(value));
+      if (['https:', 'http:'].includes(u.protocol)) { a.href = u.href; a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+    } catch {}
+    return a;
+  };
+  const valueText = (value) => Array.isArray(value) ? value.join(', ') : value;;
+  const content = document.getElementById('content');
+
+  fetch(output).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(text => {
+    const rows = text.split(/\r?\n/).map(line => { try { const value = JSON.parse(line); return value && typeof value === 'object' && typeof value.url === 'string' ? value : null; } catch { return null; } }).filter(Boolean);
+
+    const stats = el('section', null, 'panel stats');
+    stats.append(el('span', '🔗 ' + rows.length + ' URL' + (rows.length === 1 ? '' : 's'), 'badge'));
+    const depths = [...new Set(rows.map(row => row.depth).filter(value => value != null))];
+    if (depths.length) stats.append(el('span', '↳ depth ' + depths.join(', '), 'badge'));
+    const plugins = [...new Set(rows.map(row => row.plugin).filter(Boolean))];
+    if (plugins.length) stats.append(el('span', '⚙ ' + plugins.join(', '), 'badge'));
+    content.append(stats);
+
+    const panel = el('section', null, 'panel');
+    const filter = el('input'); filter.className = 'filter'; filter.type = 'search'; filter.placeholder = 'Filter URLs, titles, or tags…'; filter.setAttribute('aria-label', 'Filter discovered URLs');
+    const list = el('div', null, 'rows'); panel.append(filter, list); content.append(panel);
+    const render = () => {
+      const needle = filter.value.trim().toLowerCase();
+      list.replaceChildren();
+      let shown = 0;
+      rows.forEach((row, index) => {
+        const searchable = JSON.stringify(row).toLowerCase();
+        if (needle && !searchable.includes(needle)) return;
+        const article = el('article', null, 'row');
+        article.append(el('div', String(index + 1).padStart(2, '0'), 'number'));
+        const body = el('div');
+        const label = row.title || row.name || row.description;
+        if (label) body.append(el('div', label, 'title'));
+        body.append(safeLink(row.url, row.url));
+        const meta = el('div', null, 'meta');
+        [['tags','🏷 '],['bookmarked_at','🕒 '],['timestamp','🕒 '],['depth','↳ depth '],['plugin','⚙ '],['type','◌ '],['source','◌ '],['source_url','◌ ']].forEach(([key, icon]) => {
+          if (row[key] == null || row[key] === '') return;
+          meta.append(el('span', icon + valueText(row[key]), 'badge'));
+        });
+        if (meta.childElementCount) body.append(meta);
+        article.append(body); list.append(article); shown += 1;
+      });
+      if (!shown) list.append(el('div', 'No matching URLs', 'empty'));
+    };
+    filter.addEventListener('input', render); render();
+  }).catch(error => { content.append(el('section', 'Unable to read urls.jsonl: ' + error.message, 'panel'));
+  });
+})();
+</script><style>.row>div:last-child{min-width:0}.meta{min-width:0}.meta .badge{min-width:0}.filter{min-height:40px}@media(max-width:600px){nav a,button,.filter{min-height:40px}}</style></body></html>

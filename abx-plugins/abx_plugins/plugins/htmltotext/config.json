@@ -1,0 +1,1 @@
+{"title":"Plain text","description":"Read document text with paragraph, list, heading, and table boundaries.","category":"content","default_enabled":true,"required_plugins":["dom"]}

@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Favicon",
+  "description": "Fetch and save the site favicon or touch icon.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "image/",
+    "image/x-icon"
+  ],
+  "properties": {
+    "FAVICON_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_FAVICON",
+        "USE_FAVICON"
+      ],
+      "description": "Enable favicon downloading"
+    },
+    "FAVICON_TIMEOUT": {
+      "type": "integer",
+      "default": 30,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for favicon fetch in seconds"
+    },
+    "FAVICON_PROVIDER": {
+      "type": "string",
+      "default": "https://www.google.com/s2/favicons?domain={}&format=ico",
+      "description": "Fallback favicon provider when not found via chrome tab. {} will be replaced with the domain."
+    }
+  },
+  "category": "metadata",
+  "display_order": 20,
+  "snapshot_output_group": "metadata",
+  "default_output_path": "favicon.ico",
+  "snapshot_list_icon": true,
+  "card_hidden": true,
+  "snapshot_thumbnail_cards": [
+    {"archive_result_name": "favicon", "order": 5}
+  ]
+}

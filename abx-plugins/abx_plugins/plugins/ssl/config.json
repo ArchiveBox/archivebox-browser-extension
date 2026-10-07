@@ -1,0 +1,9 @@
+{
+  "title": "Connection security",
+  "description": "Inspect connection security from the saved certificate evidence.",
+  "category": "view",
+  "default_enabled": true,
+  "required_plugins": [
+    "sslcerts"
+  ]
+}

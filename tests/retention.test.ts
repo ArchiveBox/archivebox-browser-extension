@@ -23,10 +23,10 @@ test('local retention defaults to 30 days and persists every choice', async ({},
     const page = await context.newPage();
     await page.goto(`chrome-extension://${id}/options.html`);
     await page.getByRole('button', { name: 'Configuration', exact: true }).click();
-    await expect(page.getByLabel('Save viewport screenshots locally', { exact: true })).toBeChecked();
-    await expect(page.getByLabel('Save full-page screenshots locally', { exact: true })).not.toBeChecked();
-    await expect(page.getByLabel('Save MHTML snapshots locally', { exact: true })).toBeChecked();
-    const retention = page.getByLabel('After saving on server, remove local copies after:');
+    await expect(page.getByRole('heading', {name:'Local archiving',exact:true})).toBeVisible();
+    await expect(page.getByText('Server Sync uploads each completed WACZ with all its capture records and outputs. Local WACZ files remain available until you delete them.', {exact:true})).toBeVisible();
+    await expect(page.getByLabel('Save MHTML snapshots locally', {exact:true})).toHaveCount(0);
+    const retention = page.getByLabel('After saving on server, remove legacy local copies after:');
     await expect(retention).toHaveValue('2592000000');
     await expect(retention.locator('option')).toHaveText(['1 minute', '1 day', '30 days', '90 days', 'never']);
     for (const value of ['60000', '86400000', '7776000000', 'never', '2592000000']) {
@@ -63,13 +63,6 @@ test('local retention defaults to 30 days and persists every choice', async ({},
       const { server_registry } = await api.storage.local.get('server_registry');
       return (server_registry as ServerRegistry | undefined)?.servers[0]?.server;
     })).toBe('http://127.0.0.1:18764');
-    await expect(page.getByLabel('Upload viewport screenshots to server', { exact: true })).toBeChecked();
-    await expect(page.getByLabel('Upload full-page screenshots to server', { exact: true })).not.toBeChecked();
-    await expect(page.getByLabel('Upload MHTML snapshots to server', { exact: true })).toBeChecked();
-    await page.getByLabel('Save viewport screenshots locally', { exact: true }).uncheck();
-    await page.reload();
-    await page.getByRole('button', { name: 'Configuration', exact: true }).click();
-    await expect(page.getByLabel('Save viewport screenshots locally', { exact: true })).not.toBeChecked();
     await page.reload();
     await expect(page.locator('.saved-url-table tbody tr')).toHaveCount(1);
     await page.getByRole('checkbox', { name: 'Select all visible URLs' }).check();

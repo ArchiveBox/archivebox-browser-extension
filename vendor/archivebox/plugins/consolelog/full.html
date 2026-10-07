@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Console Log</title>
+<style>
+:root{color-scheme:dark;--ink:#e8eaed;--muted:#9aa0a6;--line:#3c4043;--bg:#202124;--panel:#292a2d;--hover:#303134;--blue:#8ab4f8;--red:#f28b82;--yellow:#fdd663;--green:#81c995}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.45 system-ui,-apple-system,sans-serif}header{display:flex;align-items:center;gap:16px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}h1{font-size:16px;margin:0;font-weight:600}nav{display:flex;gap:6px;margin-left:auto}nav a,button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);border-radius:5px;background:var(--panel);color:var(--ink);padding:5px 8px;text-decoration:none;font:inherit;cursor:pointer}nav a:hover,button:hover{background:var(--hover)}main{max-width:1200px;margin:0 auto;padding:16px}.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.filter,.level-filter{border:1px solid var(--line);border-radius:5px;background:#1b1b1b;color:var(--ink);padding:7px 9px;font:inherit}.filter{flex:1;min-width:180px}.stats{display:flex;gap:6px;flex-wrap:wrap}.badge{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:5px;background:var(--panel);padding:3px 7px;font-size:11px;color:var(--muted)}.badge.error{color:var(--red);border-color:#754d4a}.badge.warn{color:var(--yellow);border-color:#74663d}.badge.info{color:var(--blue);border-color:#4d6585}.logs{border:1px solid var(--line);border-radius:7px;overflow:hidden;background:#1b1b1b}.log-row{display:grid;grid-template-columns:22px 78px minmax(0,1fr);gap:9px;padding:8px 10px;border-bottom:1px solid #303134}.log-row:last-child{border-bottom:0}.log-row:hover{background:var(--hover)}.icon{font-size:13px;text-align:center}.log-row.error .icon,.log-row.error .message{color:var(--red)}.log-row.warn .icon,.log-row.warn .message{color:var(--yellow)}.time{color:var(--muted);font:11px ui-monospace,SFMono-Regular,monospace;padding-top:2px}.message{white-space:pre-wrap;overflow-wrap:anywhere}.meta{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:5px}.source{color:var(--blue);font:11px ui-monospace,SFMono-Regular,monospace;overflow-wrap:anywhere}.args{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}.arg{margin:0;max-width:100%;border:1px solid var(--line);border-radius:4px;background:#242528;padding:4px 6px;color:#d7d9dc;font:11px/1.4 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap;overflow-wrap:anywhere}.arg summary{cursor:pointer;color:var(--blue)}.stack{margin-top:7px;border-left:2px solid var(--red);padding-left:8px}.stack summary{cursor:pointer;color:var(--muted);font-size:11px}.stack pre{margin:5px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;color:#c6c8ca;font:11px/1.4 ui-monospace,SFMono-Regular,monospace}.empty{padding:22px;text-align:center;color:var(--muted)}@media(max-width:600px){header{padding:9px 12px}main{padding:10px}.log-row{grid-template-columns:18px 66px minmax(0,1fr);gap:6px}}
+</style></head><body>
+<header><h1>{{ plugin_icon }} Console</h1><nav aria-label="Output actions"><a id="files" title="View all files" aria-label="View all files">📁<span class="label">View all files</span></a><a id="download" download title="Download" aria-label="Download">⤓<span class="label">Download</span></a><a id="raw" title="View raw" aria-label="View raw">&lt;/&gt;<span class="label">View raw</span></a></nav></header>
+<main id="content"></main>
+<script>
+(() => {
+  const output = new URL('{{ output_path|escapejs }}', location.href);
+  output.search = ''; output.hash = '';
+  const folder = new URL('./', output);
+  document.getElementById('files').href = folder.href + '?files=1';
+  document.getElementById('download').href = output.href;
+  document.getElementById('raw').href = output.href + '?preview=1&raw=1';
+
+  const el = (tag, text, cls) => { const node = document.createElement(tag); if (text != null) node.textContent = String(text); if (cls) node.className = cls; return node; };;
+  const content = document.getElementById('content');
+  const normalizeLevel = row => {
+    const type = String(row.type || '').toLowerCase();
+    if (['error','assert','pageerror','request_failed'].includes(type)) return 'error';
+    if (['warning','warn'].includes(type)) return 'warn';
+    if (['log','info','debug','dir','table','trace','clear','count','startgroup','endgroup'].includes(type)) return 'info';
+    return 'other';
+  };
+  const iconFor = level => level === 'error' ? '✕' : level === 'warn' ? '⚠' : level === 'info' ? '›' : '·';
+  const formatTime = value => {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleTimeString([], {hour12:false});
+  };
+  const formatValue = value => {
+    if (value === null) return 'null';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'undefined') return 'undefined';
+    try { return JSON.stringify(value); } catch { return String(value); }
+  };
+  const appendValue = (parent, value) => {
+    if (value && typeof value === 'object') {
+      const details = document.createElement('details'); details.className = 'arg';
+      details.append(el('summary', formatValue(value).slice(0, 160)));
+      const pre = el('pre', '');
+      try { pre.textContent = JSON.stringify(value, null, 2); } catch { pre.textContent = String(value); }
+      details.append(pre); parent.append(details);
+    } else parent.append(el('code', formatValue(value), 'arg'));
+  };
+  const sourceText = row => {
+    const loc = row.location && typeof row.location === 'object' ? row.location : {};
+    const source = loc.url || row.url || '';
+    if (!source) return '';
+    const line = loc.lineNumber == null ? '' : ':' + (Number(loc.lineNumber) + 1);
+    const column = loc.columnNumber == null ? '' : ':' + (Number(loc.columnNumber) + 1);
+    return source + line + column;
+  };
+  const counts = rows => rows.reduce((out, row) => { const level = normalizeLevel(row); out[level] = (out[level] || 0) + 1; return out; }, {});
+  fetch(output).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(text => {
+    const rows = text.split(/\r?\n/).map(line => { try { const value = JSON.parse(line); return value && typeof value === 'object' ? value : null; } catch { return null; } }).filter(Boolean);
+    const tally = counts(rows);
+
+    const toolbar = el('div', null, 'toolbar');
+    const filter = el('input'); filter.className = 'filter'; filter.type = 'search'; filter.placeholder = 'Filter messages, URLs, or stacks…'; filter.setAttribute('aria-label', 'Filter console messages');
+    const levelFilter = el('select'); levelFilter.className = 'level-filter'; levelFilter.setAttribute('aria-label', 'Filter console level');
+    [['all','All levels'],['error','Errors'],['warn','Warnings'],['info','Info'],['other','Other']].forEach(([value,label]) => { const option = el('option', label); option.value = value; levelFilter.append(option); });
+    toolbar.append(filter, levelFilter);
+    const stats = el('div', null, 'stats');
+    [['error','✕ '],['warn','⚠ '],['info','› '],['other','· ']].forEach(([level, icon]) => { if (tally[level]) stats.append(el('span', icon + tally[level] + ' ' + level, 'badge ' + level)); });
+    content.append(toolbar, stats, el('div', null, 'logs'));
+    const logs = content.querySelector('.logs');
+    const render = () => {
+      const needle = filter.value.trim().toLowerCase();
+      const wanted = levelFilter.value;
+      logs.replaceChildren();
+      let shown = 0;
+      rows.forEach(row => {
+        const level = normalizeLevel(row);
+        if (wanted !== 'all' && wanted !== level) return;
+        if (needle && !JSON.stringify(row).toLowerCase().includes(needle)) return;
+        const line = el('article', null, 'log-row ' + level);
+        line.append(el('div', iconFor(level), 'icon'), el('div', formatTime(row.timestamp), 'time'));
+        const body = el('div');
+        body.append(el('div', row.text || row.message || row.error || '(empty)', 'message'));
+        const meta = el('div', null, 'meta');
+        if (row.type) meta.append(el('span', String(row.type), 'badge ' + level));
+        const source = sourceText(row); if (source) meta.append(el('span', source, 'source'));
+        if (row.error && row.text) meta.append(el('span', row.error, 'badge error'));
+        if (meta.childElementCount) body.append(meta);
+        if (Array.isArray(row.args) && row.args.length) { const args = el('div', null, 'args'); row.args.forEach(value => appendValue(args, value)); body.append(args); }
+        if (row.stack) { const details = document.createElement('details'); details.className = 'stack'; details.append(el('summary', '↳ Stack trace')); details.append(el('pre', row.stack)); body.append(details); }
+        line.append(body); logs.append(line); shown += 1;
+      });
+      if (!shown) logs.append(el('div', 'No matching console messages', 'empty'));
+    };
+    filter.addEventListener('input', render); levelFilter.addEventListener('change', render); render();
+  }).catch(error => { content.append(el('section', 'Unable to read console.jsonl: ' + error.message, 'empty'));
+  });
+})();
+</script><style>.log-row>div:last-child{min-width:0}.log-row[hidden]{display:none}.arg{min-width:0;overflow-wrap:anywhere}.filter,.level-filter{min-height:40px}@media(max-width:600px){header{gap:8px}nav .label{display:none}nav a,button,.filter,.level-filter{min-height:40px}.toolbar{align-items:stretch}.filter,.level-filter{width:100%;min-width:0}}</style></body></html>

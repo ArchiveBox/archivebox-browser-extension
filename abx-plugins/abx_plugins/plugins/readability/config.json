@@ -1,0 +1,1 @@
+{"title":"Readability","description":"Extract the main article from the archived DOM with Mozilla Readability.","category":"content","default_enabled":true,"required_plugins":["dom"]}

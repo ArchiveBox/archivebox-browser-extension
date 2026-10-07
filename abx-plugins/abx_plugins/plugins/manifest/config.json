@@ -1,0 +1,1 @@
+{"title":"Web manifest","description":"Preserve up to four discovered web app manifests and inspect application metadata.","category":"metadata","default_enabled":true,"required_plugins":["dom"],"timeout":30}

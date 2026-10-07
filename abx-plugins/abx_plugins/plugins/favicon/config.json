@@ -1,0 +1,1 @@
+{"title":"Favicons","description":"Fetch discovered icons into the same HTTP archive.","category":"supplement","default_enabled":true,"required_plugins":["chrome"],"timeout":30}

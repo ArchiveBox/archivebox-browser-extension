@@ -1,0 +1,18 @@
+{
+  "title": "Browser Behaviors",
+  "description": "All upstream Browsertrix behaviors: site-specific capture, autoscroll, autoclick, autoplay and shared-recorder autofetch.",
+  "category": "page_setup",
+  "default_enabled": true,
+  "required_plugins": [
+    "chrome"
+  ],
+  "timeout": 120,
+  "shutdown_grace": 5,
+  "properties": {
+    "BROWSERTRIX_BEHAVIOR_SECONDS": {
+      "type": "number",
+      "default": 30,
+      "minimum": 1
+    }
+  }
+}

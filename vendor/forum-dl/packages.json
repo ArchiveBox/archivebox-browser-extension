@@ -1,0 +1,80 @@
+[
+  {
+    "filename": "lxml-6.0.2-cp313-cp313-pyodide_2025_0_wasm32.whl",
+    "sha256": "99b959a55eaeb41a2997fa022859892880c2b708af01ff336c34c7b125c80916",
+    "loader": "pyodide",
+    "url": "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/lxml-6.0.2-cp313-cp313-pyodide_2025_0_wasm32.whl"
+  },
+  {
+    "filename": "regex-2024.11.6-cp313-cp313-pyodide_2025_0_wasm32.whl",
+    "sha256": "0400d660e4f9f6359b7a98077bdc46b34b705b38f0f6c96a3053c8b5703caeed",
+    "loader": "pyodide",
+    "url": "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/regex-2024.11.6-cp313-cp313-pyodide_2025_0_wasm32.whl"
+  },
+  {
+    "filename": "soupsieve-2.6-py3-none-any.whl",
+    "sha256": "7e7e36183777bcbc525ee458fa8c39853615b7a94d80c38b944e5824bdaf5a78",
+    "loader": "pyodide",
+    "url": "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/soupsieve-2.6-py3-none-any.whl"
+  },
+  {
+    "filename": "typing_extensions-4.15.0-py3-none-any.whl",
+    "sha256": "b57583f623dd3df72e6ace8a4061c3e4f0683755165ef73b4cd44ac3df92ddb9",
+    "loader": "pyodide",
+    "url": "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/typing_extensions-4.15.0-py3-none-any.whl"
+  },
+  {
+    "filename": "beautifulsoup4-4.13.3-py3-none-any.whl",
+    "sha256": "3b401669e1cf50a15a6fc5de272009f581f8a16180a7e5596dbdafec97472b88",
+    "loader": "pyodide",
+    "url": "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/beautifulsoup4-4.13.3-py3-none-any.whl"
+  },
+  {
+    "filename": "six-1.17.0-py2.py3-none-any.whl",
+    "sha256": "1f715fc699e802b31e53290ead6c16a4d6a8da462a225d2e06097fce45ab70b9",
+    "loader": "pyodide",
+    "url": "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/six-1.17.0-py2.py3-none-any.whl"
+  },
+  {
+    "filename": "python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+    "sha256": "ddca13fc1046572701872b9517622b57f847c77eea4bf9fdc995256e6c82beaf",
+    "loader": "pyodide",
+    "url": "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/python_dateutil-2.9.0.post0-py2.py3-none-any.whl"
+  },
+  {
+    "filename": "pytz-2025.2-py2.py3-none-any.whl",
+    "sha256": "5a9c9286f6c03a4d16ee4ced15d511097568e1e41329d3499b597ecd7f1d317e",
+    "loader": "pyodide",
+    "url": "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/pytz-2025.2-py2.py3-none-any.whl"
+  },
+  {
+    "filename": "pydantic-1.10.26-py3-none-any.whl",
+    "sha256": "c43ad70dc3ce7787543d563792426a16fd7895e14be4b194b5665e36459dd917",
+    "loader": "wheel",
+    "url": "https://files.pythonhosted.org/packages/1f/98/556e82f00b98486def0b8af85da95e69d2be7e367cf2431408e108bc3095/pydantic-1.10.26-py3-none-any.whl"
+  },
+  {
+    "filename": "tenacity-9.1.4-py3-none-any.whl",
+    "sha256": "6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55",
+    "loader": "wheel",
+    "url": "https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl"
+  },
+  {
+    "filename": "dateparser-1.2.2-py3-none-any.whl",
+    "sha256": "5a5d7211a09013499867547023a2a0c91d5a27d15dd4dbcea676ea9fe66f2482",
+    "loader": "wheel",
+    "url": "https://files.pythonhosted.org/packages/87/22/f020c047ae1346613db9322638186468238bcfa8849b4668a22b97faad65/dateparser-1.2.2-py3-none-any.whl"
+  },
+  {
+    "filename": "tzlocal-5.3.1-py3-none-any.whl",
+    "sha256": "eb1a66c3ef5847adf7a834f1be0800581b683b5608e74f86ecbcef8ab91bb85d",
+    "loader": "wheel",
+    "url": "https://files.pythonhosted.org/packages/c2/14/e2a54fabd4f08cd7af1c07030603c3356b74da07f7cc056e600436edfa17/tzlocal-5.3.1-py3-none-any.whl"
+  },
+  {
+    "filename": "html2text-2025.4.15-py3-none-any.whl",
+    "sha256": "00569167ffdab3d7767a4cdf589b7f57e777a5ed28d12907d8c58769ec734acc",
+    "loader": "wheel",
+    "url": "https://files.pythonhosted.org/packages/1d/84/1a0f9555fd5f2b1c924ff932d99b40a0f8a6b12f6dd625e2a47f415b00ea/html2text-2025.4.15-py3-none-any.whl"
+  }
+]

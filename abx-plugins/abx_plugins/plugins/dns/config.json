@@ -1,0 +1,1 @@
+{"title":"DNS and connections","description":"Derive observed host/IP mappings from response metadata; retain DNS failures that have no response.","category":"evidence","default_enabled":true,"required_plugins":["chrome"],"timeout":300,"shutdown_grace":10}

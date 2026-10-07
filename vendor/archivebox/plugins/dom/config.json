@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DOM",
+  "description": "Save the fully rendered DOM HTML from the live page.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "chrome"
+  ],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "text/html"
+  ],
+  "properties": {
+    "DOM_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_DOM",
+        "USE_DOM"
+      ],
+      "description": "Enable DOM capture"
+    },
+    "DOM_TIMEOUT": {
+      "type": "integer",
+      "default": 60,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for DOM capture in seconds"
+    }
+  },
+  "category": "main",
+  "display_order": 10,
+  "snapshot_output_group": "html",
+  "snapshot_output_order": 4
+}

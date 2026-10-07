@@ -1,0 +1,1 @@
+{"title":"Console","description":"Observe original console messages and exceptions until polite shutdown.","category":"capture","default_enabled":true,"required_plugins":["chrome"],"timeout":180,"shutdown_grace":5}

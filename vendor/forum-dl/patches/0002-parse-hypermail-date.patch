@@ -1,0 +1,18 @@
+--- a/forum_dl/extractors/hypermail.py
++++ b/forum_dl/extractors/hypermail.py
+@@ -6,6 +6,7 @@
+ from urllib.parse import urljoin, urlparse, urlunparse
+ from itertools import islice
+ import bs4
++import dateparser
+ import re
+ 
+ from .common import normalize_url, regex_match
+@@ -224,6 +225,6 @@
+             origin=response.url,
+             data={},
+             author=author_meta.get("content"),
+-            creation_time=date_meta.get("content"),
++            creation_time=dateparser.parse(date_meta.get("content")),
+             content="".join(str(v) for v in islice(address.next_siblings, 1, None)),
+         )

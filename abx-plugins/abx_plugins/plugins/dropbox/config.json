@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Dropbox",
+  "description": "Save Dropbox shared folders with the built-in ZIP download using the existing Chrome session.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "chrome"
+  ],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "application/json",
+    "application/octet-stream"
+  ],
+  "properties": {
+    "DROPBOX_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_DROPBOX",
+        "USE_DROPBOX"
+      ],
+      "description": "Download Dropbox shares"
+    },
+    "DROPBOX_TIMEOUT": {
+      "type": "integer",
+      "default": 120,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Total timeout for provider ZIP preparation and download in seconds"
+    }
+  },
+  "category": "media",
+  "display_order": 102,
+  "snapshot_output_group": "embedded_media",
+  "default_output_path": "downloads.json",
+  "screenshot": "screenshot.json",
+  "default_enabled": true,
+  "timeout": 140,
+  "shutdown_grace": 5
+}

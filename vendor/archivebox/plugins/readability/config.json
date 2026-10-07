@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Readability",
+  "description": "Extract article HTML, text, and metadata using Mozilla Readability.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "dom",
+    "responses"
+  ],
+  "wait_for_plugins": [],
+  "required_binaries": [
+    {
+      "name": "{READABILITY_BINARY}",
+      "binproviders": "env,pnpm",
+      "min_version": null,
+      "overrides": {
+        "pnpm": {
+          "install_root": "{ABXPKG_LIB_DIR}/pnpm/packages/readability",
+          "install_args": [
+            "readability-extractor"
+          ]
+        }
+      }
+    }
+  ],
+  "output_mimetypes": [
+    "text/html",
+    "text/plain",
+    "application/json"
+  ],
+  "properties": {
+    "READABILITY_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_READABILITY",
+        "USE_READABILITY"
+      ],
+      "description": "Enable Readability text extraction"
+    },
+    "READABILITY_BINARY": {
+      "type": "string",
+      "default": "readability-extractor",
+      "description": "Path to readability-extractor binary"
+    },
+    "READABILITY_TIMEOUT": {
+      "type": "integer",
+      "default": 30,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for Readability in seconds"
+    },
+    "READABILITY_ARGS": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "x-aliases": [
+        "READABILITY_DEFAULT_ARGS"
+      ],
+      "description": "Default Readability arguments"
+    },
+    "READABILITY_ARGS_EXTRA": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "x-aliases": [
+        "READABILITY_EXTRA_ARGS"
+      ],
+      "description": "Extra arguments to append to Readability command"
+    }
+  },
+  "category": "text",
+  "display_order": 10,
+  "snapshot_output_group": "article_text",
+  "snapshot_output_order": 0,
+  "snapshot_display_name": "Readability"
+}

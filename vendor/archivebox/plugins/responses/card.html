@@ -1,0 +1,171 @@
+{% load core_tags %}
+{% snapshot_preview_url snapshot 'responses/index.jsonl' as responses_index_url %}
+<div class="responses-thumbnail" aria-label="Captured documents and images" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));gap:3px;width:100%;height:100%;overflow:hidden;background:#f5f6f8;">
+{% for path, info in result.output_files.items %}
+    {% if info.mimetype == 'application/pdf' or info.extension == 'pdf' or 'officedocument' in info.mimetype or 'opendocument' in info.mimetype or info.mimetype == 'application/epub+zip' or info.mimetype == 'application/msword' or info.mimetype == 'application/vnd.ms-excel' or info.mimetype == 'application/vnd.ms-powerpoint' or info.mimetype == 'text/markdown' or info.mimetype == 'text/x-markdown' or info.extension == 'epub' or info.extension == 'doc' or info.extension == 'docx' or info.extension == 'ppt' or info.extension == 'pptx' or info.extension == 'xls' or info.extension == 'xlsx' or info.extension == 'odt' or info.extension == 'ods' or info.extension == 'odp' or info.extension == 'rtf' or info.extension == 'md' or info.extension == 'markdown' %}
+        {% if path|slice:':4' == 'all/' or path|slice:':14' == 'responses/all/' %}
+            <span title="{{ path }}" aria-label="Document: {{ path }}" data-name="{{ path }}" data-size="{{ info.size|default:0 }}" style="display:flex;align-items:center;justify-content:center;gap:3px;min-width:0;min-height:0;overflow:hidden;background:white;font:10px system-ui;"><span style="font-size:24px;">📄</span>{{ info.extension|upper }}</span>
+        {% endif %}
+    {% endif %}
+{% endfor %}
+{% for path, info in result.output_files.items %}
+    {% if info.mimetype|slice:':6' == 'image/' %}
+        {% if path|slice:':4' == 'all/' or path|slice:':14' == 'responses/all/' %}
+            {% with image_path='responses/'|add:path %}
+                {% if info.root_relative %}
+                    {% snapshot_preview_url snapshot path as image_url %}
+                {% else %}
+                    {% snapshot_preview_url snapshot image_path as image_url %}
+                {% endif %}
+                <img src="{{ image_url|cut:"?preview=1" }}?raw=1" alt="{{ path }}" loading="lazy" decoding="async" fetchpriority="low" data-name="{{ path }}" data-size="{{ info.size|default:0 }}" style="display:block;width:100%;height:100%;min-width:0;min-height:0;object-fit:contain;background:white;">
+            {% endwith %}
+        {% endif %}
+    {% endif %}
+{% endfor %}
+</div>
+<div class="responses-summary" style="padding:12px;font:12px system-ui;color:#475569;">
+    <strong>Captured responses</strong>
+    <div>No document or image thumbnails</div>
+</div>
+<script>
+(() => {
+    const summary = document.currentScript.previousElementSibling;
+    const grid = summary.previousElementSibling;
+    const fallbackItems = Array.from(grid.children);
+    const showItems = items => {
+        grid.replaceChildren(...items);
+        grid.style.display = items.length ? 'grid' : 'none';
+        summary.hidden = items.length > 0;
+    };
+    showItems(fallbackItems);
+    const normalizePath = path => path.replace(/^\.\//, '').replace(/^responses\//, '');
+    const captureKey = path => normalizePath(path).replace(/^all\/\d{8}T\d{6}__[^_]+__/, '');
+    const infoFor = (path, metadata) => metadata.get(normalizePath(path)) || metadata.get(captureKey(path));
+    const sourceName = (path, info) => {
+        try { return new URL(info?.url).pathname.split('/').pop(); }
+        catch { return captureKey(path); }
+    };
+    const render = (metadata, orderedSources = []) => {
+        const seen = new Set();
+        const selected = [];
+        const add = (item, info, sourceKey) => {
+            const hash = info?.responseSha256;
+            const url = info?.url || sourceKey || captureKey(item.dataset.name);
+            const keys = [hash, url].filter(Boolean);
+            if (keys.some(key => seen.has(key))) return;
+            keys.forEach(key => seen.add(key));
+            selected.push(item);
+        };
+
+        // LiteParse maps parsed output back to original files by source name
+        // and URL. Render those same originals in that order; response capture
+        // paths can have several timestamped copies of a single URL.
+        if (orderedSources.length) {
+            for (const source of orderedSources.slice(0, 9)) {
+                const info = [...metadata.values()].find(item => item.url === source.url.href);
+                const identity = info?.responseSha256 || source.url.href;
+                if (seen.has(identity)) continue;
+                seen.add(identity);
+                const extension = source.name.split('.').pop();
+                let item;
+                if (source.mime.startsWith('image/') || /\.(png|jpe?g|gif|bmp|tiff?|webp|svg)$/i.test(source.name)) {
+                    item = window.document.createElement('img');
+                    item.src = raw(source.url);
+                    item.alt = source.name;
+                    item.loading = 'lazy';
+                    item.decoding = 'async';
+                    item.style.cssText = 'display:block;width:100%;height:100%;min-width:0;min-height:0;object-fit:contain;background:white;';
+                } else {
+                    item = window.document.createElement('span');
+                    item.title = source.name;
+                    item.setAttribute('aria-label', `Document: ${source.name}`);
+                    item.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:3px;min-width:0;min-height:0;overflow:hidden;background:white;font:10px system-ui;';
+                    item.innerHTML = `<span style="font-size:24px">📄</span>${extension.toUpperCase()}`;
+                }
+                item.dataset.name = source.name;
+                selected.push(item);
+            }
+            showItems(selected);
+            return;
+        }
+
+        // On snapshots without LiteParse, keep the existing size-sorted preview.
+        const fallback = fallbackItems.sort((a, b) => {
+            const aPath = normalizePath(a.dataset.name), bPath = normalizePath(b.dataset.name);
+            const aInfo = infoFor(aPath, metadata), bInfo = infoFor(bPath, metadata);
+            return Number(b.dataset.size) - Number(a.dataset.size)
+                || sourceName(aPath, aInfo).localeCompare(sourceName(bPath, bInfo))
+                || captureKey(aPath).localeCompare(captureKey(bPath));
+        });
+        for (const item of fallback) {
+            if (selected.length >= 9) break;
+            add(item, infoFor(item.dataset.name, metadata));
+        }
+        showItems(selected);
+    };
+    const indexUrl = '{{ responses_index_url|cut:"?preview=1"|escapejs }}?raw=1';
+    const raw = url => { const value = new URL(url); value.searchParams.set('raw', '1'); return value.href; };
+    const snapshotRoot = new URL('../', indexUrl);
+    const safeFile = (path, root) => {
+        if (!path || path.startsWith('/') || path.includes('\\') || /^[a-z]+:/i.test(path)) return null;
+        const parts = path.split('/').filter(part => part && part !== '.');
+        return parts.length && !parts.includes('..') ? new URL(parts.map(encodeURIComponent).join('/'), root) : null;
+    };
+    const sources = [{% for capture in snapshot.archiveresult_set.all %}{% if capture.plugin == 'responses' or capture.plugin == 'staticfile' %}{% for path, info in capture.output_files.items %}{path:'{{ path|escapejs }}',plugin:'{{ capture.plugin|escapejs }}',root:{{ info.root_relative|yesno:'true,false' }},mime:'{{ info.mimetype|escapejs }}',size:{{ info.size|default:0 }}},{% endfor %}{% endif %}{% endfor %}];
+    const originals = new Map();
+    for (const source of sources) {
+        const path = source.path.replace(/^\.\//, '');
+        if (source.plugin === 'responses' && !path.replace(/^responses\//, '').startsWith('all/')) continue;
+        const url = safeFile(source.root ? path : source.plugin + '/' + path, snapshotRoot);
+        if (url) originals.set(url.href, {...source, name: path.split('/').pop(), url});
+    }
+    const sanitized = name => name.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 96) || 'source';
+    const match = (name, hint) => {
+        const values = [...originals.values()];
+        const named = hint ? values.filter(file => file.name === hint) : [];
+        const matches = named.length ? named : values.filter(file => sanitized(file.name) === name);
+        return matches.length === 1 ? matches[0] : null;
+    };
+    const liteparseFiles = [{% for capture in snapshot.archiveresult_set.all %}{% if capture.plugin == 'liteparse' %}{% for path, info in capture.output_files.items %}'{{ path|escapejs }}',{% endfor %}{% endif %}{% endfor %}];
+    const documents = new Map();
+    const pluginRoot = new URL('liteparse/', snapshotRoot);
+    for (const path of liteparseFiles) {
+        const relative = path.replace(/^\.\//, '').replace(/^liteparse\//, '');
+        if (!/\.(txt|json)$/i.test(relative)) continue;
+        const url = safeFile(relative, pluginRoot), name = relative.replace(/\.(txt|json)$/i, '');
+        if (!url) continue;
+        if (!documents.has(name) || /\.txt$/i.test(relative)) documents.set(name, {name, url, json: /\.json$/i.test(relative)});
+    }
+    const orderedDocs = [...documents.values()].sort((a, b) => (Number(match(b.name)?.size) || 0) - (Number(match(a.name)?.size) || 0) || a.name.localeCompare(b.name));
+    const resolveLiteparseOrder = async () => {
+        const orderedSources = [];
+        for (const document of orderedDocs) {
+            try {
+                const response = await fetch(raw(document.url));
+                if (!response.ok) continue;
+                const value = await response.text();
+                const source = value.match(/^\uFEFF?<!-- source: ([^\r\n]+) -->\r?\n/);
+                const original = match(document.name, source?.[1]);
+                if (original) orderedSources.push(original);
+            } catch {}
+        }
+        return orderedSources;
+    };
+    fetch(indexUrl).then(response => {
+        if (!response.ok) throw new Error(`responses index HTTP ${response.status}`);
+        return response.text();
+    }).then(text => {
+        const metadata = new Map();
+        for (const line of text.split('\n')) {
+            try {
+                const item = JSON.parse(line);
+                if (item.path) {
+                    metadata.set(normalizePath(item.path), item);
+                    metadata.set(captureKey(item.path), item);
+                }
+            } catch {}
+        }
+        return resolveLiteparseOrder().then(orderedSources => render(metadata, orderedSources));
+    }).catch(() => render(new Map()));
+})();
+</script>

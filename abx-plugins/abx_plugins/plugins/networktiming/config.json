@@ -1,0 +1,1 @@
+{"title":"Network timing","description":"Derive connection and response timing from the original browser observations stored with WARC responses.","category":"metadata","default_enabled":true,"required_plugins":["chrome"]}

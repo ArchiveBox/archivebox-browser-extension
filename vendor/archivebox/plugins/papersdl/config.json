@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "papers-dl",
+  "description": "Fetch downloadable academic papers from paper URLs and DOI targets.",
+  "screenshot": "screenshot.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [],
+  "required_binaries": [
+    {
+      "name": "{PAPERSDL_BINARY}",
+      "binproviders": "env,uv",
+      "min_version": null,
+      "postinstall_scripts": true,
+      "overrides": {
+        "uv": {
+          "postinstall_scripts": true,
+          "install_root": "{ABXPKG_LIB_DIR}/uv/packages/papers-dl",
+          "install_args": [
+            "--no-deps",
+            "--only-binary=PyMuPDF",
+            "papers-dl==0.0.25",
+            "aiohttp>=3.13.2",
+            "aiohappyeyeballs>=2.5.0",
+            "aiosignal>=1.4.0",
+            "attrs>=17.3.0",
+            "frozenlist>=1.1.1",
+            "multidict>=4.5,<7.0",
+            "propcache>=0.2.0",
+            "typing-extensions>=4.12.2",
+            "yarl>=1.17.0,<2.0",
+            "beautifulsoup4==4.12.3",
+            "bs4==0.0.2",
+            "certifi==2024.2.2",
+            "cffi>=1.16.0",
+            "charset-normalizer==3.3.2",
+            "cryptography==42.0.5",
+            "easygui==0.98.3",
+            "feedparser==6.0.11",
+            "google==3.0.0",
+            "idna==3.6",
+            "loguru==0.7.2",
+            "pdf2doi==1.5.1",
+            "pdfminer.six==20221105",
+            "pdftitle==0.11",
+            "pycparser==2.21",
+            "PyMuPDF>=1.23.26",
+            "PyPDF2==2.0.0",
+            "pyperclip==1.8.2",
+            "requests==2.31.0",
+            "retrying==1.3.4",
+            "sgmllib3k==1.0.0",
+            "six==1.16.0",
+            "soupsieve==2.5",
+            "urllib3==2.2.1",
+            "w3lib==2.1.2"
+          ]
+        }
+      }
+    }
+  ],
+  "output_mimetypes": [
+    "application/pdf"
+  ],
+  "properties": {
+    "PAPERSDL_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_PAPERSDL",
+        "USE_PAPERSDL"
+      ],
+      "description": "Enable paper downloading with papers-dl"
+    },
+    "PAPERSDL_BINARY": {
+      "type": "string",
+      "default": "papers-dl",
+      "description": "Path to papers-dl binary"
+    },
+    "PAPERSDL_TIMEOUT": {
+      "type": "integer",
+      "default": 300,
+      "minimum": 10,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for paper downloads in seconds"
+    },
+    "PAPERSDL_ARGS": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "fetch"
+      ],
+      "x-aliases": [
+        "PAPERSDL_DEFAULT_ARGS"
+      ],
+      "description": "Default papers-dl arguments"
+    },
+    "PAPERSDL_ARGS_EXTRA": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "x-aliases": [
+        "PAPERSDL_EXTRA_ARGS"
+      ],
+      "description": "Extra arguments to append to papers-dl command"
+    }
+  },
+  "category": "text",
+  "display_order": 90,
+  "snapshot_output_group": "embedded_media",
+  "snapshot_output_order": 0
+}

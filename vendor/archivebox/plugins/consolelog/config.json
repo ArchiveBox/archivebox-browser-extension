@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Console Log",
+  "description": "Capture browser console messages emitted while the page loads.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "chrome"
+  ],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "application/x-ndjson"
+  ],
+  "properties": {
+    "CONSOLELOG_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_CONSOLELOG",
+        "USE_CONSOLELOG"
+      ],
+      "description": "Enable console log capture"
+    },
+    "CONSOLELOG_TIMEOUT": {
+      "type": "integer",
+      "default": 30,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for console log capture in seconds"
+    }
+  },
+  "category": "metadata",
+  "display_order": 60,
+  "snapshot_output_group": "metadata"
+}

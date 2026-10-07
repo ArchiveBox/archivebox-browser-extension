@@ -1,0 +1,32 @@
+[
+  {
+    "name": "cryptography",
+    "filename": "cryptography-46.0.3-cp313-abi3-pyodide_2025_0_wasm32.whl",
+    "sha256": "8dcec3549f85ea9df0941f75339fa5539d3b4a87ea0a47ab1957fd30c3878419",
+    "url": "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/cryptography-46.0.3-cp313-abi3-pyodide_2025_0_wasm32.whl"
+  },
+  {
+    "name": "cffi",
+    "filename": "cffi-1.17.1-cp313-cp313-pyodide_2025_0_wasm32.whl",
+    "sha256": "a91747e5e4d982e7e7b2f158f2d06302c4205198ccec688e34b9c310e4417da7",
+    "url": "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/cffi-1.17.1-cp313-cp313-pyodide_2025_0_wasm32.whl"
+  },
+  {
+    "name": "pycparser",
+    "filename": "pycparser-2.22-py3-none-any.whl",
+    "sha256": "778a41679914eee8499ce3d37a8d15d808d8972e70aa02eef13ac59649559aaa",
+    "url": "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/pycparser-2.22-py3-none-any.whl"
+  },
+  {
+    "name": "six",
+    "filename": "six-1.17.0-py2.py3-none-any.whl",
+    "sha256": "1f715fc699e802b31e53290ead6c16a4d6a8da462a225d2e06097fce45ab70b9",
+    "url": "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/six-1.17.0-py2.py3-none-any.whl"
+  },
+  {
+    "name": "libopenssl",
+    "filename": "libopenssl-1.1.1w.zip",
+    "sha256": "eaec7126f466a33ea4121fd230211bb01e9ad1c5748f3cd0b4b1c8677b4ac90a",
+    "url": "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/libopenssl-1.1.1w.zip"
+  }
+]

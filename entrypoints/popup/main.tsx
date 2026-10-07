@@ -4,9 +4,9 @@ import ReactDOM from 'react-dom/client';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { archiveBoxServerUrlMatches, findSubmittedSnapshot, getServerPersonas, hasServerHostPermission, isArchiveablePageUrl, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
-import { mhtmlUnsupportedMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
+import { supportsWaczCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
-import { assertLocalCaptureStorageAvailable } from '@/src/lib/screenshotStorage';
+import { deleteCapture } from '@/src/archive/storage';
 import { createSnapshot } from '@/src/lib/snapshots';
 import { getConfig, getSnapshots, mutateSnapshots } from '@/src/lib/storage';
 import { matchingTagSuggestions } from '@/src/lib/tags';
@@ -17,12 +17,6 @@ import './style.css';
 
 type RemoteArchiveStatus = 'checking' | 'not_archived' | 'archived' | 'sync_failed' | 'unavailable';
 type LocalArchiveStatus = 'saved' | 'unsaved' | 'removed';
-type ScreenshotCaptureState = {
-  phase: 'idle' | 'visible' | 'capturing' | 'canceling';
-  captured: number;
-  total: number;
-  snapshot_id?: string;
-};
 type ActivePage = {
   favIconUrl?: string | null;
   tabId: number;
@@ -82,7 +76,7 @@ async function getCurrentSnapshot(activePage: ActivePage): Promise<{
   let currentSnapshot!: Snapshot;
   let created = false;
   const snapshots = await mutateSnapshots((snapshots) => {
-    currentSnapshot = snapshots.find((snapshot) => snapshot.url === activePage.url)!;
+    currentSnapshot = [...snapshots].reverse().find((snapshot) => snapshot.url === activePage.url)!;
     if (!currentSnapshot) {
       currentSnapshot = createSnapshot(activePage.url, [], activePage.title, activePage.favIconUrl || null);
       snapshots.push(currentSnapshot);
@@ -156,38 +150,6 @@ function ArchiveBoxOverlay() {
   }
   const [faviconFailed, setFaviconFailed] = useState(false);
   const [isFadingOut, setIsFadingOut] = useState(false);
-  const [screenshotCapture, setScreenshotCapture] = useState<ScreenshotCaptureState>({
-    phase: 'idle',
-    captured: 0,
-    total: 0,
-  });
-
-  useEffect(() => {
-    const listener = (message: RuntimeMessage) => {
-      if (message.type !== 'screenshot_capture_progress') return undefined;
-      setScreenshotCapture((current) => {
-        if (current.snapshot_id && current.snapshot_id !== message.snapshot_id) return current;
-        // Automatic captures run after URL acceptance, so no awaiting popup call
-        // will reset this state. Terminal events must also remove input listeners;
-        // otherwise normal typing/scrolling cancels a capture that already finished.
-        const nextPhase = message.phase === 'scrolling'
-          ? 'capturing'
-          : message.phase === 'visible'
-            ? 'visible'
-            : 'idle';
-        return {
-          phase: nextPhase,
-          snapshot_id: message.snapshot_id,
-          captured: message.captured,
-          total: message.total,
-        };
-      });
-      return undefined;
-    };
-    browser.runtime.onMessage.addListener(listener);
-    return () => browser.runtime.onMessage.removeListener(listener);
-  }, []);
-
   async function refresh(checkServer = false) {
     const configured = defaultServers(await getConfig())[0] || null;
     setServer(configured);
@@ -237,8 +199,8 @@ function ArchiveBoxOverlay() {
     setRemoteStatus(!archivebox_server_url ? 'unavailable' : receipt ? 'archived' : 'not_archived');
     setRemoteDetail(archivebox_server_url ? '' : t("Server not configured"));
     if (!archivebox_server_url) {
-      setOk(false);
-      setStatus(t("Saved locally. Server connection unavailable."));
+      setOk(true);
+      setStatus(t("Saved locally"));
     } else if (receipt) {
       setOk(true);
       setStatus(submissionMessage(currentSnapshot.depth ?? 0));
@@ -254,6 +216,10 @@ function ArchiveBoxOverlay() {
       setStatus(t("URL submitted. Capture upload failed: $1", receipt.delivery_error));
     }
     setAllTags([...new Set([...snapshots].reverse().flatMap((item) => item.tags))]);
+    if (supportsWaczCapture && !currentSnapshot.wacz) {
+      const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({type:'capture_snapshot_wacz',snapshot_id:currentSnapshot.id,tabId:nextActivePage.tabId});
+      if (!response.ok) {setOk(false);setStatus(response.errorMessage || 'Unable to archive page');}
+    }
   }
 
   async function ensureConfiguredServerPermission(requestPermission: boolean): Promise<void> {
@@ -266,48 +232,6 @@ function ArchiveBoxOverlay() {
     if (await hasServerHostPermission(configuredServerUrl)) return;
     if (!requestPermission) {
       throw new Error(t("Click Sync to grant ArchiveBox server permission."));
-    }
-  }
-
-  async function ensureServerSnapshotId(snapshot_id: string, latestSnapshot: Snapshot): Promise<Snapshot> {
-    const connection = destination();
-    if (latestSnapshot.remote_copies?.[connection.id]?.snapshot_id) return latestSnapshot;
-    const metadata = await syncArchiveBoxSnapshotMetadata(connection, latestSnapshot);
-    if (!metadata.id) return latestSnapshot;
-    const entries = await mutateSnapshots((snapshots) => snapshots.map((item) => item.id === snapshot_id && item.remote_copies?.[connection.id]?.crawl_id === latestSnapshot.remote_copies?.[connection.id]?.crawl_id ? {
-      ...item, remote_copies: { ...item.remote_copies, [connection.id]: {
-        status: 'accepted', ...item.remote_copies?.[connection.id], submitted_to: new URL(connection.server).origin, snapshot_id: metadata.id,
-      } },
-    } : item));
-    const updated = entries.find((item) => item.id === snapshot_id) || latestSnapshot;
-    setSnapshot(updated);
-    return updated;
-  }
-
-  async function uploadCapturedArtifactIfArchived(
-    snapshot_id: string,
-    kind: 'screenshot' | 'mhtml' | 'singlefile',
-    artifactLabel: string,
-  ): Promise<void> {
-    const snapshots = await getSnapshots();
-    let latestSnapshot = snapshots.find((item) => item.id === snapshot_id);
-    if (!server || !latestSnapshot || (remoteStatus !== 'archived' && !latestSnapshot.remote_copies?.[server_id]?.crawl_id)) return;
-    if (kind === 'screenshot' && !server.policy.upload_screenshots_to_server && !server.policy.upload_viewport_screenshots_to_server) return;
-    if (kind === 'mhtml' && !server.policy.upload_mhtml_to_server) return;
-
-    try {
-      setOk(null);
-      setStatus(t("Uploading $1 to ArchiveBox Server...", artifactLabel));
-      latestSnapshot = await ensureServerSnapshotId(snapshot_id, latestSnapshot);
-      await uploadSnapshotCaptureArtifactsToArchiveBox(destination(), latestSnapshot);
-      setOk(true);
-      setRemoteDetail('');
-      setStatus(t("Saved local $1 and uploaded to ArchiveBox Server", artifactLabel));
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      setOk(false);
-      setRemoteDetail('');
-      setStatus(t("Saved local $1. Failed to upload artifact: $2", artifactLabel, errorMessage));
     }
   }
 
@@ -362,6 +286,7 @@ function ArchiveBoxOverlay() {
     persona = snapshot?.persona_overrides?.[server_id] ?? (snapshot?.remote_copies?.[server_id]?.persona === null ? 'Default' : snapshot?.remote_copies?.[server_id]?.persona),
     replaceFresh = false,
   ) {
+    if (!server) return;
     if (localSnapshotId) submittedThisSession.current.add(`${localSnapshotId}:${destination().id}`);
     setConfirmedRemoteId(null);
     setRemoteStatus('not_archived');
@@ -439,10 +364,11 @@ function ArchiveBoxOverlay() {
 
   useEffect(() => {
     const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
-      if (area !== 'local' || !changes.entries || !snapshot || !server) return;
+      if (area !== 'local' || !changes.entries || !snapshot) return;
       const updated = (changes.entries.newValue as Snapshot[] | undefined)?.find((item) => item.id === snapshot.id);
       if (!updated) return;
       setSnapshot(updated);
+      if (!server) return;
       const copy = updated.remote_copies?.[server.id];
       if (copy?.delivery_error) {
         setOk(false);
@@ -532,7 +458,7 @@ function ArchiveBoxOverlay() {
     setLocalStatus('removed');
     setOk(null);
     setStatus(t("Removed from local saved URLs"));
-    await mutateSnapshots((snapshots) => snapshots.filter((item) => item.url !== activePage.url));
+    if (snapshot) await deleteCapture(snapshot.id);
     setIsFadingOut(true);
     window.setTimeout(close, 450);
   }
@@ -597,322 +523,12 @@ function ArchiveBoxOverlay() {
     }
   }
 
-  function openCaptureView(view: 'screenshot' | 'mhtml' | 'singlefile') {
-    if (!snapshot?.id) return;
-    browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
-      type: 'open_options',
-      id: snapshot.id,
-      view,
-    });
-  }
-
-  async function ensureMhtmlPermission(): Promise<boolean> {
-    setOk(null);
-    setStatus(t("MHTML capture needs permission to save the current tab as a browser-generated MHTML file."));
-    const granted = await browser.permissions.request({ permissions: ['pageCapture'] }).catch(() => false);
-    if (!granted && !(await browser.permissions.contains({ permissions: ['pageCapture'] }).catch(() => false))) {
-      setOk(false);
-      setStatus(t("MHTML capture permission denied"));
-      return false;
-    }
-    return true;
-  }
-
-  async function requestScreenshotScrollPermission(): Promise<boolean> {
-    setOk(null);
-    setStatus(t("Full-page screenshots need scripting permission only to scroll the current tab and restore it after capture."));
-    const granted = await browser.permissions.request({ permissions: ['scripting'] }).catch(() => false);
-    if (!granted && !(await browser.permissions.contains({ permissions: ['scripting'] }).catch(() => false))) {
-      setOk(null);
-      setStatus(t("Saved visible-area screenshot. Full-page scrolling permission denied."));
-      return false;
-    }
-    return true;
-  }
-
-  async function screenshotNeedsScrolling(activePageForCapture: ActivePage): Promise<boolean | null> {
-    let response: RuntimeResponse;
-    try {
-      response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
-        type: 'measure_screenshot_page',
-        tabId: activePageForCapture.tabId,
-      });
-    } catch {
-      return null;
-    }
-    if (!response.ok) return null;
-    return Boolean(response.screenshotNeedsScroll);
-  }
-
-  async function ensureLocalCaptureStoragePermission(): Promise<boolean> {
-    const storageManager = navigator.storage as StorageManager & {
-      persist?: () => Promise<boolean>;
-    };
-    await storageManager.persist?.().catch(() => false);
-    try {
-      await assertLocalCaptureStorageAvailable();
-    } catch (error) {
-      setOk(false);
-      setStatus(error instanceof Error ? error.message : String(error));
-      return false;
-    }
-    return true;
-  }
-
-  async function cancelScreenshotCapture() {
-    const snapshot_id = screenshotCapture.snapshot_id || snapshot?.id;
-    if (!snapshot_id) return;
-    setScreenshotCapture((current) => ({
-      ...current,
-      phase: 'canceling',
-    }));
-    setStatus(t("Canceling screenshot capture..."));
-    await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
-      type: 'cancel_snapshot_screenshot',
-      snapshot_id,
-    }).catch(() => undefined);
-  }
-
-  useEffect(() => {
-    if (screenshotCapture.phase !== 'capturing') return undefined;
-
-    const scrollCancelWindowMs = 1200;
-    const scrollCancelDelta = 900;
-    const scrollCancelEvents = 4;
-    const keyCancelWindowMs = 1200;
-    const keyCancelEvents = 2;
-    let cancelRequested = false;
-    let scrollStartedAt = 0;
-    let scrollDelta = 0;
-    let scrollEvents = 0;
-    let keyStartedAt = 0;
-    let keyEvents = 0;
-
-    function eventTargetIsEditable(target: EventTarget | null): boolean {
-      if (!(target instanceof HTMLElement)) return false;
-      const tagName = target.tagName.toLowerCase();
-      return target.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select';
-    }
-
-    function requestCancel(): void {
-      if (cancelRequested) return;
-      cancelRequested = true;
-      void cancelScreenshotCapture();
-    }
-
-    function recordScroll(delta: number): void {
-      const now = Date.now();
-      if (!scrollStartedAt || now - scrollStartedAt > scrollCancelWindowMs) {
-        scrollStartedAt = now;
-        scrollDelta = 0;
-        scrollEvents = 0;
-      }
-      scrollDelta += Math.abs(delta);
-      scrollEvents += 1;
-      if (scrollDelta >= scrollCancelDelta || scrollEvents >= scrollCancelEvents) {
-        requestCancel();
-      }
-    }
-
-    function handleWheel(event: WheelEvent): void {
-      recordScroll(Math.abs(event.deltaY) + Math.abs(event.deltaX));
-    }
-
-    function handleTouchMove(): void {
-      recordScroll(300);
-    }
-
-    function handleKey(event: KeyboardEvent): void {
-      if (event.key === 'Escape' || eventTargetIsEditable(event.target)) {
-        requestCancel();
-        return;
-      }
-
-      const now = Date.now();
-      if (!keyStartedAt || now - keyStartedAt > keyCancelWindowMs) {
-        keyStartedAt = now;
-        keyEvents = 0;
-      }
-      keyEvents += 1;
-      if (keyEvents >= keyCancelEvents) {
-        requestCancel();
-      }
-    }
-
-    window.addEventListener('wheel', handleWheel, { capture: true, passive: true });
-    window.addEventListener('touchmove', handleTouchMove, { capture: true, passive: true });
-    window.addEventListener('keydown', handleKey, { capture: true });
-    return () => {
-      window.removeEventListener('wheel', handleWheel, { capture: true });
-      window.removeEventListener('touchmove', handleTouchMove, { capture: true });
-      window.removeEventListener('keydown', handleKey, { capture: true });
-    };
-  }, [screenshotCapture.phase, screenshotCapture.snapshot_id, snapshot?.id]);
-
-  async function captureLocalArtifact(kind: 'screenshot' | 'mhtml' | 'singlefile') {
-    if (kind === 'screenshot' && (screenshotCapture.phase === 'capturing' || screenshotCapture.phase === 'canceling')) {
-      await cancelScreenshotCapture();
-      return;
-    }
-
-    setStatusLink(null);
-    if (kind === 'mhtml' && !supportsMhtmlCapture) {
-      setOk(false);
-      setStatus(mhtmlUnsupportedMessage());
-      return;
-    }
-    if (kind === 'mhtml' && !(await ensureMhtmlPermission())) return;
-
-    const nextActivePage = activePage || await getActivePage();
-    setActivePage(nextActivePage);
-    const { currentSnapshot } = await getCurrentSnapshot(nextActivePage);
-    if (kind === 'screenshot' && (currentSnapshot.screenshot || currentSnapshot.viewport_screenshot)) {
-      openCaptureView('screenshot');
-      return;
-    }
-    if (kind === 'mhtml' && currentSnapshot.mhtml) {
-      openCaptureView('mhtml');
-      return;
-    }
-    if (kind === 'singlefile' && currentSnapshot.singlefile) {
-      openCaptureView('singlefile');
-      return;
-    }
-
-    if (!(await ensureLocalCaptureStoragePermission())) return;
-    if (kind === 'screenshot') {
-      const visibleLabel = t("visible-area screenshot");
-      setStatus(t("Saving local $1...", visibleLabel));
-      setOk(null);
-      setScreenshotCapture({
-        phase: 'visible',
-        snapshot_id: currentSnapshot.id,
-        captured: 0,
-        total: 1,
-      });
-      const visibleResponse = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
-        type: 'capture_snapshot_screenshot',
-        snapshot_id: currentSnapshot.id,
-        tabId: nextActivePage.tabId,
-        windowId: nextActivePage.windowId,
-        fullPage: false,
-      });
-
-      if (!visibleResponse.ok) {
-        const errorMessage = visibleResponse.errorMessage || visibleResponse.error || t("Unknown error");
-        setOk(false);
-        setStatus(t("Failed to save local $1: $2", visibleLabel, errorMessage));
-        await refresh();
-        return;
-      }
-
-      let snapshots = await getSnapshots();
-      let nextSnapshot = snapshots.find((item) => item.id === currentSnapshot.id) || currentSnapshot;
-      setSnapshot({ ...nextSnapshot });
-      setLocalStatus('saved');
-      setOk(true);
-      setStatus(t("Saved local $1", visibleLabel));
-      setScreenshotCapture({
-        phase: 'visible',
-        snapshot_id: currentSnapshot.id,
-        captured: 1,
-        total: 1,
-      });
-
-      let hasScrollPermission = await browser.permissions.contains({ permissions: ['scripting'] }).catch(() => false);
-      if (!hasScrollPermission) {
-        hasScrollPermission = await requestScreenshotScrollPermission();
-      }
-      if (!hasScrollPermission) {
-        setScreenshotCapture({ phase: 'idle', captured: 0, total: 0 });
-        await uploadCapturedArtifactIfArchived(currentSnapshot.id, 'screenshot', t("visible-area screenshot"));
-        return;
-      }
-
-      const needsScroll = await screenshotNeedsScrolling(nextActivePage);
-      if (!needsScroll) {
-        setOk(true);
-        setStatus(t("Saved local $1", t("screenshot")));
-        setScreenshotCapture({ phase: 'idle', captured: 0, total: 0 });
-        await uploadCapturedArtifactIfArchived(currentSnapshot.id, 'screenshot', t("screenshot"));
-        return;
-      }
-
-      const artifactLabel = t("screenshot");
-      setStatus(t("Saving local $1...", artifactLabel));
-      setOk(null);
-      setScreenshotCapture({
-        phase: 'capturing',
-        snapshot_id: currentSnapshot.id,
-        captured: 1,
-        total: 2,
-      });
-      const fullPageResponse = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
-        type: 'capture_snapshot_screenshot',
-        snapshot_id: currentSnapshot.id,
-        tabId: nextActivePage.tabId,
-        windowId: nextActivePage.windowId,
-        fullPage: true,
-      });
-
-      snapshots = await getSnapshots();
-      nextSnapshot = snapshots.find((item) => item.id === currentSnapshot.id) || currentSnapshot;
-      setSnapshot({ ...nextSnapshot });
-      setLocalStatus('saved');
-      if (!fullPageResponse.ok) {
-        const errorMessage = fullPageResponse.errorMessage || fullPageResponse.error || t("Unknown error");
-        setOk(false);
-        setStatus(t("Saved visible-area screenshot. Failed to save full-page screenshot: $1", errorMessage));
-        setScreenshotCapture({ phase: 'idle', captured: 0, total: 0 });
-        await uploadCapturedArtifactIfArchived(currentSnapshot.id, 'screenshot', t("visible-area screenshot"));
-        return;
-      }
-
-      setOk(true);
-      setStatus(fullPageResponse.screenshotCanceled
-        ? t("Saved partial local $1", artifactLabel)
-        : t("Saved local $1", artifactLabel));
-      setScreenshotCapture({ phase: 'idle', captured: 0, total: 0 });
-      await uploadCapturedArtifactIfArchived(currentSnapshot.id, 'screenshot', artifactLabel);
-      return;
-    }
-    const artifactLabel = kind === 'mhtml' ? t("MHTML snapshot") : t("SingleFile HTML");
-    setStatus(t("Saving local $1...", artifactLabel));
-    setOk(null);
-    const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
-      type: kind === 'mhtml'
-          ? 'capture_snapshot_mhtml'
-          : 'capture_snapshot_singlefile',
-      snapshot_id: currentSnapshot.id,
-      tabId: nextActivePage.tabId,
-      windowId: nextActivePage.windowId,
-    });
-
-    if (!response.ok) {
-      const errorMessage = response.errorMessage || response.error || t("Unknown error");
-      setOk(false);
-      if (kind === 'singlefile') {
-        const installMessage = t("Make sure you have SingleFile installed.");
-        setStatus(installMessage);
-        setStatusLink({
-          href: singleFileChromeWebStoreUrl,
-          label: t("Install SingleFile from the Chrome Web Store"),
-          status: installMessage,
-        });
-      } else {
-        setStatus(t("Failed to save local $1: $2", artifactLabel, errorMessage));
-      }
-      await refresh();
-      return;
-    }
-
-    const snapshots = await getSnapshots();
-    const nextSnapshot = snapshots.find((item) => item.id === currentSnapshot.id) || currentSnapshot;
-    setSnapshot({ ...nextSnapshot });
-    setLocalStatus('saved');
-    setOk(true);
-    setStatus(t("Saved local $1", artifactLabel));
-    await uploadCapturedArtifactIfArchived(currentSnapshot.id, kind, artifactLabel);
+  async function openLocalArchive() {
+    if (!snapshot || !activePage) return;
+    const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>(snapshot.wacz
+      ? {type:'open_snapshot_wacz',snapshot_id:snapshot.id}
+      : {type:'capture_snapshot_wacz',snapshot_id:snapshot.id,tabId:activePage.tabId});
+    if (!response.ok) { setOk(false); setStatus(response.errorMessage || 'Unable to archive page'); }
   }
 
   async function addTag(tag: string) {
@@ -935,21 +551,6 @@ function ArchiveBoxOverlay() {
   const depthOptions = crawlDepthOptions();
   const currentDepthLabel = depthOptions.find((option) => option.value === depth)?.label || t("Depth 0: just this page");
   const crawlButtonLabel = depth === 0 ? t("Crawl") : t("Crawl Depth: $1", depth);
-  const screenshotCaptureActive = screenshotCapture.phase === 'capturing' || screenshotCapture.phase === 'canceling';
-  const screenshotCaptureVisible = screenshotCapture.phase === 'visible';
-  const screenshotButtonClass = [
-    'archivebox-overlay__capture-button',
-    (snapshot?.screenshot || snapshot?.viewport_screenshot) || screenshotCaptureVisible ? 'archivebox-overlay__capture-button--saved' : '',
-    screenshotCaptureActive ? 'archivebox-overlay__capture-button--capturing' : '',
-  ].filter(Boolean).join(' ');
-  const savedScreenshotCount = Math.max(1, (snapshot?.screenshot || snapshot?.viewport_screenshot)?.parts?.length || 0);
-  const screenshotButtonLabel = screenshotCaptureActive
-    ? t("Stop $1/$2", screenshotCapture.captured, screenshotCapture.total || screenshotCapture.captured)
-    : screenshotCaptureVisible && screenshotCapture.captured > 0
-      ? `✓ ${t("Screenshot")} ${screenshotCapture.captured}/${screenshotCapture.total}`
-      : (snapshot?.screenshot || snapshot?.viewport_screenshot)
-        ? `✓ ${t("Screenshot")} ${savedScreenshotCount}`
-        : t("Screenshot");
 
   return (
     <section className={`archivebox-overlay${isFadingOut ? ' archivebox-overlay--leaving' : ''}`} aria-label={t("ArchiveBox save panel")}>
@@ -1001,43 +602,9 @@ function ArchiveBoxOverlay() {
 
       <div className="archivebox-overlay__header">
         <div className="archivebox-overlay__capture-actions">
-          <button
-            className={screenshotButtonClass}
-            onClick={() => captureLocalArtifact('screenshot')}
-            title={screenshotCaptureActive
-              ? t("Cancel full-page screenshot capture and restore scroll position")
-              : (snapshot?.screenshot || snapshot?.viewport_screenshot)
-                ? t("Open saved screenshot")
-                : t("Save a screenshot for this URL. Full-page scrolling may ask for optional scripting permission; denying it saves the visible area.")}
-          >
-            {screenshotButtonLabel}
+          <button className="archivebox-overlay__capture-button" disabled={!supportsWaczCapture || !snapshot} onClick={()=>void openLocalArchive()}>
+            {!supportsWaczCapture ? 'Local archiving requires Chrome or Edge' : snapshot?.wacz?.state === 'complete' ? 'Open archive' : snapshot?.wacz?.state === 'capturing' ? 'Archiving…' : snapshot?.wacz?.state === 'failed' ? 'Capture failed — open details' : 'Archive page'}
           </button>
-          {supportsMhtmlCapture ? (
-            <button
-              className={`archivebox-overlay__capture-button${snapshot?.mhtml ? ' archivebox-overlay__capture-button--saved' : ''}`}
-              onClick={() => captureLocalArtifact('mhtml')}
-              title={snapshot?.mhtml ? t("Open saved MHTML snapshot") : t("Save an MHTML snapshot for this URL")}
-            >
-              {snapshot?.mhtml ? `✓ ${t("MHTML")}` : t("MHTML")}
-            </button>
-          ) : import.meta.env.BROWSER !== 'safari' && (
-            <button
-              className="archivebox-overlay__capture-button archivebox-overlay__capture-button--disabled"
-              onClick={() => captureLocalArtifact('mhtml')}
-              title={mhtmlUnsupportedMessage()}
-            >
-              {t("MHTML unavailable")}
-            </button>
-          )}
-          {/* SingleFile capture is unfinished; keep its button hidden for now.
-          <button
-            className={`archivebox-overlay__capture-button${snapshot?.singlefile ? ' archivebox-overlay__capture-button--saved' : ''}`}
-            onClick={() => captureLocalArtifact('singlefile')}
-            title={snapshot?.singlefile ? t("Open saved SingleFile HTML snapshot") : singleFileCaptureUnavailableMessage()}
-          >
-            {snapshot?.singlefile ? `✓ ${t("SingleFile")}` : t("SingleFile")}
-          </button>
-          */}
         </div>
         <div className="archivebox-overlay__crawl">
           <button
@@ -1097,7 +664,7 @@ function ArchiveBoxOverlay() {
             className={`archivebox-overlay__pill archivebox-overlay__pill--${remoteStatus}`}
             title={remoteDetail || undefined}
           >
-            <span className="archivebox-overlay__pill-text">{remoteStatus === 'archived'
+            <span className="archivebox-overlay__pill-text">{!server ? t("Server not configured") : remoteStatus === 'archived'
               ? submissionAge(snapshot?.remote_copies?.[server_id]?.submitted_at, now)
               : remoteStatus === 'checking'
                 ? t("Checking server...")

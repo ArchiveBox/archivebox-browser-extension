@@ -1,0 +1,6 @@
+{
+  "title": "Rendered DOM",
+  "description": "Derive the rendered DOM from the archived page through ReplayWeb.page.",
+  "category": "view",
+  "default_enabled": true
+}

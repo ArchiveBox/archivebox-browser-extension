@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Archived media</title>
+<style>
+:root{color-scheme:light;--bg:#f5f7f9;--panel:#fff;--line:#d9dee4;--text:#25282c;--muted:#66717c;--accent:#315c83}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 system-ui,-apple-system,sans-serif}a{color:var(--accent)}button,select,.action{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;text-decoration:none}button:hover,.action:hover{background:#edf2f7}button:focus-visible,a:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:3px}[hidden]{display:none!important}header{display:flex;align-items:center;gap:12px;min-height:49px;padding:6px 16px;border-bottom:1px solid var(--line);background:#fff}.brand{font-weight:750;letter-spacing:-.4px;font-size:15px}.muted{color:var(--muted)}header nav{display:flex;gap:5px;margin-left:auto}header .action{font-size:13px;min-height:36px;border-radius:5px}main{max-width:1600px;margin:auto;padding:24px 28px;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px}.stage{width:100%;min-width:0;background:#060709;border:1px solid var(--line);border-radius:12px;overflow:hidden;min-height:240px;display:flex;flex-direction:column;align-items:center;justify-content:center;aspect-ratio:16/9}.stage video{width:100%;height:100%;min-height:0}.stage.audio{padding:24px;gap:18px}.stage.audio img{height:calc(100% - 80px);max-width:100%;min-height:0;object-fit:contain;border-radius:8px}.stage audio{width:min(600px,100%)}.placeholder{font-size:64px;color:var(--muted)}h1{font-size:24px;line-height:1.3;letter-spacing:-.5px;margin:18px 0 8px;overflow-wrap:anywhere}h2{font-size:15px;margin:0}.byline,.actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.byline{color:var(--muted)}.actions{margin:16px 0}.action{font-size:12px}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:16px}.description{white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto}.facts{display:flex;gap:8px 20px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:12px}.queue{align-self:start;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}.queue-head{padding:16px;border-bottom:1px solid var(--line)}#playlist-name{overflow-wrap:anywhere}#queue{max-height:720px;overflow:auto;padding:8px}.item{display:flex;align-items:center;gap:10px;border:0;width:100%;text-align:left;background:transparent;padding:9px;border-radius:8px}.item[aria-current=true]{background:#e7eef7}.thumb{width:100px;height:62px;object-fit:cover;border-radius:5px;background:#101114;color:#cbd5e1;flex-shrink:0;display:grid;place-items:center;font-size:23px}.item-copy{min-width:0}.item-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-weight:600;font-size:13px}.item-detail{display:block;font-size:11px;color:var(--muted);margin-top:4px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}#transcript{max-height:340px;overflow:auto;margin-bottom:12px}.cue{display:flex;gap:14px;width:100%;text-align:left;border:0;background:transparent;font-size:13px}.cue time{color:var(--accent);flex:0 0 52px;font-variant-numeric:tabular-nums}.cue.active{background:#e7eef7}summary{cursor:pointer;font-weight:600}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto;font-size:12px}#notice{color:var(--muted);margin:10px 0}select{max-width:65%;font-size:12px}#chapters{display:flex;gap:8px;overflow:auto;margin-top:12px}#chapters button{white-space:nowrap;font-size:12px}.empty{padding:32px;text-align:center;color:var(--muted)}@media(max-width:1000px){main{grid-template-columns:minmax(0,1fr) 280px;gap:16px;padding:18px}}@media(max-width:760px){main{display:flex;flex-direction:column;padding:12px}.queue{width:100%}#queue{max-height:350px}header{padding:12px}header .label{display:none}h1{font-size:21px}.stage{min-height:200px}.stage.audio{height:300px;aspect-ratio:auto}}
+
+.watch-heading{padding:2px 0 0}.eyebrow{display:flex;align-items:center;gap:7px;margin-top:18px;color:var(--muted);font-size:11px;font-weight:650;letter-spacing:.04em;text-transform:uppercase}.eyebrow:empty{display:none}h1{margin:6px 0 16px;font-size:clamp(21px,2vw,28px)}.channel-row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.channel{display:flex;align-items:center;gap:11px;min-width:0}.avatar{display:grid;place-items:center;flex:none;width:44px;height:44px;border-radius:50%;background:#e3ebf4;color:#315c83;font-size:16px;font-weight:750}.channel-name{display:flex;align-items:center;gap:5px;font-weight:700;color:var(--text);text-decoration:none}.channel-detail{color:var(--muted);font-size:12px}.stats{display:flex;flex-wrap:wrap;gap:8px}.stat{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;background:#edf1f5;border-radius:18px;font-size:12px}.icon{width:16px;height:16px;display:inline-block;flex:none;vertical-align:-3px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.stat .icon{color:#667b90}.description-card{background:#edf1f5;border:0}.facts{color:var(--text);font-weight:600;gap:8px 18px}.facts>span{display:inline-flex;align-items:center;gap:6px}.description{max-height:none;overflow:visible;font-size:13px;line-height:1.7}.description.collapsed{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}.description a{overflow-wrap:anywhere}.text-button{padding:6px 0;border:0;background:transparent;color:var(--accent);font-weight:650;font-size:12px}.text-button:hover{background:transparent;text-decoration:underline}.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.tag{background:#e5eaf0;border-radius:5px;padding:3px 8px;font-size:11px;color:#46617c}.detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin:14px 0 0}.detail-grid dt{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;margin-bottom:4px}.detail-grid dd{margin:0;font-size:13px;overflow-wrap:anywhere}.media-details{margin-top:18px}.media-details>h2{display:flex;align-items:center;gap:7px}.stage.audio{background:radial-gradient(ellipse at 30% 10%,#354b63,#111c29 75%);padding:24px;aspect-ratio:16/9}.stage.audio img{width:auto;height:calc(100% - 75px);max-height:320px!important;aspect-ratio:1;object-fit:contain;box-shadow:0 15px 40px #0007;border-radius:8px}.stage.audio audio{height:44px;flex-shrink:0}.queue-head h2{font-size:17px;line-height:1.4;margin:6px 0}.queue-kicker{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}.queue-meta{font-size:12px;color:var(--muted);margin-top:6px}.queue-controls{display:flex;align-items:center;gap:6px;margin-top:12px}.queue-controls button{display:grid;place-items:center;padding:7px}.queue-controls label{display:flex;align-items:center;gap:5px;margin-left:auto;font-size:11px;color:var(--muted)}.queue-position{font-size:11px;color:var(--muted);margin-top:8px}.item-index{width:15px;flex-shrink:0;font-size:11px;color:var(--muted);text-align:center}.thumb{width:84px;height:54px}.audio-list .thumb{width:58px;height:58px}.item[aria-current=true] .item-index{color:var(--accent)}.item-detail{line-height:1.5}.queue-summary{font-size:12px;color:var(--muted)}.panel-head h2{display:flex;align-items:center;gap:7px}#metadata{font-size:12px;background:transparent;border:0;padding:12px 0}#metadata summary{color:var(--muted);font-weight:500}#notice:empty{display:none}.actions{margin:14px 0}.actions .action{display:inline-flex;align-items:center;gap:5px}#chapters:empty{display:none}.stage:not(.audio)>img{object-fit:contain;max-height:100%;max-width:100%}@media(max-width:760px){.stage.audio{height:340px;aspect-ratio:auto}.stage.audio img{max-height:235px!important}.channel-row{gap:12px}.queue{order:0}.stats{gap:6px}.detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.queue-head h2{font-size:16px}}
+</style>
+</head>
+<body>
+<header><span class="brand">{{ plugin_icon }} YT-DLP</span><nav aria-label="Output actions"><a id="files" class="action" aria-label="View all files" title="View all files">📁<span class="label"> View all files</span></a><a id="header-download" class="action" download aria-label="Download" title="Download">⤓<span class="label"> Download</span></a><a id="raw" class="action" aria-label="View raw" title="View raw">&lt;/&gt;<span class="label"> View raw</span></a></nav></header>
+<main>
+<section aria-label="Media player">
+<div id="stage" class="stage"><p class="empty">Loading archived media…</p></div>
+<p id="notice" role="status"></p>
+<div class="watch-heading"><div id="eyebrow" class="eyebrow"></div><h1 id="title">Archived media</h1><div class="channel-row"><div id="byline" class="channel"></div><div id="stats" class="stats" aria-label="Engagement at capture"></div></div></div>
+<div class="actions"><a id="download" class="action" download hidden>↓ Download media</a><a id="source" class="action" target="_blank" rel="noopener noreferrer" hidden>Original page ↗</a><a id="json-link" class="action" hidden>JSON metadata</a></div>
+<div id="chapters" aria-label="Chapters"></div>
+<div class="card description-card"><div id="facts" class="facts"></div><div id="description" class="description collapsed">No description saved.</div><button id="description-toggle" class="text-button" aria-expanded="false" hidden>Show more</button><div id="tags" class="tags"></div></div>
+<section id="credits-panel" class="media-details" hidden><h2>Music & credits</h2><dl id="credits" class="detail-grid"></dl></section>
+<section id="details-panel" class="card" hidden><h2>About this capture</h2><dl id="details" class="detail-grid"></dl></section>
+<div class="card"><div class="panel-head"><h2>Transcript & subtitles</h2><select id="language" aria-label="Subtitle language" hidden></select></div><div id="transcript"><p class="muted">No subtitles saved.</p></div><a id="subtitle-download" class="action" download hidden>↓ Download subtitles</a></div>
+<details id="metadata" class="card"><summary>View original metadata JSON</summary><pre id="json">No JSON metadata saved.</pre></details>
+</section>
+<aside class="queue" aria-label="Archived playlist"><div class="queue-head"><div id="queue-kicker" class="queue-kicker">Archived media</div><h2 id="playlist-name">In this archive</h2><div id="playlist-owner" class="queue-meta"></div><span id="count" class="queue-summary"></span><div id="queue-controls" class="queue-controls" hidden><button id="previous" aria-label="Previous track" title="Previous track">‹</button><button id="next" aria-label="Next track" title="Next track">›</button><label><input id="autoplay" type="checkbox"> Play next</label></div><div id="position" class="queue-position"></div></div><div id="queue"></div></aside>
+</main>
+<script>
+(async () => {
+    const $ = id => document.getElementById(id);
+    const el = (tag, text, cls) => {const node = document.createElement(tag); if (text != null) node.textContent = text; if (cls) node.className = cls; return node;};
+    const icon = name => {
+        const paths = {person:'M20 21v-2a7 7 0 0 0-14 0v2 M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0',calendar:'M4 5h16v16H4z M8 3v4 M16 3v4 M4 10h16',play:'M9 5l11 7-11 7z',clock:'M12 8v5l3 2 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',heart:'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8',comment:'M21 4H3v14h5l4 4v-4h9z',music:'M9 18V5l12-2v13 M9 8l12-2 M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0',disc:'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0 M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0',file:'M14 2H4v20h16V8z M14 2v6h6',check:'M5 12l4 4L19 6',repeat:'M4 8h15l-3-3 M20 16H5l3 3',captions:'M3 5h18v14H3z M10 10H7v4h3 M17 10h-3v4h3'};
+        const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('class','icon');svg.setAttribute('aria-hidden','true');
+        const path = document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[name] || paths.file);svg.append(path);return svg;
+    };
+    const number = value => Number(value).toLocaleString();
+    const date = value => {if (!value) return '';const match = String(value).match(/^(\d{4})(\d{2})(\d{2})$/);const d = match ? new Date(`${match[1]}-${match[2]}-${match[3]}T12:00:00Z`) : new Date(Number(value)*1000);return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric',timeZone:'UTC'});};
+    const safeLink = (url,label) => {const node = el('a',label);try {const parsed = new URL(url);if (['https:','http:'].includes(parsed.protocol)) {node.href=parsed.href;node.target='_blank';node.rel='noopener noreferrer';}} catch {}return node;};
+    const output = new URL('{{ output_path|escapejs }}', location.href);
+    output.search = ''; output.hash = '';
+    const root = new URL(output), boundary = root.pathname.lastIndexOf('/ytdlp/');
+    root.pathname = boundary >= 0 ? root.pathname.slice(0, boundary + 1) : new URL('../', output).pathname;
+    const raw = url => {const u = new URL(url); u.searchParams.set('raw', '1'); return u.href;};
+    $('files').href = new URL('ytdlp/?files=1', root).href;
+    $('header-download').href = raw(output);$('raw').href = raw(output);
+    const captures = [{% for capture in snapshot.archiveresult_set.all %}{% if capture.plugin == 'ytdlp' %}{% for path, info in capture.output_files.items %}{path:'{{ path|escapejs }}',root:{{ info.root_relative|yesno:'true,false' }},mime:'{{ info.mimetype|escapejs }}',size:Number('{{ info.size|escapejs }}')},{% endfor %}{% endif %}{% endfor %}];
+    const seen = new Set(), files = [];
+    for (const file of captures) {
+        const path = file.path.replace(/^\.\//, '');
+        if (path.startsWith('/') || path.split('/').includes('..')) continue;
+        const relative = file.root ? path : 'ytdlp/' + path;
+        const url = new URL(relative.split('/').map(encodeURIComponent).join('/'), root).href;
+        if (!seen.has(url)) {seen.add(url); files.push({...file, path:relative, url});}
+    }
+    if (!seen.has(output.href)) files.push({path:decodeURIComponent(output.pathname.split('/').pop()),url:output.href,mime:''});
+    const isMedia = f => /\.(mp4|webm|mkv|avi|mov|flv|wmv|m4v|mp3|m4a|ogg|oga|wav|flac|aac|opus)$/i.test(f.path);
+    const stem = path => path.replace(/\.(info\.json|[^.]+)$/i, '');
+    const time = seconds => {const n = Math.max(0, Math.floor(Number(seconds) || 0));return n >= 3600 ? `${Math.floor(n/3600)}:${String(Math.floor(n/60)%60).padStart(2,'0')}:${String(n%60).padStart(2,'0')}` : `${Math.floor(n/60)}:${String(n%60).padStart(2,'0')}`;};
+    const read = async file => {const response = await fetch(raw(file.url));if (!response.ok) throw new Error('File unavailable');return response.text();};
+    const infos = await Promise.all(files.filter(f => /\.info\.json$/i.test(f.path)).map(async file => {
+        try {return {file, data:JSON.parse(await read(file)) || {}};} catch {return {file, data:{},failed:true};}
+    }));
+    const media = files.filter(isMedia);
+    const entries = media.map(file => ({file, info:infos.find(info => stem(info.file.path) === stem(file.path))}));
+    // Keep metadata-only captures visible when a download was unavailable.
+    for (const info of infos) if (!entries.some(entry => entry.info === info) && !['playlist','multi_video'].includes(info.data._type)) entries.push({info});
+    const related = entry => {
+        const base = stem(entry.info ? entry.info.file.path : entry.file.path);
+        return files.filter(file => file.path.startsWith(base + '.') && !entries.some(other => other !== entry && stem(other.info ? other.info.file.path : other.file.path).length > base.length && file.path.startsWith(stem(other.info ? other.info.file.path : other.file.path) + '.')));
+    };
+    const artwork = entry => related(entry).find(f => /\.(jpe?g|png|webp|avif)$/i.test(f.path));
+    const name = entry => entry.info?.data.title || entry.file?.path.split('/').pop() || stem(entry.info.file.path).split('/').pop();
+    entries.sort((a,b) => (Number(a.info?.data.playlist_index) || Infinity) - (Number(b.info?.data.playlist_index) || Infinity));
+    const playlist = infos.find(info => ['playlist','multi_video'].includes(info.data._type));
+    $('playlist-name').textContent = playlist?.data.title || entries.find(e => e.info?.data.playlist_title)?.info.data.playlist_title || 'In this archive';
+    const totalDuration = entries.reduce((total,entry) => total + (Number(entry.info?.data.duration) || 0),0);
+    const expected = playlist?.data.playlist_count || entries.find(e => e.info?.data.playlist_count)?.info.data.playlist_count;
+    $('count').textContent = `${entries.length}${expected > entries.length ? ' of '+expected : ''} item${entries.length === 1 ? '' : 's'} · ${entries.filter(e => e.file).length} playable${totalDuration ? ' · '+time(totalDuration) : ''}`;
+    $('queue-kicker').textContent = playlist ? 'Saved playlist' : 'In this archive';
+    const curator = playlist?.data.uploader || entries.find(e => e.info?.data.playlist_uploader)?.info.data.playlist_uploader;
+    if (curator) $('playlist-owner').append('Curated by ',safeLink(playlist?.data.uploader_url,curator));
+    $('queue-controls').hidden = entries.length < 2;
+    $('queue').classList.toggle('audio-list',entries.every(e => !e.file || /\.(mp3|m4a|ogg|oga|wav|flac|aac|opus)$/i.test(e.file.path)));
+    let player, version = 0, subtitleVersion = 0, trackURL, cues = [];
+    const buttons = [];
+    function seek(seconds) {if (player) player.currentTime = seconds;}
+    function description(text) {
+        const node = $('description');node.replaceChildren();node.classList.add('collapsed');
+        // Build links and seek controls as text nodes; archived descriptions are never HTML.
+        for (const part of String(text || 'No description saved.').split(/(https?:\/\/[^\s<>]+|\b(?:\d{1,2}:)?\d{1,2}:\d{2}\b)/g)) {
+            if (/^https?:\/\//.test(part)) node.append(safeLink(part,part));
+            else if (/^(?:\d{1,2}:)?\d{1,2}:\d{2}$/.test(part) && player) {const button=el('button',part,'text-button');button.onclick=()=>seek(part.split(':').reduce((n,v)=>n*60+Number(v),0));node.append(button);}
+            else node.append(document.createTextNode(part));
+        }
+        const toggle=$('description-toggle');toggle.hidden=String(text||'').length<240 && !String(text||'').includes('\n');toggle.textContent='Show more';toggle.setAttribute('aria-expanded','false');
+        toggle.onclick=()=>{const collapsed=node.classList.toggle('collapsed');toggle.textContent=collapsed?'Show more':'Show less';toggle.setAttribute('aria-expanded',String(!collapsed));};
+    }
+    function metadata(data,entry,audio) {
+        const owner=data.channel || data.uploader || data.artist || 'Unknown creator';
+        const avatar=el('span',owner.split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase(),'avatar');avatar.setAttribute('aria-hidden','true');
+        const body=el('div'),channel=safeLink(data.channel_url || data.uploader_url,owner);channel.className='channel-name';
+        if (data.channel_is_verified) {const badge=icon('check');badge.setAttribute('aria-label','Verified channel');badge.removeAttribute('aria-hidden');channel.append(badge);}
+        body.append(channel);const channelDetails=[data.uploader_id?.startsWith('@')?data.uploader_id:null,data.channel_follower_count!=null?number(data.channel_follower_count)+' followers':null].filter(Boolean);
+        if(channelDetails.length)body.append(el('div',channelDetails.join(' · '),'channel-detail'));$('byline').replaceChildren(avatar,body);
+        const platform=data.extractor_key || data.extractor || '';$('eyebrow').replaceChildren(icon(audio?'music':'play'),document.createTextNode([platform,audio?'Audio':'Video'].filter(Boolean).join(' · ')));
+        $('stats').replaceChildren();
+        for(const [key,label,type] of [['like_count','likes','heart'],['comment_count','comments','comment'],['repost_count','reposts','repeat']]) if(data[key]!=null){const item=el('span',null,'stat');item.append(icon(type),document.createTextNode(number(data[key])+' '+label));item.title='Saved at capture';$('stats').append(item);}
+        $('facts').replaceChildren();
+        for(const [type,value] of [['play',data.view_count!=null?number(data.view_count)+(audio?' plays':' views'):null],['calendar',date(data.release_date||data.upload_date||data.timestamp)],['clock',data.duration!=null?time(data.duration):null]]) if(value){const item=el('span');item.append(icon(type),document.createTextNode(value));$('facts').append(item);}
+        description(data.description);
+        $('tags').replaceChildren();for(const tag of [...new Set([data.genre,...(Array.isArray(data.categories)?data.categories:[]),...(Array.isArray(data.tags)?data.tags:[])].filter(Boolean))].slice(0,12)) $('tags').append(el('span',tag,'tag'));
+        const fields=(id,rows)=>{const list=$(id);list.replaceChildren();for(const [label,value,type] of rows){if(value==null || value==='' || value==='none')continue;const group=el('div'),dt=el('dt');dt.append(icon(type),document.createTextNode(label));group.append(dt,el('dd',value));list.append(group);}$(id+'-panel').hidden=!list.children.length;};
+        fields('credits',[['Artist',data.artist || (Array.isArray(data.artists)?data.artists.join(', '):null),'person'],['Track',data.track,'music'],['Album',data.album,'disc'],['Genre',data.genre,'music'],['Released',date(data.release_date),'calendar'],['License',data.license,'file'],['Copyright',data.copyright,'file']]);
+        const size=Number(entry.file?.size || data.filesize);
+        fields('details',[['Quality',data.resolution || (data.width&&data.height?`${data.width} × ${data.height}`:null),'play'],['File',entry.file ? entry.file.path.split('.').pop().toUpperCase()+(size?' · '+(size/1048576).toFixed(1)+' MB':'') : 'Metadata only','file'],['Video codec',data.vcodec,'play'],['Audio codec',data.acodec,'music'],['Audio bitrate',data.abr?Math.round(data.abr)+' kbps':null,'music'],['Sample rate',data.asr?number(data.asr)+' Hz':null,'music'],['Frame rate',data.fps?data.fps+' fps':null,'play'],['Language',data.language,'captions']]);
+    }
+    function parseSubtitles(text) {
+        const stamp = value => value.replace(',', '.').split(':').reduce((total, part) => total * 60 + Number(part), 0);
+        return text.replace(/\r/g, '').split(/\n\s*\n/).flatMap(block => {
+            const lines = block.split('\n'), index = lines.findIndex(line => /\d+:\d.*-->/.test(line));
+            if (index < 0) return [];
+            const match = lines[index].match(/([\d:.,]+)\s*-->\s*([\d:.,]+)/);
+            if (!match) return [];
+            const start = stamp(match[1]), end = stamp(match[2]);
+            const doc = new DOMParser().parseFromString(lines.slice(index+1).join('\n').replace(/<[^>]*>/g, ''), 'text/html');
+            return Number.isFinite(start) && end > start ? [{start,end,text:doc.body.textContent}] : [];
+        });
+    }
+    async function subtitles(file, selectedVersion) {
+        const request = ++subtitleVersion;
+        cues = []; $('transcript').replaceChildren(el('p', file ? 'Loading subtitles…' : 'No subtitles saved.', 'muted'));
+        if (trackURL) {URL.revokeObjectURL(trackURL);trackURL = null;}
+        if (player) player.querySelectorAll('track').forEach(track => track.remove());
+        $('subtitle-download').hidden = !file;
+        if (!file) return;
+        $('subtitle-download').href = raw(file.url);
+        try {
+            const text = await read(file);
+            if (version !== selectedVersion || request !== subtitleVersion) return;
+            cues = parseSubtitles(text);
+            $('transcript').replaceChildren();
+            if (!cues.length) {$('transcript').append(el('p','This subtitle format is available to download.', 'muted'));return;}
+            for (const cue of cues) {const button = el('button', null, 'cue');button.append(el('time',time(cue.start)),el('span',cue.text));button.disabled = !player;button.onclick = () => seek(cue.start);cue.button = button;$('transcript').append(button);}
+            if (player) {
+                const vttTime = n => {const ms = Math.round(n*1000);return `${String(Math.floor(ms/3600000)).padStart(2,'0')}:${String(Math.floor(ms/60000)%60).padStart(2,'0')}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}.${String(ms%1000).padStart(3,'0')}`;};
+                trackURL = URL.createObjectURL(new Blob(['WEBVTT\n\n' + cues.map(c => `${vttTime(c.start)} --> ${vttTime(c.end)}\n${c.text.replace(/&/g,'&amp;').replace(/</g,'&lt;')}\n`).join('\n')], {type:'text/vtt'}));
+                const track = el('track');track.kind = 'subtitles';track.label = $('language').selectedOptions[0].textContent;track.src = trackURL;track.default = true;player.append(track);
+            }
+        } catch {if (version === selectedVersion && request === subtitleVersion) $('transcript').replaceChildren(el('p','Could not load subtitles. Use the download link to open the saved file.', 'muted'));}
+    }
+    async function select(entry, index) {
+        const current = ++version;
+        if (player) player.pause();
+        player = null; $('stage').replaceChildren();$('notice').textContent = '';
+        buttons.forEach((button,i) => button.setAttribute('aria-current', String(i === index)));
+        $('position').textContent = `${index+1} / ${entries.length} · ${entry.file ? 'Now selected' : 'Media unavailable'}`;
+        $('previous').disabled=index===0;$('next').disabled=index===entries.length-1;
+        $('previous').onclick=()=>select(entries[index-1],index-1);$('next').onclick=()=>select(entries[index+1],index+1);
+        const data = entry.info?.data || {}, image = artwork(entry), audio = entry.file && /\.(mp3|m4a|ogg|oga|wav|flac|aac|opus)$/i.test(entry.file.path);
+        $('stage').classList.toggle('audio', !!audio);
+        if (audio || !entry.file) {
+            if (image) {const img = el('img');img.src = raw(image.url);img.alt = name(entry);img.style.maxHeight = '75%';img.style.maxWidth = '100%';$('stage').append(img);}
+            else $('stage').append(el('div','♫','placeholder'));
+        }
+        if (entry.file) {
+            player = el(audio ? 'audio' : 'video');player.controls = true;player.preload = 'metadata';player.src = raw(entry.file.url);
+            if (!audio) {player.playsInline = true;if (image) player.poster = raw(image.url);}
+            player.addEventListener('error', () => {$('notice').textContent = 'Your browser could not play this file. Download it to play with a compatible media player.';});
+            player.addEventListener('timeupdate', () => {for (const cue of cues) cue.button.classList.toggle('active',player.currentTime >= cue.start && player.currentTime < cue.end);});
+            player.addEventListener('ended',async()=>{if($('autoplay').checked && index+1<entries.length){await select(entries[index+1],index+1);if(player)player.play().catch(()=>{});}});
+            $('stage').append(player);
+        } else $('notice').textContent = 'Metadata was saved, but no media file is available.';
+        $('title').textContent = name(entry);document.title = name(entry) + ' · ArchiveBox';
+        metadata(data,entry,audio);
+        $('download').hidden = !entry.file;if (entry.file) $('download').href = raw(entry.file.url);
+        const selectedURL = entry.file?.url || entry.info.file.url;
+        $('header-download').href = raw(selectedURL);$('raw').href = raw(selectedURL);
+        $('json-link').hidden = !entry.info;if (entry.info) $('json-link').href = raw(entry.info.file.url);
+        $('source').hidden = true;
+        try {const source = new URL(data.webpage_url || data.original_url);if (['https:','http:'].includes(source.protocol)) {$('source').href = source.href;$('source').hidden = false;}} catch {}
+        $('json').textContent = entry.info ? (entry.info.failed ? 'Could not load JSON metadata. Use the JSON metadata link to open the saved file.' : JSON.stringify(data,null,2)) : 'No JSON metadata saved.';
+        $('chapters').replaceChildren();
+        for (const chapter of Array.isArray(data.chapters) ? data.chapters : []) {if (!Number.isFinite(chapter.start_time)) continue;const button = el('button',time(chapter.start_time) + ' ' + (chapter.title || 'Chapter'));button.disabled = !player;button.onclick = () => seek(chapter.start_time);$('chapters').append(button);}
+        const subs = related(entry).filter(f => /\.(vtt|srt|ass|lrc)$/i.test(f.path));
+        $('language').replaceChildren();$('language').hidden = !subs.length;
+        for (const [i,file] of subs.entries()) {const option = el('option',file.path.slice(stem(entry.info ? entry.info.file.path : entry.file.path).length+1));option.value = i;$('language').append(option);}
+        $('language').onchange = () => subtitles(subs[Number($('language').value)],current);
+        subtitles(subs[0],current);
+        const descriptionFile = related(entry).find(f => /\.description$/i.test(f.path));
+        if (!data.description && descriptionFile) {try {const text = await read(descriptionFile);if (version === current) description(text);} catch {}}
+    }
+    entries.forEach((entry,index) => {
+        const button = el('button',null,'item'), image = artwork(entry);button.append(el('span',String(index+1),'item-index'));
+        if (image) {const img = el('img',null,'thumb');img.src = raw(image.url);img.alt = '';img.loading = 'lazy';button.append(img);} else button.append(el('span',entry.file && /\.(mp3|m4a|ogg|wav|flac|aac|opus)$/i.test(entry.file.path) ? '♫' : '▶','thumb'));
+        const copy = el('span',null,'item-copy');copy.append(el('span',name(entry),'item-title'),el('span',[entry.info?.data.channel || entry.info?.data.uploader,entry.info?.data.duration != null ? time(entry.info.data.duration) : null,!entry.file ? 'Metadata only' : null].filter(Boolean).join(' · '),'item-detail'));button.append(copy);button.onclick = () => select(entry,index);buttons.push(button);$('queue').append(button);
+    });
+    if (entries.length) {const index = Math.max(0,entries.findIndex(e => e.file?.url === output.href));await select(entries[index],index);}
+    else {$('stage').replaceChildren(el('p','No archived video or audio files found.','empty'));$('notice').textContent = 'Browse files to see the available capture output.';}
+})();
+</script>
+</body>
+</html>

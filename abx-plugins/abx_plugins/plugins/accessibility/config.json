@@ -1,0 +1,10 @@
+{
+  "title": "Accessibility tree",
+  "description": "Derive Chromium's native accessibility tree from offline replay when opened.",
+  "category": "derived",
+  "default_enabled": true,
+  "required_plugins": [
+    "chrome"
+  ],
+  "timeout": 30
+}

@@ -1,0 +1,34 @@
+diff --git a/core/index.js b/core/index.js
+index 6f429a52fe8a2c576b0527c2b556fed04f4b1618..c892c50de45dcfb261ce1353cd0703c69d0d3c2c 100644
+--- a/core/index.js
++++ b/core/index.js
+@@ -1804,10 +1804,10 @@ class Processor {
+ const DATA_URI_PREFIX = "data:";
+ const ABOUT_BLANK_URI = "about:blank";
+ const BLOB_URI_PREFIX = "blob:";
+-const HTTP_URI_PREFIX = /^https?:\/\//;
++const HTTP_URI_PREFIX = /^(?:https?|chrome-extension):\/\//;
+ const FILE_URI_PREFIX = /^file:\/\//;
+ const EMPTY_URL = /^https?:\/\/+\s*$/;
+-const NOT_EMPTY_URL = /^(https?:\/\/|file:\/\/|blob:).+/;
++const NOT_EMPTY_URL = /^((?:https?|chrome-extension):\/\/|file:\/\/|blob:).+/;
+ const SINGLE_FILE_VARIABLE_NAME_PREFIX = "--sf-img-";
+ const PARAGRAPH_TAG_NAME = "P";
+ 
+diff --git a/core/lib/processor-helper-common.js b/core/lib/processor-helper-common.js
+index a5ef6c041de1a66e0e7564f0679cbfb88ef22a7b..19a79b09285ed664eeb0c2b2e6983d90db0bbe7a 100644
+--- a/core/lib/processor-helper-common.js
++++ b/core/lib/processor-helper-common.js
+@@ -36,10 +36,10 @@ const DATA_URI_PREFIX = "data:";
+ const ABOUT_BLANK_URI = "about:blank";
+ const REGEXP_URL_HASH = /(#.+?)$/;
+ const BLOB_URI_PREFIX = "blob:";
+-const HTTP_URI_PREFIX = /^https?:\/\//;
++const HTTP_URI_PREFIX = /^(?:https?|chrome-extension):\/\//;
+ const FILE_URI_PREFIX = /^file:\/\//;
+ const EMPTY_URL = /^https?:\/\/+\s*$/;
+-const NOT_EMPTY_URL = /^(https?:\/\/|file:\/\/|blob:).+/;
++const NOT_EMPTY_URL = /^((?:https?|chrome-extension):\/\/|file:\/\/|blob:).+/;
+ const PREFIX_DATA_URI_IMAGE_SVG = "data:image/svg+xml";
+ const REFERRER_POLICY_ELEMENTS = ["IMG", "LINK", "SCRIPT"];
+ const UTF8_CHARSET = "utf-8";

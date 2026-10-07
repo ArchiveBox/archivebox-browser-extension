@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Title</title>
+<style>
+:root{color-scheme:light;--ink:#202b36;--muted:#64748b;--line:#e2e6eb;--accent:#446b97;--paper:#fff;--bg:#f5f6f8}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,sans-serif}header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 20px;background:var(--paper);border-bottom:1px solid var(--line)}h1{font-size:17px;margin:0}h2{font-size:15px;margin:0 0 12px}nav{display:flex;gap:6px;margin-left:auto}nav a,button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);border-radius:6px;background:white;color:var(--ink);padding:6px 9px;text-decoration:none;font:inherit;cursor:pointer}nav a:hover,button:hover{background:#edf2f7}a{color:var(--accent);overflow-wrap:anywhere}main{max-width:1080px;margin:0 auto;padding:24px}.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:20px;margin-bottom:16px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px}.badge{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:5px;background:#f1f5f9;padding:2px 7px;font-size:12px;color:#475569}.badges{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}.muted{color:var(--muted)}.mono,code{font:12px/1.5 ui-monospace,SFMono-Regular,monospace;overflow-wrap:anywhere}dl{display:grid;grid-template-columns:minmax(100px,1fr) 3fr;gap:8px 16px;margin:0}dt{color:var(--muted);overflow-wrap:anywhere}dd{margin:0;overflow-wrap:anywhere}details>summary{cursor:pointer}@media(max-width:500px){header{padding:10px;gap:8px}nav .label{display:none}main{padding:12px}.panel{padding:14px}dl{grid-template-columns:1fr}dd{margin-bottom:6px}}
+
+header h1{display:none}main{min-height:calc(100vh - 62px);display:grid;place-items:center;text-align:center}.page-title{font-size:clamp(28px,5vw,64px);font-weight:550;letter-spacing:-.035em;line-height:1.2;overflow-wrap:anywhere;max-width:900px}@media(max-width:600px){nav a{min-width:40px;min-height:40px}header{flex-wrap:wrap}nav{flex-shrink:0}main{min-width:0}}
+</style></head><body>
+<header><h1> Title</h1><nav aria-label="Output actions"><a id="files" title="View all files" aria-label="View all files">📁<span class="label">View all files</span></a><a id="download" download title="Download" aria-label="Download">⤓<span class="label">Download</span></a><a id="raw" title="View raw" aria-label="View raw">&lt;/&gt;<span class="label">View raw</span></a></nav></header>
+<main id="content"></main>
+<script>
+(() => {
+  const output = new URL('{{ output_path|escapejs }}', location.href);
+  output.search = ''; output.hash = '';
+  const folder = new URL('./', output);
+  document.getElementById('files').href = folder.href + '?files=1';
+  document.getElementById('download').href = output.href + '?raw=1';
+  document.getElementById('raw').href = output.href + '?preview=1&raw=1';
+  const el = (tag, text, cls) => { const node = document.createElement(tag); if (text != null) node.textContent = String(text); if (cls) node.className = cls; return node; };
+  const safeLink = (value, label) => { const a = el('a', label || value); try { const u = new URL(value); if (['https:', 'http:'].includes(u.protocol)) { a.href = u.href; a.target = '_blank'; a.rel = 'noopener noreferrer'; } } catch {} return a; };;
+  const content = document.getElementById('content');
+  
+  fetch(output.href + '?raw=1').then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(title => {
+    content.append(el('h1', title, 'page-title'));
+  });
+
+})();
+</script></body></html>

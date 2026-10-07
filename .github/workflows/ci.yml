@@ -44,4 +44,10 @@ jobs:
         run: pnpm exec playwright test tests/safari-import.test.ts tests/options-responsive.test.ts tests/retention.test.ts tests/server_registry.test.ts
       - name: Verify local capture and reject unconfirmed submissions
         if: matrix.browser == 'chrome'
-        run: pnpm exec playwright test tests/popup.test.ts --grep 'action popup saves MHTML|HTTP 200 from a normal website'
+        run: pnpm exec playwright test tests/popup.test.ts tests/wacz-capture.test.ts --trace retain-on-failure --grep 'native action popup|auto-archive captures a full WACZ|action popup saves a full WACZ|HTTP 200 from a normal website|toolbar runs all plugins|interrupted capture'
+      - name: Retain browser failure evidence
+        if: failure() && matrix.browser == 'chrome'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: chromium-test-results
+          path: test-results/

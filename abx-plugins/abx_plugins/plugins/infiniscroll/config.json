@@ -1,0 +1,13 @@
+{
+  "title": "Infinite scroll",
+  "description": "Bounded scrolling and details expansion while the recorder saves newly loaded responses.",
+  "category": "page_setup", "default_enabled": true, "required_plugins": ["chrome"],
+  "timeout": 35, "shutdown_grace": 3,
+  "properties": {
+    "INFINISCROLL_TIMEOUT": {"type":"number","default":5,"minimum":0,"maximum":30,"description":"Maximum interaction time in seconds."},
+    "INFINISCROLL_SCROLL_DELAY": {"type":"number","default":500,"minimum":100,"maximum":2000},
+    "INFINISCROLL_SCROLL_DISTANCE": {"type":"number","default":800,"minimum":100,"maximum":3000},
+    "INFINISCROLL_SCROLL_LIMIT": {"type":"number","default":10,"minimum":0,"maximum":60},
+    "INFINISCROLL_EXPAND_DETAILS": {"type":"boolean","default":true}
+  }
+}

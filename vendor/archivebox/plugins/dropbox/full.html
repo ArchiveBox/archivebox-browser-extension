@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Saved files</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --line: #dfe4eb;
+        --muted: #667085;
+        --blue: #245dc1;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        font: 13px/1.5 system-ui, sans-serif;
+        color: #253247;
+        background: white;
+        display: flex;
+        flex-direction: column;
+      }
+      a {
+        color: var(--blue);
+        text-decoration: none;
+      }
+      button,
+      input {
+        font: inherit;
+      }
+      button,
+      a.action {
+        cursor: pointer;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        background: white;
+        padding: 5px 10px;
+        color: #344054;
+      }
+      button:hover,
+      a.action:hover {
+        background: #f0f5ff;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      h1 {
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      nav {
+        display: flex;
+        gap: 6px;
+        margin-left: auto;
+        flex-shrink: 0;
+      }
+      main {
+        display: flex;
+        min-height: 0;
+        flex: 1;
+      }
+      .listing {
+        overflow: auto;
+        flex: 1;
+        min-width: 0;
+      }
+      #preview {
+        width: 55%;
+        min-width: 280px;
+        border-left: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      #preview[hidden] {
+        display: none;
+      }
+      .preview-head {
+        padding: 9px 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-bottom: 1px solid var(--line);
+        background: #f8fafc;
+      }
+      #filename {
+        overflow-wrap: anywhere;
+        font-weight: 600;
+        margin-right: auto;
+      }
+      #content {
+        overflow: auto;
+        padding: 16px;
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+      }
+      #content img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+      }
+      #content pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        align-self: stretch;
+        margin: 0;
+        width: 100%;
+        font: 12px/1.6 ui-monospace, monospace;
+      }
+      #content iframe {
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+      #content audio,
+      #content video {
+        max-width: 100%;
+      }
+      .empty {
+        padding: 22px;
+        color: var(--muted);
+      }
+      #error {
+        color: #b42318;
+        padding: 8px 16px;
+        margin: 0;
+      }
+      #error:empty {
+        display: none;
+      }
+      @media (max-width: 640px) {
+        header {
+          flex-wrap: wrap;
+          padding: 9px 12px;
+        }
+        nav {
+          margin-left: 0;
+        }
+        main {
+          flex-direction: column;
+        }
+        .listing {
+          min-height: 140px;
+        }
+        #preview {
+          width: 100%;
+          border-left: 0;
+          border-top: 1px solid var(--line);
+          min-height: 300px;
+          flex: 1;
+        }
+
+      }
+    </style>
+  </head>
+  <body data-output="{{ output_path }}">
+    <header>
+      <h1 id="title">{{ plugin_icon }} Saved files</h1>
+      <nav id="actions" aria-label="Output actions">
+        <a class="action" id="files">View all files</a>
+      </nav>
+    </header>
+    <p id="error" role="alert"></p>
+    <main>
+      <section class="listing" aria-label="Files"><div id="entries"></div></section>
+      <section id="preview" aria-label="File preview" hidden>
+        <div class="preview-head">
+          <span id="filename"></span><button id="download">Download</button
+          ><button id="close" aria-label="Close preview">×</button>
+        </div>
+        <div id="content"></div>
+      </section>
+    </main>
+
+  </body>
+</html>

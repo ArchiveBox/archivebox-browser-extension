@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Chrome Screencast",
+  "description": "Stream low-resolution Chrome screencast JPEG frames for the admin live progress UI.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "chrome"
+  ],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "image/jpeg"
+  ],
+  "properties": {
+    "CHROME_SCREENCAST_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable live browser preview frames for the admin live progress UI"
+    },
+    "CHROME_SCREENCAST_QUALITY": {
+      "type": "integer",
+      "default": 65,
+      "minimum": 1,
+      "maximum": 100,
+      "description": "Live preview JPEG quality"
+    },
+    "CHROME_SCREENCAST_FPS": {
+      "type": "integer",
+      "default": 1,
+      "minimum": 1,
+      "maximum": 5,
+      "description": "Maximum screencast JPEG frames written per second"
+    },
+    "CHROME_SCREENCAST_KEEP": {
+      "type": "integer",
+      "default": 0,
+      "minimum": 0,
+      "description": "Number of screencast frames to keep after Chrome exits (there is a separate screenshot plugin for real hi-res screenshots)"
+    },
+    "CHROME_SCREENCAST_SCALE": {
+      "type": "number",
+      "default": 0.5,
+      "minimum": 0.1,
+      "maximum": 1,
+      "description": "CDP screenshot clip scale for live preview frames"
+    }
+  },
+  "category": "media",
+  "display_order": 30
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Hashes",
+  "description": "Generate a hash manifest for files produced in the snapshot directory.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "application/json"
+  ],
+  "properties": {
+    "HASHES_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_HASHES",
+        "USE_HASHES"
+      ],
+      "description": "Enable merkle tree hash generation"
+    },
+    "HASHES_TIMEOUT": {
+      "type": "integer",
+      "default": 30,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for merkle tree generation in seconds"
+    }
+  },
+  "category": "metadata",
+  "display_order": 100,
+  "wait_for_background_cleanup": true,
+  "wait_for_plugins": [
+    "ytdlp",
+    "gallerydl",
+    "forumdl",
+    "git",
+    "archivedotorg",
+    "favicon",
+    "papersdl",
+    "tlsnotary"
+  ],
+  "snapshot_output_group": "metadata"
+}

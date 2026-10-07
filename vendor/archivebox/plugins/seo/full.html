@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SEO</title>
+<style>
+:root{color-scheme:light;--ink:#202b36;--muted:#64748b;--line:#e2e6eb;--accent:#446b97;--paper:#fff;--bg:#f5f6f8}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,sans-serif}header{display:flex;align-items:center;gap:10px;padding:6px 10px;background:var(--paper);border-bottom:1px solid var(--line)}h1{font-size:15px;margin:0}h2{font-size:16px;margin:0}nav{display:flex;gap:5px;margin-left:auto}nav a{display:inline-flex;align-items:center;justify-content:center;gap:5px;border:1px solid var(--line);border-radius:5px;background:white;color:var(--ink);padding:5px 8px;text-decoration:none}nav a:hover{background:#edf2f7}a{color:var(--accent);overflow-wrap:anywhere}main{width:100%;min-width:0;padding:8px}.badge{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:5px;background:#f1f5f9;padding:2px 6px;font-size:12px;color:#475569}.badges{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0}.social{overflow:hidden;background:var(--paper);border:1px solid var(--line);border-radius:8px}.social-top{display:flex;align-items:center;gap:8px;padding:8px 10px}.site-icon{width:30px;height:30px;object-fit:contain;flex:none;border-radius:5px}.site-placeholder{display:grid;place-items:center;font-size:22px}.identity{min-width:0;line-height:1.3}.identity strong,.identity span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.identity span{color:var(--muted);font-size:12px}.link-preview{display:block;color:inherit;text-decoration:none}.link-preview:hover{background:#f8fafc}.link-preview>img{display:block;width:100%;max-height:320px;object-fit:contain;background:#eef2f5}.link-copy{padding:8px 10px 10px}.link-copy p{margin:4px 0 0;color:#536471}.social-actions{display:flex;gap:28px;border-top:1px solid var(--line);padding:6px 10px;color:#64748b}.social-actions svg{display:block;width:18px;height:18px}.metadata{border-top:1px solid var(--line);padding:8px 2px}.metadata>summary{cursor:pointer;color:var(--muted);font-size:12px}.metadata dl{display:grid;grid-template-columns:minmax(100px,180px) minmax(0,1fr);gap:6px 12px;margin:8px 0 0}.metadata dt{color:var(--muted);overflow-wrap:anywhere}.metadata dd{min-width:0;margin:0;overflow-wrap:anywhere}@media(max-width:600px){nav a{min-width:40px;min-height:40px}.label{display:none}header{gap:6px;padding:4px 8px}main{padding:6px}.metadata dl{grid-template-columns:minmax(0,1fr)}.metadata dd{margin-bottom:4px}}
+@media(min-width:601px){.link-preview{display:flex;flex-direction:row-reverse;align-items:center}.link-preview>img{width:40%;max-width:480px;flex:none}.link-copy{flex:1;min-width:0}}
+</style></head><body>
+<header><h1>{{ plugin_icon }} SEO</h1><nav aria-label="Output actions"><a id="files" title="View all files" aria-label="View all files">📁<span class="label">View all files</span></a><a id="download" download title="Download" aria-label="Download">⤓<span class="label">Download</span></a><a id="raw" title="View raw" aria-label="View raw">&lt;/&gt;<span class="label">View raw</span></a></nav></header>
+<main id="content"></main>
+<script>
+(() => {
+  const output = new URL('{{ output_path|escapejs }}', location.href);
+  output.search = ''; output.hash = '';
+  const folder = new URL('./', output);
+  document.getElementById('files').href = folder.href + '?files=1';
+  document.getElementById('download').href = output.href;
+  document.getElementById('raw').href = output.href + '?preview=1&raw=1';
+  const el = (tag, text, cls) => { const node = document.createElement(tag); if (text != null) node.textContent = String(text); if (cls) node.className = cls; return node; };
+  const safeLink = (value, label) => { const a = el('a', label || value); try { const u = new URL(value); if (['https:', 'http:'].includes(u.protocol)) { a.href = u.href; a.target = '_blank'; a.rel = 'noopener noreferrer'; } } catch {} return a; };;
+  const content = document.getElementById('content');
+  
+  fetch(output).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(data => {
+    const badges = el('div', null, 'badges');
+    for (const [key, icon] of [['language','🌐'],['author','✍'],['robots','◉'],['theme-color','●']]) {
+      if (!data[key]) continue;
+      const badge = el('span', icon + ' ' + data[key], 'badge');
+      if (key === 'theme-color' && CSS.supports('color', data[key])) badge.style.borderLeft = '12px solid ' + data[key];
+      badges.append(badge);
+    }
+    // Use archived images so previews also work offline and under the snapshot security policy.
+    const responseFiles = [{% for capture in snapshot.archiveresult_set.all %}{% if capture.plugin == 'responses' %}{% for path, info in capture.output_files.items %}{path:'{{ path|escapejs }}',root:{{ info.root_relative|yesno:'true,false' }}},{% endfor %}{% endif %}{% endfor %}];
+    const localImage = (imageURL, alt) => {
+      if (!imageURL) return null;
+      try {
+        const original = new URL(imageURL, data.url);
+        if (!['https:', 'http:'].includes(original.protocol)) return null;
+        const encoded = encodeURIComponent(original.href).replace(/[!'()*]/g, char => '%' + char.charCodeAt(0).toString(16).toUpperCase()).replaceAll('%', '_');
+        const match = responseFiles.find(file => file.path.includes('__GET__' + encoded));
+        if (!match) return null;
+        const img = el('img');
+        img.alt = alt || '';
+        img.referrerPolicy = 'no-referrer';
+        img.src = new URL('../' + (match.root ? '' : 'responses/') + match.path.split('/').map(encodeURIComponent).join('/'), folder).href;
+        img.addEventListener('error', () => img.remove(), {once:true});
+        return img;
+      } catch { return null; }
+    };
+    const hostname = value => {
+      try { return new URL(value, data.url).hostname.replace(/^www\./, ''); }
+      catch { return value || ''; }
+    };
+    const rawURL = data['og:url'] || data.canonical || data.url;
+    let url = '';
+    try { url = new URL(rawURL, data.url).href; } catch {}
+    const title = data['og:title'] || data.title;
+    const description = data['og:description'] || data.description;
+    const site = data['og:site_name'] || hostname(url);
+    const card = el('article', null, 'social');
+    const top = el('div', null, 'social-top');
+    const faviconFiles = [{% for capture in snapshot.archiveresult_set.all %}{% if capture.plugin == 'favicon' %}{% for path, info in capture.output_files.items %}{path:'{{ path|escapejs }}',root:{{ info.root_relative|yesno:'true,false' }}},{% endfor %}{% endif %}{% endfor %}];
+    let icon = localImage(data['og:icon'] || data.icon || data.favicon, site);
+    if (!icon) {
+      const favicon = faviconFiles.find(file => /\.(ico|png|svg|webp|jpe?g)$/i.test(file.path));
+      if (favicon) {
+        icon = el('img'); icon.alt = site || '';
+        icon.src = new URL('../' + (favicon.root ? '' : 'favicon/') + favicon.path.split('/').map(encodeURIComponent).join('/'), folder).href;
+        icon.addEventListener('error', () => icon.remove(), {once:true});
+      }
+    }
+    if (!icon) {
+      try { icon = localImage(new URL('/favicon.ico', url).href, site); } catch {}
+    }
+    if (icon) { icon.className = 'site-icon'; top.append(icon); }
+    else top.append(el('span', '🌐', 'site-icon site-placeholder'));
+    const identity = el('div', null, 'identity');
+    identity.append(el('strong', site || title));
+    if (url && site !== hostname(url)) identity.append(el('span', hostname(url)));
+    top.append(identity); card.append(top);
+    const preview = url ? safeLink(url, '') : el('div');
+    preview.textContent = ''; preview.className = 'link-preview';
+    const imageURLs = [data['og:image:secure_url'], data['og:image'], data['og:image:url'], data['twitter:image'], data['twitter:image:src'], data.image];
+    const seoFiles = [{% for path, info in result.output_files.items %}'{{ path|escapejs }}',{% endfor %}];
+    const featured = seoFiles.find(file => /^featured-image\.[a-z0-9]+$/i.test(file));
+    let image;
+    if (featured) {
+      image = el('img'); image.alt = data['og:image:alt'] || data['twitter:image:alt'] || '';
+      image.src = new URL(encodeURIComponent(featured), folder).href;
+    } else {
+      for (const imageURL of imageURLs) {
+        image = localImage(imageURL, data['og:image:alt'] || data['twitter:image:alt']);
+        if (image) break;
+      }
+    }
+    if (image) preview.append(image);
+    const linkCopy = el('div', null, 'link-copy');
+    if (title) linkCopy.append(el('h2', title));
+    if (description) linkCopy.append(el('p', description));
+    preview.append(linkCopy); card.append(preview);
+    const actionBar = el('div', null, 'social-actions');
+    const icons = [
+      ['Like', 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z'],
+      ['Comment', 'M21 11.5a8.5 8.5 0 0 1-8.5 8.5 9 9 0 0 1-4-.9L3 21l1.9-5.5a9 9 0 0 1-.9-4A8.5 8.5 0 0 1 12.5 3H13a8.5 8.5 0 0 1 8 8v.5Z'],
+      ['Share', 'M12 16V3m-5 5 5-5 5 5M5 13v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7'],
+    ];
+    for (const [label, path] of icons) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor'); svg.setAttribute('stroke-width', '1.6');
+      svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round');
+      svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', label);
+      const shape = document.createElementNS(svg.namespaceURI, 'path'); shape.setAttribute('d', path);
+      svg.append(shape); actionBar.append(svg);
+    }
+    card.append(actionBar); content.append(card, badges);
+    const panel=el('details',null,'metadata'); panel.open=true; panel.append(el('summary','Metadata'));
+    const fields=el('dl');
+    for(const [key,value] of Object.entries(data)){ fields.append(el('dt',key),el('dd',value)); }
+    panel.append(fields); content.append(panel);
+  });
+
+})();
+</script></body></html>

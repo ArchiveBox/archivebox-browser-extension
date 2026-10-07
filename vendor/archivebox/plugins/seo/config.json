@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SEO",
+  "description": "Capture SEO-related metadata such as meta tags and Open Graph fields.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "chrome"
+  ],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "application/json"
+  ],
+  "properties": {
+    "SEO_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_SEO",
+        "USE_SEO"
+      ],
+      "description": "Enable SEO metadata capture"
+    },
+    "SEO_TIMEOUT": {
+      "type": "integer",
+      "default": 30,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for SEO capture in seconds"
+    }
+  },
+  "category": "metadata",
+  "display_order": 90,
+  "snapshot_output_group": "metadata",
+  "snapshot_thumbnail_cards": [
+    {"archive_result_name": "seo", "order": 3}
+  ]
+}

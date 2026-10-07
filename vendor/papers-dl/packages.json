@@ -1,0 +1,109 @@
+[
+  {
+    "name": "loguru",
+    "version": "0.7.2",
+    "filename": "loguru-0.7.2-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/03/0a/4f6fed21aa246c6b49b561ca55facacc2a44b87d65b8b92362a8e99ba202/loguru-0.7.2-py3-none-any.whl",
+    "sha256": "003d71e3d3ed35f0f8984898359d65b79e5b21943f78af86aa5491210429b8eb"
+  },
+  {
+    "name": "beautifulsoup4",
+    "version": "4.12.3",
+    "filename": "beautifulsoup4-4.12.3-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/b1/fe/e8c672695b37eecc5cbf43e1d0638d88d66ba3a44c4d321c796f4e59167f/beautifulsoup4-4.12.3-py3-none-any.whl",
+    "sha256": "b80878c9f40111313e55da8ba20bdba06d8fa3969fc68304167741bbf9e082ed"
+  },
+  {
+    "name": "soupsieve",
+    "version": "2.5",
+    "filename": "soupsieve-2.5-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/4c/f3/038b302fdfbe3be7da016777069f26ceefe11a681055ea1f7817546508e3/soupsieve-2.5-py3-none-any.whl",
+    "sha256": "eaa337ff55a1579b6549dc679565eac1e3d000563bcb1c8ab0d0fefbc0c2cdc7"
+  },
+  {
+    "name": "PyPDF2",
+    "version": "2.0.0",
+    "filename": "PyPDF2-2.0.0-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/76/23/3cb3218c421a1b9b7b378cafd032869dddbc0e6a7f3a940c296d0c40b304/PyPDF2-2.0.0-py3-none-any.whl",
+    "sha256": "eb9eb675d91c0d167abd63fa5f5037486d5b9ef9715c5c8b55b99c3627619402"
+  },
+  {
+    "name": "pdfminer.six",
+    "version": "20221105",
+    "filename": "pdfminer.six-20221105-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/46/68/b3fb5f073bcd3df9143a3520289c147351bfa3c1b096d44081f38fd1c247/pdfminer.six-20221105-py3-none-any.whl",
+    "sha256": "1eaddd712d5b2732f8ac8486824533514f8ba12a0787b3d5fe1e686cd826532d"
+  },
+  {
+    "name": "pdftitle",
+    "version": "0.11",
+    "filename": "pdftitle-0.11.tar.gz",
+    "url": "https://files.pythonhosted.org/packages/18/68/fde8449fdd656e23e4d598d7b0821313bd8d7c915babba9dfe375e648421/pdftitle-0.11.tar.gz",
+    "sha256": "81ec9d427d9c759be6fb9bc6e074f642f6615747e35f2e260e14b2e8aa0127d0",
+    "assetFilename": "pdftitle-0.11.tgz"
+  },
+  {
+    "name": "requests",
+    "version": "2.31.0",
+    "filename": "requests-2.31.0-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl",
+    "sha256": "58cd2187c01e70e6e26505bca751777aa9f2ee0b7f4300988b709f44e013003f"
+  },
+  {
+    "name": "certifi",
+    "version": "2024.2.2",
+    "filename": "certifi-2024.2.2-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/ba/06/a07f096c664aeb9f01624f858c3add0a4e913d6c96257acb4fce61e7de14/certifi-2024.2.2-py3-none-any.whl",
+    "sha256": "dc383c07b76109f368f6106eee2b593b04a011ea4d55f652c6ca24a754d1cdd1"
+  },
+  {
+    "name": "charset-normalizer",
+    "version": "3.3.2",
+    "filename": "charset_normalizer-3.3.2-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/28/76/e6222113b83e3622caa4bb41032d0b1bf785250607392e1b778aca0b8a7d/charset_normalizer-3.3.2-py3-none-any.whl",
+    "sha256": "3e4d1f6587322d2788836a99c69062fbb091331ec940e02d12d179c1d53e25fc"
+  },
+  {
+    "name": "idna",
+    "version": "3.6",
+    "filename": "idna-3.6-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl",
+    "sha256": "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f"
+  },
+  {
+    "name": "urllib3",
+    "version": "2.2.1",
+    "filename": "urllib3-2.2.1-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl",
+    "sha256": "450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d"
+  },
+  {
+    "name": "google",
+    "version": "3.0.0",
+    "filename": "google-3.0.0-py2.py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/ac/35/17c9141c4ae21e9a29a43acdfd848e3e468a810517f862cad07977bf8fe9/google-3.0.0-py2.py3-none-any.whl",
+    "sha256": "889cf695f84e4ae2c55fbc0cfdaf4c1e729417fa52ab1db0485202ba173e4935"
+  },
+  {
+    "name": "feedparser",
+    "version": "6.0.11",
+    "filename": "feedparser-6.0.11-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/7c/d4/8c31aad9cc18f451c49f7f9cfb5799dadffc88177f7917bc90a66459b1d7/feedparser-6.0.11-py3-none-any.whl",
+    "sha256": "0be7ee7b395572b19ebeb1d6aafb0028dee11169f1c934e0ed67d54992f4ad45"
+  },
+  {
+    "name": "sgmllib3k",
+    "version": "1.0.0",
+    "filename": "sgmllib3k-1.0.0.tar.gz",
+    "url": "https://files.pythonhosted.org/packages/9e/bd/3704a8c3e0942d711c1299ebf7b9091930adae6675d7c8f476a7ce48653c/sgmllib3k-1.0.0.tar.gz",
+    "sha256": "7868fb1c8bfa764c1ac563d3cf369c381d1325d36124933a726f29fcdaa812e9",
+    "assetFilename": "sgmllib3k-1.0.0.tgz"
+  },
+  {
+    "name": "pdf2doi",
+    "version": "1.5.1",
+    "filename": "pdf2doi-1.5.1-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/57/81/41088b039d98ab891494b6e0409d4597f7f0eccfdad31ac4fac80933eec7/pdf2doi-1.5.1-py3-none-any.whl",
+    "sha256": "5251a2213f68a7fe3c2e4f5b48ad165d060ba2df8befe7dcfab3b542f8e7f92b"
+  }
+]

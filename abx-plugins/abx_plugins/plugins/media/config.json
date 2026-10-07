@@ -1,0 +1,10 @@
+{
+  "title":"Embedded media", "description":"Discover embedded audio/video and archive direct files or HLS/DASH manifests, selected segments, initialization data, captions and ordinary AES-128 keys into one WACZ.",
+  "category":"supplement", "default_enabled":true, "required_plugins":["chrome"],
+  "timeout":180, "shutdown_grace":5,
+  "properties":{
+    "MEDIA_FETCH_MISSING":{"type":"boolean","default":true,"description":"Fetch discovered direct media and stream dependencies; live, protected, unsupported or truncated captures are explicitly partial."},
+    "MEDIA_MAX_URLS":{"type":"integer","default":500,"minimum":1,"maximum":5000},
+    "MEDIA_MAX_MB":{"type":"integer","default":256,"minimum":1,"maximum":4096,"description":"Budget for inspected original media bodies; an oversized response is cancelled rather than saved as a corrupt complete file."}
+  }
+}

@@ -1,0 +1,68 @@
+--- a/forum_dl/extractors/discourse.py
++++ b/forum_dl/extractors/discourse.py
+@@ -141,7 +141,7 @@
+                 path = (category_id, f"{topic_id}")
+             else:
+                 for _, subboard in self._subboards[self.root.path].items():
+-                    if category_id in self._subboards[self.root.path]:
++                    if category_id in self._subboards[subboard.path]:
+                         path = subboard.path + (category_id, f"{topic_id}")
+                         break
+                 else:
+@@ -198,10 +198,12 @@
+             )
+ 
+     def _fetch_thread_page_posts(self, thread: Thread, state: PageState):
++        consumed_ids: set[int]
+         if state.url == thread.url:
+             json_url = f"{state.url}.json"
+             response = self._session.get(json_url)
+             page_json = response.json()
++            consumed_ids = {post["id"] for post in page_json["post_stream"]["posts"]}
+             state = DiscourseThreadPageState(
+                 url=response.url,
+                 stream_data=page_json["post_stream"]["stream"],
+@@ -211,6 +213,7 @@
+             origin = state.url
+             state = cast(DiscourseThreadPageState, state)
+             post_ids = tuple(state.stream_data[:20])
++            consumed_ids = set(post_ids)
+             response = self._session.get(
+                 origin,
+                 params={"post_ids[]": post_ids},
+@@ -225,7 +228,6 @@
+             topic_id = data["topic_id"]
+             post_number = data["post_number"]
+ 
+-            state.stream_data.pop(0)
+             yield Post(
+                 path=thread.path,
+                 subpath=(str(data["id"]),),
+@@ -237,6 +239,7 @@
+                 content=data.get("cooked", None),
+             )
+ 
++        state.stream_data = [post_id for post_id in state.stream_data if post_id not in consumed_ids]
+         topic_id = str(page_json["id"])
+ 
+         if state.stream_data:
+--- a/forum_dl/extractors/hackernews.py
++++ b/forum_dl/extractors/hackernews.py
+@@ -114,7 +114,7 @@
+     def _fetch_top_boards(self):
+         firebase_url = f"https://hacker-news.firebaseio.com/v0/maxitem.json"
+         self._max_item_id = int(self._session.get(firebase_url).content)
+-        self.pages: list[list[int]] = [[]] * (1 + self._calc_page_id(self._max_item_id))
++        self.pages: list[list[int]] = [[] for _ in range(1 + self._calc_page_id(self._max_item_id))]
+ 
+     def _do_fetch_subboards(self, board: Board):
+         pass
+@@ -276,7 +276,7 @@
+ 
+         for story_id in json:
+             firebase_url = f"https://hacker-news.firebaseio.com/v0/item/{story_id}.json"
+-            response = self._session.get(firebase_url)
++            response = self._session.get(firebase_url, should_cache=True)
+             data = response.json()
+ 
+             yield Thread(

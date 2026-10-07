@@ -1,0 +1,1 @@
+{"title":"Screenshot","description":"A JPEG preview capped at 12,000 CSS pixels tall, plus full-resolution page-by-page PNGs capped by INFINISCROLL_SCROLL_LIMIT.","category":"capture","default_enabled":true,"required_plugins":["chrome"],"timeout":30}

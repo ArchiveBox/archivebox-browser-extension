@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Accessibility",
+  "description": "Capture the browser accessibility tree for the archived page.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "chrome"
+  ],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "application/json"
+  ],
+  "properties": {
+    "ACCESSIBILITY_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_ACCESSIBILITY",
+        "USE_ACCESSIBILITY"
+      ],
+      "description": "Enable accessibility tree capture"
+    },
+    "ACCESSIBILITY_TIMEOUT": {
+      "type": "integer",
+      "default": 30,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for accessibility capture in seconds"
+    }
+  },
+  "category": "metadata",
+  "display_order": 50,
+  "snapshot_output_group": "metadata"
+}

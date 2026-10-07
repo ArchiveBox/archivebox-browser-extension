@@ -1,0 +1,17 @@
+{
+  "title": "PDF",
+  "description": "Print the archived page to PDF on demand.",
+  "category": "derived",
+  "default_enabled": true,
+  "required_plugins": [
+    "chrome"
+  ],
+  "timeout": 60,
+  "properties": {
+    "PDF_LANDSCAPE": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use landscape paper orientation."
+    }
+  }
+}

@@ -1,0 +1,297 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Chrome",
+  "description": "Needed by many other plugins to save high-fidelity archives within a real browser (does not save anything itself).",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [],
+  "required_binaries": [
+    {
+      "name": "{NODE_BINARY}",
+      "binproviders": "env,node,apt,brew",
+      "min_version": "22.12.0",
+      "overrides": {
+        "apt": {
+          "install_args": [
+            "nodejs"
+          ]
+        }
+      }
+    },
+    {
+      "name": "abxbus",
+      "binproviders": "pnpm",
+      "min_version": "2.5.73",
+      "min_release_age": 0,
+      "overrides": {
+        "pnpm": {
+          "install_root": "{ABXPKG_LIB_DIR}/pnpm/packages/abxbus",
+          "min_release_age": 0,
+          "install_args": [
+            "abxbus@2.5.73"
+          ],
+          "postinstall_scripts": true,
+          "abspath": "{ABXPKG_LIB_DIR}/pnpm/packages/abxbus/node_modules/abxbus/dist/cjs/index.js",
+          "version": "2.5.73"
+        }
+      }
+    },
+    {
+      "name": "browsers",
+      "binproviders": "pnpm",
+      "min_version": null,
+      "postinstall_scripts": false,
+      "overrides": {
+        "pnpm": {
+          "install_root": "{ABXPKG_LIB_DIR}/pnpm/packages/chrome",
+          "install_args": [
+            "@puppeteer/browsers@3.0.4",
+            "puppeteer@25.1.0"
+          ],
+          "version": "3.0.4"
+        }
+      }
+    },
+    {
+      "name": "{CHROME_BINARY}",
+      "binproviders": "env,playwright,puppeteer",
+      "min_version": "153.0.8010.36",
+      "min_release_age": 0,
+      "postinstall_scripts": true,
+      "overrides": {
+        "playwright": {
+          "install_args": [
+            "--with-deps",
+            "chromium",
+            "--no-shell"
+          ]
+        }
+      }
+    }
+  ],
+  "output_mimetypes": [
+    "text/plain",
+    "application/json"
+  ],
+  "properties": {
+    "AUTH_STORAGE_FILE": {
+      "type": "string",
+      "default": "",
+      "x-scope": "crawl_execution",
+      "description": "Path to a persona auth.json cookie export; preserves full browser cookie attributes and takes precedence over COOKIES_FILE"
+    },
+    "COOKIES_FILE": {
+      "type": "string",
+      "default": "",
+      "x-scope": "crawl_execution",
+      "description": "Optional path to a Netscape cookies.txt file to import before navigation; missing files warn and skip cookie import"
+    },
+    "CHROME_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "USE_CHROME"
+      ],
+      "description": "Enable Chrome browser integration for archiving"
+    },
+    "CHROME_BINARY": {
+      "type": "string",
+      "default": "chromium",
+      "description": "Path to a Chromium-family browser binary"
+    },
+    "CHROMEWEBSTORE_EXTENSIONS_DIR": {
+      "type": "string",
+      "default": "",
+      "description": "abxpkg-managed Chrome Web Store extension download/cache directory. This is intentionally not derived from PERSONAS_DIR/ACTIVE_PERSONA like runtime Chrome profile paths; Chrome reads unpacked extension artifacts from here while running with persona-derived user data dirs."
+    },
+    "NODE_BINARY": {
+      "type": "string",
+      "default": "node",
+      "description": "Path to Node.js binary"
+    },
+    "CHROME_TIMEOUT": {
+      "type": "integer",
+      "default": 60,
+      "minimum": 5,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for Chrome operations in seconds"
+    },
+    "CHROME_HEADLESS": {
+      "type": "boolean",
+      "default": true,
+      "description": "Run Chrome in headless mode"
+    },
+    "PERSONAS_DIR": {
+      "type": "string",
+      "default": "",
+      "description": "Shared Chrome/browser personas root"
+    },
+    "ACTIVE_PERSONA": {
+      "type": "string",
+      "default": "Default",
+      "description": "Active browser persona name"
+    },
+    "CHROME_SANDBOX": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable Chrome sandbox (disable in Docker with --no-sandbox)"
+    },
+    "CHROME_RESOLUTION": {
+      "type": "string",
+      "default": "1440,2000",
+      "pattern": "^\\d+,\\d+$",
+      "x-fallback": "RESOLUTION",
+      "description": "Browser viewport resolution (width,height)"
+    },
+    "BROWSER_COLOR_SCHEME": {
+      "type": "string",
+      "pattern": "^(light|dark)?$",
+      "default": "",
+      "description": "Preferred page color scheme (empty uses the browser default)"
+    },
+    "CHROME_USER_AGENT": {
+      "type": "string",
+      "default": "",
+      "x-fallback": "USER_AGENT",
+      "description": "User agent string for Chrome"
+    },
+    "CHROME_CDP_URL": {
+      "type": "string",
+      "default": "",
+      "description": "Connect to an already-running browser over CDP instead of launching a new local Chrome process"
+    },
+    "CHROME_IS_LOCAL": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether the managed browser process is local and should have a live chrome.pid marker"
+    },
+    "CHROME_KEEPALIVE": {
+      "type": "boolean",
+      "default": false,
+      "description": "Keep the browser alive after the owning crawl/snapshot hook exits instead of closing it during cleanup"
+    },
+    "CHROME_ISOLATION": {
+      "type": "string",
+      "default": "crawl",
+      "enum": [
+        "crawl",
+        "snapshot"
+      ],
+      "description": "Whether Chrome runs as one shared browser per crawl or a separate browser per snapshot"
+    },
+    "CHROME_ARGS": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-default-apps",
+        "--disable-sync",
+        "--disable-infobars",
+        "--disable-blink-features=AutomationControlled",
+        "--disable-component-update",
+        "--disable-domain-reliability",
+        "--disable-breakpad",
+        "--disable-client-side-phishing-detection",
+        "--disable-hang-monitor",
+        "--disable-speech-synthesis-api",
+        "--disable-speech-api",
+        "--disable-print-preview",
+        "--disable-notifications",
+        "--disable-desktop-notifications",
+        "--disable-popup-blocking",
+        "--disable-prompt-on-repost",
+        "--disable-external-intent-requests",
+        "--disable-session-crashed-bubble",
+        "--disable-search-engine-choice-screen",
+        "--disable-datasaver-prompt",
+        "--ash-no-nudges",
+        "--hide-crash-restore-bubble",
+        "--suppress-message-center-popups",
+        "--noerrdialogs",
+        "--no-pings",
+        "--silent-debugger-extension-api",
+        "--deny-permission-prompts",
+        "--enable-unsafe-extension-debugging",
+        "--remote-allow-origins=*",
+        "--safebrowsing-disable-auto-update",
+        "--metrics-recording-only",
+        "--password-store=basic",
+        "--use-mock-keychain",
+        "--disable-cookie-encryption",
+        "--font-render-hinting=none",
+        "--force-color-profile=srgb",
+        "--disable-partial-raster",
+        "--disable-skia-runtime-opts",
+        "--disable-2d-canvas-clip-aa",
+        "--enable-webgl",
+        "--hide-scrollbars",
+        "--export-tagged-pdf",
+        "--generate-pdf-document-outline",
+        "--disable-lazy-loading",
+        "--disable-renderer-backgrounding",
+        "--disable-background-networking",
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-ipc-flooding-protection",
+        "--disable-extensions-http-throttling",
+        "--disable-back-forward-cache",
+        "--autoplay-policy=no-user-gesture-required",
+        "--disable-gesture-requirement-for-media-playback",
+        "--lang=en-US,en;q=0.9",
+        "--log-level=2",
+        "--enable-logging=stderr"
+      ],
+      "x-aliases": [
+        "CHROME_DEFAULT_ARGS"
+      ],
+      "description": "Default Chrome command-line arguments (static flags only, dynamic args like --user-data-dir are added at runtime)"
+    },
+    "CHROME_ARGS_EXTRA": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "x-aliases": [
+        "CHROME_EXTRA_ARGS"
+      ],
+      "description": "Extra arguments to append to Chrome command (for user customization)"
+    },
+    "CHROME_PAGELOAD_TIMEOUT": {
+      "type": "integer",
+      "default": 60,
+      "minimum": 5,
+      "x-fallback": "CHROME_TIMEOUT",
+      "description": "Timeout for page navigation/load in seconds"
+    },
+    "CHROME_WAIT_FOR": {
+      "type": "string",
+      "default": "domcontentloaded",
+      "enum": [
+        "domcontentloaded",
+        "load",
+        "networkidle0",
+        "networkidle2"
+      ],
+      "description": "Page load completion condition (domcontentloaded, load, networkidle0, networkidle2)"
+    },
+    "CHROME_DELAY_AFTER_LOAD": {
+      "type": "number",
+      "default": 0,
+      "minimum": 0,
+      "description": "Extra delay in seconds after page load completes before archiving (useful for JS-heavy SPAs)"
+    },
+    "CHROME_CHECK_SSL_VALIDITY": {
+      "type": "boolean",
+      "default": true,
+      "x-fallback": "CHECK_SSL_VALIDITY",
+      "description": "Whether to verify SSL certificates (disable for self-signed certs)"
+    }
+  },
+  "category": "page_setup",
+  "display_order": 10,
+  "snapshot_output_group": "metadata"
+}

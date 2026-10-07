@@ -31,10 +31,9 @@ This is a browser extension that lets you send individual browser tabs or all UR
 - ⚙️ Automatically archive pages that match your chosen URL patterns, with allowlists and denylists.
 - 📥 Review and bulk import URLs from browser history or bookmarks on Chrome, Edge, and Firefox.
 - 🧭 Import Safari bookmarks, Reading List, and history from Safari's exported ZIP, HTML, or JSON files.
-- 🖼️ Keep local screenshots, including full-page captures when permission is granted.
-- 📄 Save local MHTML copies of pages. (Chrome and Edge.)
-- 📑 Save HTML copies with the optional SingleFile extension installed and connected.
-- 📤 Export saved URLs as CSV or JSON, screenshots as PNG, page captures as HTML or MHTML, or everything together in a ZIP.
+- 🗃️ Capture locally with the full ArchiveBox JS/WASM engine and keep a portable WACZ in OPFS. (Chromium.)
+- 🔎 Replay archived pages, screenshots, documents, media, and derived SingleFile/article views locally.
+- 📤 Export completed archives as WACZ, saved URLs as CSV or JSON, or all local files together in a ZIP. Legacy PNG, HTML, and MHTML exports remain available.
 - 👤 Choose cookies and browser settings to sync to an ArchiveBox authentication profile for sites that require a login.
 - 🧹 Choose how long to keep local copies, including cleanup after successful submission to your server.
 - 🌐 Use the extension in English, Spanish, or Simplified Chinese.
@@ -48,17 +47,21 @@ In **Extension options → Bulk Import URLs**, choose which Safari data to impor
 
 ## Local Captures
 
-Viewport screenshots and MHTML captures (Chrome/Edge/Brave) are enabled by default, along with uploading these artifacts to the selected server. Safari and Firefox do not capture MHTML. Full-page capture and upload are separate opt-in settings. Viewport and full-page images are stored independently when both are enabled. Existing explicit capture and upload choices are preserved.
+On Chrome, Edge, and other compatible Chromium browsers, opening the toolbar saves the page using the full ArchiveBox JS/WASM plugin flow. No ArchiveBox server or companion SingleFile extension is required. A capture tab runs independently of the popup; keep it open until capture finishes.
 
-The extension stores capture artifacts in the browser's extension-local OPFS storage:
+All registered plugins run with their normal applicability checks, including the bundled Pyodide extractors and WASM document/OCR engines. Screenshots and original responses share a single WACZ; SingleFile, article, PDF, and other views derive their output from the saved archive. Capture reloads the source tab with recording enabled.
 
-- Viewport screenshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_viewport/screenshot.png`
-- Full-page screenshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_screenshot/screenshot.png`
-- MHTML snapshot: `snapshots/YYYYMMDD/example.com/{uuid}/chrome_extension_mhtml/snapshot.mhtml`
+Finished, verified packages are stored in extension-local OPFS:
 
-Older local MHTML files retain their recorded `chrome_mhtml` paths. Uploads use the separate `chrome_extension_mhtml` server directory so server-side MHTML captures cannot overwrite browser-captured files.
+`snapshots/YYYYMMDD/example.com/{uuid}/archivebox_js/capture.wacz`
 
-Local copies in OPFS are removed after 30 days by default; you can configure the extension to keep them indefinitely or remove them as soon as the server receives the URL.
+Open them from **Saved URLs** or the popup's **Open archive** button. The shared viewer provides replay, plugin outputs, search, download, and deletion. Export offers WACZ and includes finished archives in ZIP exports. Stopping or interrupting a capture does not publish a partial WACZ. **Archive again** creates a new snapshot and starts from scratch.
+
+Server Sync submits URLs and metadata, then uploads the completed package through the existing ArchiveResult API as `wacz/capture.wacz`. If capture finishes after URL submission, delivery continues with the popup closed. The server stores one placeholder `wacz` result; the per-hook records remain inside the package's `index.jsonl`. No server filesystem changes or record import are needed. Local WACZ files remain available until you explicitly delete them. Existing screenshot/MHTML/HTML files remain readable and exportable.
+
+Firefox and Safari retain URL collection, server submission, and persona features. The full local engine requires Chromium's debugger API; there is no reduced legacy capture fallback.
+
+See [engine provenance and licenses](ARCHIVEBOX-JS.md).
 
 ## Setup
 
@@ -110,16 +113,25 @@ node scripts/test-retention-live.mjs
 
 The live test imports bookmarks through the options UI, submits them, checks disconnected/missing-server preservation, verifies OPFS and metadata deletion, restarts the service worker, and waits for automatic expiration after resubmission. It creates server test records and deletes one of its own records to test a missing snapshot; use a disposable collection. UI default/persistence and layout checks run with `pnpm exec playwright test tests/retention.test.ts tests/options-responsive.test.ts`.
 
-To verify native popup submission and real capture uploads, start a disposable collection with `archivebox server` (including its normal crawler worker):
+To verify the new local capture flow in real Chromium:
 
 ```bash
-ARCHIVEBOX_TEST_SERVER=http://127.0.0.1:5797 \
-ARCHIVEBOX_TEST_KEY_FILE=/path/to/disposable-server-api-key \
-FULLPAGE=1 FULLPAGE_UPLOAD=1 AGE_CHECK=1 RESUBMIT=1 \
-node scripts/test-popup-delivery-live.mjs
+pnpm build
+pnpm exec playwright test tests/wacz-capture.test.ts
+pnpm exec playwright test tests/popup.test.ts --grep 'native action popup|auto-archive captures a full WACZ|action popup saves a full WACZ'
 ```
 
-This uses the options and native popup UI, verifies the live seconds counter, compares replayed captures with local bytes, and waits two real minutes before checking the submission age and fresh server lookup. `RESUBMIT=1` verifies that Re-submit creates a new crawl and snapshot with `ONLY_NEW=False`, and checks the crawl depth wording. `DELETE_AFTER_AGE=1` deletes its own server snapshot through the public API, then verifies that reopening the popup detects the missing capture and submits it again. Omit `FULLPAGE_UPLOAD` to verify that full-page capture stays local while viewport and MHTML upload. The test creates real example.com submissions and verifies their crawls seal. `PERSONA_TEST=1` creates a test persona through the public API and selects it in the popup; combine with `AGE_CHECK=1` to verify an older capture is preserved, or `REUSE_LOCAL=1` to verify a reused capture is preserved while new local captures still run. Run persona and Re-submit scenarios separately. `ARCHIVEBOX_TEST_COLLECTION=/path/to/collection` additionally checks the real crawl persona foreign key read-only. `OLD_SERVER=1` tests a real older server whose schema lacks snapshot ownership/persona fields; this compatibility fixture can run without workers.
+These tests load the unpacked extension through CDP, archive real documents through the toolbar, verify the exported WACZ hashes and Snapshot records, replay SingleFile after shutting down the source server, and check interruption, fresh recapture, and OPFS deletion.
+
+To verify outbound WACZ delivery, start a disposable ArchiveBox server without archive workers, build the extension, and run:
+
+```bash
+ARCHIVEBOX_TEST_SERVER=http://127.0.0.1:5899 \
+ARCHIVEBOX_TEST_KEY_FILE=/path/to/disposable-server-api-key \
+node scripts/test-wacz-delivery-live.mjs
+```
+
+The test configures the extension through its UI, captures a real document, closes the popup after URL acceptance, and verifies the server's `wacz` result contains exactly the same bytes as the local export. The old `scripts/test-popup-delivery-live.mjs` targets the retired per-artifact capture UI. Server-side import of the embedded result records is a separate follow-up.
 
 ## Changelog
 
@@ -162,4 +174,4 @@ Other projects that help with ingest URLs into ArchiveBox from various sources.
 
 ## License
 
-MIT License
+AGPL-3.0-or-later. Original MIT notices are retained in `LICENSES/`.

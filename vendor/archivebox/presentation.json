@@ -1,0 +1,221 @@
+{
+  "accessibility": {
+    "title": "Accessibility",
+    "snapshot_output_group": "metadata"
+  },
+  "archivewebpage": {
+    "title": "ArchiveWeb.page",
+    "snapshot_output_group": "html",
+    "snapshot_output_order": 0,
+    "snapshot_display_name": "ArchiveWebpage"
+  },
+  "chrome": {
+    "title": "Chrome",
+    "snapshot_output_group": "metadata"
+  },
+  "consolelog": {
+    "title": "Console Log",
+    "snapshot_output_group": "metadata"
+  },
+  "defuddle": {
+    "title": "Defuddle",
+    "snapshot_output_group": "article_text",
+    "snapshot_output_order": 1
+  },
+  "dns": {
+    "title": "DNS",
+    "snapshot_output_group": "metadata"
+  },
+  "dom": {
+    "title": "DOM",
+    "snapshot_output_group": "html",
+    "snapshot_output_order": 4
+  },
+  "favicon": {
+    "title": "Favicon",
+    "snapshot_output_group": "metadata",
+    "snapshot_list_icon": true,
+    "card_hidden": true,
+    "snapshot_thumbnail_cards": [
+      {
+        "archive_result_name": "favicon",
+        "order": 5
+      }
+    ]
+  },
+  "forumdl": {
+    "title": "forum-dl",
+    "snapshot_output_group": "embedded_media",
+    "snapshot_display_name": "Forum-DL"
+  },
+  "gallerydl": {
+    "title": "gallery-dl",
+    "snapshot_output_group": "embedded_media",
+    "snapshot_display_name": "Gallery-DL"
+  },
+  "hashes": {
+    "title": "Hashes",
+    "snapshot_output_group": "metadata"
+  },
+  "headers": {
+    "title": "Headers",
+    "snapshot_output_group": "metadata"
+  },
+  "htmltotext": {
+    "title": "HTML to Text",
+    "snapshot_output_group": "article_text",
+    "snapshot_output_order": 4
+  },
+  "infiniscroll": {
+    "title": "Infinite Scroll"
+  },
+  "istilldontcareaboutcookies": {
+    "title": "I Still Don't Care About Cookies"
+  },
+  "liteparse": {
+    "title": "LiteParse",
+    "snapshot_output_group": "embedded_media"
+  },
+  "media": {
+    "title": "Media",
+    "snapshot_output_group": "embedded_media",
+    "card_hidden": true
+  },
+  "mercury": {
+    "title": "Mercury",
+    "snapshot_output_group": "article_text",
+    "snapshot_output_order": 2
+  },
+  "modalcloser": {
+    "title": "Modal Closer"
+  },
+  "papersdl": {
+    "title": "papers-dl",
+    "snapshot_output_group": "embedded_media",
+    "snapshot_output_order": 0
+  },
+  "parse_dom_outlinks": {
+    "title": "Parse DOM Outlinks",
+    "snapshot_output_group": "metadata"
+  },
+  "parse_html_urls": {
+    "title": "Parse HTML URLs",
+    "snapshot_output_group": "metadata"
+  },
+  "parse_jsonl_urls": {
+    "title": "Parse JSONL URLs",
+    "snapshot_output_group": "metadata"
+  },
+  "parse_netscape_urls": {
+    "title": "Parse Netscape URLs",
+    "snapshot_output_group": "metadata"
+  },
+  "parse_rss_urls": {
+    "title": "Parse RSS URLs",
+    "snapshot_output_group": "metadata"
+  },
+  "parse_txt_urls": {
+    "title": "Parse Text URLs",
+    "snapshot_output_group": "metadata"
+  },
+  "pdf": {
+    "title": "PDF",
+    "snapshot_output_group": "raster",
+    "snapshot_output_order": 1
+  },
+  "readability": {
+    "title": "Readability",
+    "snapshot_output_group": "article_text",
+    "snapshot_output_order": 0,
+    "snapshot_display_name": "Readability"
+  },
+  "redirects": {
+    "title": "Redirects",
+    "snapshot_output_group": "metadata"
+  },
+  "responses": {
+    "title": "Responses",
+    "snapshot_output_group": "embedded_media",
+    "snapshot_thumbnail_cards": [
+      {
+        "archive_result_name": "responses",
+        "order": 4
+      }
+    ]
+  },
+  "screenshot": {
+    "title": "Screenshot",
+    "snapshot_output_group": "raster",
+    "snapshot_output_order": 0,
+    "snapshot_primary_preview": true,
+    "snapshot_thumbnail_cards": [
+      {
+        "archive_result_name": "screenshot",
+        "order": 0
+      },
+      {
+        "archive_result_name": "chrome_extension_screenshot",
+        "order": 1
+      }
+    ]
+  },
+  "seo": {
+    "title": "SEO",
+    "snapshot_output_group": "metadata",
+    "snapshot_thumbnail_cards": [
+      {
+        "archive_result_name": "seo",
+        "order": 3
+      }
+    ]
+  },
+  "singlefile": {
+    "title": "SingleFile",
+    "snapshot_output_group": "html",
+    "snapshot_output_order": 1,
+    "snapshot_display_name": "SingleFile"
+  },
+  "ssl": {
+    "title": "SSL",
+    "snapshot_output_group": "metadata"
+  },
+  "sslcerts": {
+    "title": "SSL Certificates",
+    "snapshot_output_group": "metadata"
+  },
+  "staticfile": {
+    "title": "Static File"
+  },
+  "title": {
+    "title": "Title",
+    "snapshot_output_group": "metadata",
+    "snapshot_title_source": true
+  },
+  "ytdlp": {
+    "title": "yt-dlp",
+    "snapshot_display_name": "YouTube-DL",
+    "snapshot_output_group": "embedded_media",
+    "snapshot_output_order": 40
+  },
+  "git": {
+    "title": "Git",
+    "snapshot_display_name": "Git",
+    "snapshot_output_group": "embedded_media",
+    "snapshot_output_order": 60
+  },
+  "googledocs": {
+    "title": "Google Docs",
+    "snapshot_output_group": "embedded_media",
+    "default_output_path": "exports.json"
+  },
+  "gdrive": {
+    "title": "Google Drive",
+    "snapshot_output_group": "embedded_media",
+    "default_output_path": "downloads.json"
+  },
+  "dropbox": {
+    "title": "Dropbox",
+    "snapshot_output_group": "embedded_media",
+    "default_output_path": "downloads.json"
+  }
+}

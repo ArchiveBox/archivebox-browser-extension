@@ -1,0 +1,1 @@
+{"title":"Defuddle","description":"Extract article content and metadata locally from the archived DOM.","category":"content","default_enabled":true,"required_plugins":["dom"]}

@@ -1,4 +1,3 @@
-import { supportsMhtmlCapture } from './browserCapabilities';
 import { appConnection } from './appConnection';
 import { activeServer, validateRegistry, defaultServerPolicy } from './server_registry';
 import type { ConfigState, Persona, Snapshot, ServerConfiguration, ServerRegistry, ServerPolicy } from './types';
@@ -13,11 +12,6 @@ const defaultConfig: ConfigState = {
   exclude_urls: '',
   local_retention_ms: 2592000000,
   enable_auto_archive: false,
-  save_screenshots_locally: false,
-  save_viewport_screenshots_locally: true,
-  save_mhtml_locally: supportsMhtmlCapture,
-  save_singlefile_locally: false,
-  singlefile_extension_id: '',
   tab_manager_plus_extension_id: '',
 };
 
@@ -48,8 +42,8 @@ export async function getConfig(): Promise<ConfigState> {
   };
   if (!['auto', 'en', 'es', 'zh_CN'].includes(config.ui_language)
     || ![60000, 86400000, 2592000000, 7776000000, 'never'].includes(config.local_retention_ms)
-    || [config.match_urls, config.exclude_urls, config.singlefile_extension_id, config.tab_manager_plus_extension_id].some((value) => typeof value !== 'string')
-    || [config.enable_auto_archive, config.save_screenshots_locally, config.save_viewport_screenshots_locally, config.save_mhtml_locally, config.save_singlefile_locally].some((value) => typeof value !== 'boolean')) {
+    || [config.match_urls, config.exclude_urls, config.tab_manager_plus_extension_id].some((value) => typeof value !== 'string')
+    || typeof config.enable_auto_archive !== 'boolean') {
     throw new Error('Saved extension settings are invalid.');
   }
   return config;

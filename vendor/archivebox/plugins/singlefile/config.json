@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SingleFile",
+  "description": "Save a complete page as a single self-contained HTML file using the SingleFile Chrome extension.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [
+    "chrome"
+  ],
+  "required_binaries": [
+    {
+      "name": "singlefile",
+      "binproviders": "env,chromewebstore",
+      "min_version": null,
+      "overrides": {
+        "chromewebstore": {
+          "install_args": [
+            "mpiodijhokgodhhofbcjdecpffjipkle",
+            "--name=singlefile"
+          ]
+        }
+      }
+    }
+  ],
+  "output_mimetypes": [
+    "text/html"
+  ],
+  "properties": {
+    "SINGLEFILE_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "SAVE_SINGLEFILE",
+        "USE_SINGLEFILE"
+      ],
+      "description": "Enable SingleFile archiving"
+    },
+    "SINGLEFILE_TIMEOUT": {
+      "type": "integer",
+      "default": 60,
+      "minimum": 10,
+      "x-fallback": "TIMEOUT",
+      "description": "Timeout for SingleFile in seconds"
+    }
+  },
+  "category": "main",
+  "display_order": 40,
+  "snapshot_output_group": "html",
+  "snapshot_output_order": 1,
+  "snapshot_display_name": "SingleFile"
+}

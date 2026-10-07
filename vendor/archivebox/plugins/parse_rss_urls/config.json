@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Parse RSS URLs",
+  "description": "Parse RSS and Atom feeds and emit discovered entry URLs as JSONL snapshot records.",
+  "screenshot": "screenshot.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [],
+  "required_binaries": [
+    {
+      "name": "feedparser",
+      "binproviders": "uv,env",
+      "min_version": null,
+      "postinstall_scripts": true,
+      "overrides": {
+        "uv": {
+          "postinstall_scripts": true,
+          "install_root": "{ABXPKG_LIB_DIR}/uv/packages/parse_rss_urls-6.0.12",
+          "install_args": [
+            "feedparser==6.0.12"
+          ]
+        }
+      }
+    }
+  ],
+  "output_mimetypes": [
+    "application/x-ndjson"
+  ],
+  "properties": {
+    "PARSE_RSS_URLS_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "USE_PARSE_RSS_URLS"
+      ],
+      "description": "Enable RSS/Atom feed URL parsing"
+    }
+  },
+  "x-accepts-internal-input": true,
+  "category": "postprocessing",
+  "display_order": 50,
+  "snapshot_output_group": "metadata"
+}

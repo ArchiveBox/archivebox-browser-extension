@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Parse Text URLs",
+  "description": "Parse plain text documents and emit discovered URLs as JSONL snapshot records.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "application/x-ndjson"
+  ],
+  "properties": {
+    "PARSE_TXT_URLS_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "USE_PARSE_TXT_URLS"
+      ],
+      "description": "Enable plain text URL parsing"
+    }
+  },
+  "x-accepts-internal-input": true,
+  "category": "postprocessing",
+  "display_order": 60,
+  "snapshot_output_group": "metadata"
+}

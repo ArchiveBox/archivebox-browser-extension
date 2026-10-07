@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Parse HTML URLs",
+  "description": "Parse HTML documents and emit discovered links as JSONL snapshot records.",
+  "type": "object",
+  "additionalProperties": false,
+  "required_plugins": [],
+  "required_binaries": [],
+  "output_mimetypes": [
+    "application/x-ndjson"
+  ],
+  "properties": {
+    "PARSE_HTML_URLS_ENABLED": {
+      "type": "boolean",
+      "default": true,
+      "x-aliases": [
+        "USE_PARSE_HTML_URLS"
+      ],
+      "description": "Enable HTML URL parsing"
+    }
+  },
+  "x-accepts-internal-input": true,
+  "category": "postprocessing",
+  "display_order": 20,
+  "snapshot_output_group": "metadata"
+}

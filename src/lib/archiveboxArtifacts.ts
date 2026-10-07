@@ -52,7 +52,7 @@ function opfsFileToUpload(file: OpfsFile): ArchiveResultUploadFile {
   return {
     blob: file.blob,
     output_path: file.output_path,
-    mimeType: file.blob.type || 'application/octet-stream',
+    mimeType: file.directory === 'archivebox_js' ? 'application/wacz' : file.blob.type || 'application/octet-stream',
   };
 }
 
@@ -76,10 +76,11 @@ function buildSnapshotArtifactGroups(snapshot: Snapshot, opfsFiles: OpfsFile[]):
     if (!files.length) return [];
     return [{
       // Never share the server hook's chrome_mhtml directory: its later capture would overwrite ours.
-      plugin: directory === 'chrome_mhtml' ? 'chrome_extension_mhtml' : directory,
+      plugin: directory === 'archivebox_js' ? 'wacz' : directory === 'chrome_mhtml' ? 'chrome_extension_mhtml' : directory,
       output_str: files[0]?.output_path || '',
       output_json: {
         source: extensionArtifactSource,
+        snapshot_id: snapshot.id,
         snapshot_title: snapshot.title,
         snapshot_url: snapshot.url,
         snapshot_tags: snapshot.tags,
@@ -167,7 +168,13 @@ async function uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked(server: Server
 }> {
   let uploadedAny = false;
   if (!snapshot_id) return emptySyncResult;
+  if (snapshot.wacz && (snapshot.wacz.state !== 'complete' || !snapshot.wacz.file)) {
+    throw new Error('Local capture did not finish. Archive the URL again before uploading it.');
+  }
   const opfsFiles = getOpfsFilesForSnapshot(snapshot, await readSnapshotOpfsFiles(snapshot));
+  if (snapshot.wacz && !opfsFiles.some(file => file.path === snapshot.wacz!.file)) {
+    throw new Error('The completed WACZ is missing from local storage.');
+  }
 
   for (const group of buildSnapshotArtifactGroups(snapshot, opfsFiles)) {
     if (group.plugin === 'chrome_extension_viewport' && !server.policy.upload_viewport_screenshots_to_server) continue;

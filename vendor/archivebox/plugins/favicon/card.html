@@ -1,0 +1,11 @@
+<!-- Favicon thumbnail - small favicon preview -->
+<div class="extractor-thumbnail favicon-thumbnail" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #fff;">
+    {% if output_path %}
+        <img src="{{ output_path }}"
+             alt="Favicon"
+             style="width: 28px; height: 28px; max-width: 28px; max-height: 28px; object-fit: contain;"
+             loading="lazy"
+             decoding="async"
+             fetchpriority="low">
+    {% endif %}
+</div>
