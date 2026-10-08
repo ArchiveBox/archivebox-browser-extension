@@ -54,14 +54,13 @@ import {
   getPersonas,
   getSnapshots,
   setActivePersona,
-  setConfig,
   updateServer,
   removeServer,
   mutatePersonas,
   updatePersona,
   mutateSnapshots,
 } from '@/src/lib/storage';
-import type { ConfigState, Persona, RuntimeMessage, RuntimeResponse, Snapshot, StoredCookie } from '@/src/lib/types';
+import type { ConfigPatch, ConfigState, Persona, RuntimeMessage, RuntimeResponse, Snapshot, StoredCookie } from '@/src/lib/types';
 import { retentionDurations, type CaptureKind } from '@/src/lib/types';
 
 type Tab = 'urls' | 'config' | 'profiles' | 'import';
@@ -985,6 +984,7 @@ function OptionsMain() {
   const server = activeServer(config);
   const [serverDraft, setServerDraft] = useState<string | null>(null);
   const [tokenDraft, setTokenDraft] = useState<string | null>(null);
+  const [savingServer, setSavingServer] = useState(false);
   const server_id = server?.id || '';
   useEffect(() => {
     if (!server) return;
@@ -1015,6 +1015,7 @@ function OptionsMain() {
   function destination() { return requireServer(config, server_id); }
   async function saveServer(patch: Parameters<typeof updateServer>[1]) {
     const id = server?.id ?? null;
+    setSavingServer(true);
     if (id && patch.policy) setConfigState((current) => ({
       ...current,
       server_policies: { ...current.server_policies, [id]: { ...destination().policy, ...patch.policy } },
@@ -1026,6 +1027,8 @@ function OptionsMain() {
     } catch (error) {
       setConfigState(await getConfig());
       setServerStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setSavingServer(false);
     }
   }
   const archiveboxServerUrlIsValid = isHttpUrl((server?.server || ''));
@@ -1227,11 +1230,15 @@ function OptionsMain() {
     );
   }
 
-  async function saveConfig(patch: Partial<ConfigState>) {
-    const next = { ...config, ...patch };
+  async function saveConfig(patch: ConfigPatch) {
     if (patch.ui_language) setUiLanguage(patch.ui_language);
-    setConfigState(next);
-    await setConfig(patch);
+    setConfigState(current => ({ ...current, ...patch, capture_retention_ms: Object.fromEntries(
+      Object.entries({ ...current.capture_retention_ms, ...patch.capture_retention_ms }).filter(([, value]) => value !== null),
+    ) }));
+    // Dispatch before yielding: the background completes this write even if
+    // the options page is immediately reloaded or closed.
+    const response: RuntimeResponse = await browser.runtime.sendMessage({ type: 'set_config', patch } satisfies RuntimeMessage);
+    if (!response.ok) throw new Error(response.errorMessage || 'Unable to save settings.');
   }
 
   async function testServer() {
@@ -2106,7 +2113,7 @@ function OptionsMain() {
             <p className="help-text">The extension uses the ArchiveBox app server registry until you save a connection here. Cookie sync permissions are configured separately for each server.</p>
           )}
           <Field label={t("ArchiveBox Server URL")}>
-            <input value={serverDraft ?? server?.server ?? ''} onChange={(event) => setServerDraft(event.currentTarget.value)} onBlur={async () => { if (serverDraft !== null) { await saveServer({ server: serverDraft }); setServerDraft(null); } }} placeholder={t("http://localhost:5797 or https://archivebox.example.com")} />
+            <input disabled={savingServer} value={serverDraft ?? server?.server ?? ''} onChange={(event) => setServerDraft(event.currentTarget.value)} onBlur={async () => { if (serverDraft !== null) { await saveServer({ server: serverDraft }); setServerDraft(null); } }} placeholder={t("http://localhost:5797 or https://archivebox.example.com")} />
             <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin`, '_blank')}>{t("Admin")}</button>
             <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin/login/`, '_blank')}>{t("Login")}</button>
             <button disabled={!archiveboxServerUrlIsValid} onClick={testServer}>{t("Test")}</button>
@@ -2116,7 +2123,7 @@ function OptionsMain() {
             {t("The base URL of your self-hosted ArchiveBox server. Local HTTP servers such as")} <code>http://localhost:5797</code> {t("are supported, as are HTTPS deployments.")}
           </p>
           <Field label={t("API Key")}>
-            <input value={tokenDraft ?? server?.token ?? ''} onChange={(event) => setTokenDraft(event.currentTarget.value)} onBlur={async () => { if (tokenDraft !== null) { await saveServer({ token: tokenDraft.trim() }); setTokenDraft(null); } }} placeholder="... abcexamplekey1234 ..." />
+            <input disabled={savingServer} value={tokenDraft ?? server?.token ?? ''} onChange={(event) => setTokenDraft(event.currentTarget.value)} onBlur={async () => { if (tokenDraft !== null) { await saveServer({ token: tokenDraft.trim() }); setTokenDraft(null); } }} placeholder="... abcexamplekey1234 ..." />
             <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin/api/apitoken/add/`, '_blank')}>{t("Generate")}</button>
             <button disabled={!archiveboxServerUrlIsValid} onClick={testApiKeyValue}>{t("Test")}</button>
             <StatusBadge status={apiStatus} />
@@ -2250,11 +2257,9 @@ function OptionsMain() {
             ...(config.save_singlefile_locally ? [['singlefile', t('SingleFile retention')]] : []),
           ] as Array<[CaptureKind, string]>).map(([kind, label]) => <Field label={label} key={kind}>
             <select aria-label={label} value={config.capture_retention_ms[kind] ?? 'snapshot'} onChange={event => {
-              const captures = { ...config.capture_retention_ms };
               const value = event.currentTarget.value;
-              if (value === 'snapshot') delete captures[kind];
-              else captures[kind] = value === 'never' ? 'never' : Number(value) as ConfigState['local_retention_ms'];
-              void saveConfig({ capture_retention_ms: captures });
+              void saveConfig({ capture_retention_ms: { [kind]: value === 'snapshot' ? null
+                : value === 'never' ? 'never' : Number(value) as ConfigState['local_retention_ms'] } });
             }}>
               <option value="snapshot">{t('Default (same as snapshot)')}</option>
               {retentionDurations.filter(value => config.local_retention_ms === 'never' || (value !== 'never' && value <= config.local_retention_ms)).map(value =>

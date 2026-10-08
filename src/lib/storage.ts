@@ -1,7 +1,7 @@
 import { supportsMhtmlCapture } from './browserCapabilities';
 import { appConnection } from './appConnection';
 import { activeServer, validateRegistry, defaultServerPolicy } from './server_registry';
-import type { ConfigState, Persona, Snapshot, ServerConfiguration, ServerRegistry, ServerPolicy } from './types';
+import type { ConfigPatch, ConfigState, Persona, Snapshot, ServerConfiguration, ServerRegistry, ServerPolicy } from './types';
 import { retentionDurations } from './types';
 import { capturePlugins } from './captureStatus';
 import { archiveBoxServerUrlMatches } from './archiveboxUrlExclusions';
@@ -60,21 +60,26 @@ export async function getConfig(): Promise<ConfigState> {
   return config;
 }
 
-export async function setConfig(config: Partial<ConfigState>): Promise<void> {
+export async function setConfig(config: ConfigPatch): Promise<void> {
   // Global capture/UI settings are independent of server registry edits.
   const { schema_version, servers, active_server_id, default_server_ids, server_policies, ...preferences } = config;
   if (server_policies !== undefined || servers !== undefined || active_server_id !== undefined || default_server_ids !== undefined || schema_version !== undefined) {
     throw new Error('Use server registry operations to change destinations.');
   }
-  if (preferences.local_retention_ms !== undefined || preferences.capture_retention_ms !== undefined) {
-    const current = await getConfig();
-    const limit = preferences.local_retention_ms ?? current.local_retention_ms;
-    const captures = preferences.capture_retention_ms ?? current.capture_retention_ms;
-    preferences.capture_retention_ms = Object.fromEntries(Object.entries(captures).map(([kind, value]) => [kind,
-      limit !== 'never' && (value === 'never' || value > limit) ? limit : value,
-    ]));
-  }
-  await browser.storage.local.set(preferences);
+  // The background owns this transaction so closing/reloading options cannot
+  // cancel a read-modify-write, and concurrent tabs cannot lose other types.
+  await navigator.locks.request('archivebox-config', async () => {
+    if (preferences.local_retention_ms !== undefined || preferences.capture_retention_ms !== undefined) {
+      const current = await getConfig();
+      const limit = preferences.local_retention_ms ?? current.local_retention_ms;
+      const captures = { ...current.capture_retention_ms, ...preferences.capture_retention_ms };
+      preferences.capture_retention_ms = Object.fromEntries(Object.entries(captures)
+        .filter(([, value]) => value !== null).map(([kind, value]) => [kind,
+          limit !== 'never' && (value === 'never' || (value !== null && value > limit)) ? limit : value,
+        ]));
+    }
+    await browser.storage.local.set(preferences);
+  });
 }
 
 export async function updateServer(id: string | null, patch: Partial<Omit<ServerConfiguration, 'id'>> & { policy?: Partial<ServerPolicy> }): Promise<ServerConfiguration> {

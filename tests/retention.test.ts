@@ -58,6 +58,34 @@ test('capture retention inherits the snapshot limit and persists shorter per-typ
   } finally { await harness.close(); }
 });
 
+test('concurrent retention edits survive closing their options tabs immediately', async () => {
+  const harness = await launchExtension();
+  try {
+    const openSettings = async () => {
+      const page = await harness.context.newPage();
+      await page.goto(`chrome-extension://${harness.id}/options.html`);
+      await page.getByRole('button', { name: 'Configuration', exact: true }).click();
+      return page;
+    };
+    const first = await openSettings();
+    await first.getByLabel('After saving on server, remove local copies after:').selectOption('never');
+    const pages = [first, await openSettings(), await openSettings()];
+    const choices = [
+      ['MHTML retention', '60000'],
+      ['Viewport screenshot retention', '86400000'],
+      ['Full-page screenshot retention', '7776000000'],
+    ] as const;
+    await Promise.all(pages.map(async (page, index) => {
+      const [label, value] = choices[index]!;
+      await page.getByLabel(label, { exact: true }).selectOption(value);
+      await page.close();
+    }));
+    const reopened = await openSettings();
+    await expect(reopened.getByLabel('After saving on server, remove local copies after:')).toHaveValue('never');
+    for (const [label, value] of choices) await expect(reopened.getByLabel(label, { exact: true })).toHaveValue(value);
+  } finally { await harness.close(); }
+});
+
 test('local retention defaults to 30 days and persists every choice', async ({}, testInfo) => {
   const harness = await launchExtension();
   const { context, id } = harness;

@@ -6,7 +6,7 @@ import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCap
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { appendSnapshotScreenshotParts, writeSnapshotMhtmlBytes, writeSnapshotScreenshot, writeSnapshotScreenshotParts, writeSnapshotSingleFileHtml } from '@/src/lib/screenshotStorage';
 import { createSnapshot } from '@/src/lib/snapshots';
-import { getArchiveBoxServerUrl, getConfig, getPersonas, getSnapshots, mutateSnapshots } from '@/src/lib/storage';
+import { getArchiveBoxServerUrl, getConfig, getPersonas, getSnapshots, mutateSnapshots, setConfig } from '@/src/lib/storage';
 import type { RuntimeMessage, RuntimeResponse, Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotSingleFile } from '@/src/lib/types';
 import { compactUuid } from '@/src/lib/uuid';
 
@@ -965,6 +965,11 @@ export default defineBackground(() => {
     _sender,
   ): Promise<RuntimeResponse> | RuntimeResponse => {
     switch (message.type) {
+      case 'set_config':
+        return setConfig(message.patch)
+          .then(() => ({ ok: true }))
+          .catch((error: Error) => ({ ok: false, errorMessage: error.message }));
+
       case 'archivebox_add':
         return getConfig().then(async (config) => {
           const configuredServer = requireServer(config, message.server_id);

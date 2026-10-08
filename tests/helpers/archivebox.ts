@@ -18,7 +18,7 @@ export const test = base.extend<{}, { archivebox: ArchiveBoxApi }>({
     await mkdir(collection);
     const runtime = process.env.ARCHIVEBOX_TEST_PROJECT
       ? ['run', '--project', process.env.ARCHIVEBOX_TEST_PROJECT]
-      : ['run', '--no-project', '--with', 'archivebox==0.9.74rc34'];
+      : ['run', '--no-project', '--python', '3.13', '--with', 'archivebox==0.9.74rc34'];
     const run = promisify(execFile);
     let child: ReturnType<typeof spawn> | undefined;
     const log = await open(path.join(root, 'server.log'), 'a');

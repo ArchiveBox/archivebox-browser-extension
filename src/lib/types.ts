@@ -179,6 +179,11 @@ export type ArchiveboxAddMessage = {
   };
 };
 
+// Capture-retention updates patch one type; null restores inheritance.
+export type ConfigPatch = Omit<Partial<ConfigState>, 'capture_retention_ms'> & {
+  capture_retention_ms?: Partial<Record<CaptureKind, RetentionDuration | null>>;
+};
+
 export type ArchiveboxRemoveMessage = {
   type: 'archivebox_remove';
   server_id: string;
@@ -265,6 +270,7 @@ export type ScreenshotRestoreScrollMessage = {
 };
 
 export type RuntimeMessage =
+  | { type: 'set_config'; patch: ConfigPatch }
   | ArchiveboxAddMessage
   | ArchiveboxRemoveMessage
   | TestServerMessage
