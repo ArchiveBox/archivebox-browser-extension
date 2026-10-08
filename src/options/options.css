@@ -547,7 +547,7 @@ code {
 }
 
 .saved-url-table th:nth-child(5) {
-  width: 72px;
+  width: 84px;
   padding-right: 4px;
   padding-left: 4px;
 }
@@ -908,35 +908,84 @@ code {
   min-height: 16px;
 }
 
-.sync-icon {
+.files-icons {
   display: inline-grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--ab-rule);
-  border-radius: 999px;
-  background: var(--ab-vellum);
-  color: var(--ab-ink-4);
+  grid-template-columns: repeat(3, 22px);
+  gap: 0;
   vertical-align: middle;
 }
 
-.sync-icon--success {
-  border-color: rgba(90, 107, 60, 0.35);
-  background: #edf4e5;
-  color: var(--ab-moss);
+/* ArchiveBox admin's compact output piles, with a delivery mark on each cover. */
+.files-icon-pile {
+  position: relative;
+  display: inline-block;
+  width: 20px;
+  height: 24px;
+  isolation: isolate;
+  color: var(--ab-ink-3);
 }
-
-.sync-icon--error {
-  border-color: rgba(139, 42, 42, 0.38);
-  background: var(--ab-oxblood-wash);
-  color: var(--ab-oxblood);
+.files-icon-pile::before,
+.files-icon-pile::after {
+  position: absolute;
+  top: 3px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border: 1px solid #d9cdd3;
+  border-radius: 3px;
+  background: #f7f2f4;
+  content: '';
+  pointer-events: none;
+  z-index: -2;
+  transform: translate(2px, -2px) rotate(7deg);
 }
-
-.sync-icon--warning {
-  border-color: rgba(181, 131, 42, 0.4);
-  background: #fbf2dc;
-  color: var(--ab-ochre);
+.files-icon-pile::after { transform: translate(1px, -1px) rotate(3deg); z-index: -1; background: #ece5e8; }
+.files-icon-pile .files-icon-pile-top {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  min-height: 22px;
+  padding: 1px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--ab-vellum);
+  box-shadow: none;
+  color: inherit;
 }
+.files-icon-pile--uploaded { color: var(--ab-moss); }
+.files-icon-pile--warning { color: var(--ab-ochre); }
+.files-icon-pile-mark {
+  position: absolute;
+  bottom: -2px;
+  right: -1px;
+  min-width: 9px;
+  background: var(--ab-vellum);
+  border-radius: 3px;
+  font: bold 10px/11px sans-serif;
+}
+.files-icon-pile-popup {
+  position: fixed;
+  box-sizing: border-box;
+  width: min(260px, calc(100vw - 16px));
+  margin: 0;
+  padding: 10px;
+  border: 1px solid #d9cdd3;
+  border-radius: 6px;
+  background: var(--ab-vellum);
+  box-shadow: var(--ab-shadow-2);
+  color: var(--ab-ink);
+  text-align: left;
+  font-size: 12px;
+}
+.files-icon-pile-popup > strong { display: block; font-size: 11px; overflow-wrap: anywhere; }
+.file-delivery { display: flex; gap: 8px; align-items: flex-start; margin-top: 9px; }
+.file-delivery > svg { flex: 0 0 16px; margin-top: 2px; }
+.file-delivery b, .file-delivery span { display: block; overflow-wrap: anywhere; }
+.file-delivery span { font-size: 11px; line-height: 1.4; color: var(--ab-ink-3); }
+.file-delivery[data-state='uploaded'] > svg { color: var(--ab-moss); }
+.file-delivery[data-state='failed'] > svg { color: var(--ab-oxblood); }
+.file-delivery[data-state='unknown'] > svg, .file-delivery[data-state='remote'] > svg { color: var(--ab-ochre); }
 
 .list {
   display: grid;
@@ -1872,7 +1921,7 @@ code {
 
   .saved-url-table tbody tr {
     display: grid;
-    grid-template-columns: 30px minmax(0, 1fr) 36px;
+    grid-template-columns: 30px minmax(0, 1fr) 84px;
     grid-template-areas: "check date sync" ". main main" ". tags tags";
     border-bottom: 1px solid var(--ab-rule-strong);
     padding: 4px 0 8px;

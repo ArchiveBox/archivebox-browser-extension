@@ -723,7 +723,11 @@ button.archivebox-overlay__tag-chip {
        persona the remaining space; squeezing capture buttons hid their text. */
     grid-template-columns: max-content max-content minmax(0, 1fr);
     gap: 4px;
+    position: relative;
   }
+
+  /* Anchor the wide menu to the header, not the narrow middle button. */
+  .archivebox-overlay__crawl { position: static; }
 
   .archivebox-overlay__header button {
     font-size: 11px;

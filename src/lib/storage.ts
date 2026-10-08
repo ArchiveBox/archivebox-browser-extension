@@ -2,6 +2,8 @@ import { supportsMhtmlCapture } from './browserCapabilities';
 import { appConnection } from './appConnection';
 import { activeServer, validateRegistry, defaultServerPolicy } from './server_registry';
 import type { ConfigState, Persona, Snapshot, ServerConfiguration, ServerRegistry, ServerPolicy } from './types';
+import { retentionDurations } from './types';
+import { capturePlugins } from './captureStatus';
 import { archiveBoxServerUrlMatches } from './archiveboxUrlExclusions';
 import { uuidv7 } from './uuid';
 import { migratePublishedStorage } from './storage_migration';
@@ -12,6 +14,7 @@ const defaultConfig: ConfigState = {
   match_urls: '',
   exclude_urls: '',
   local_retention_ms: 2592000000,
+  capture_retention_ms: {},
   enable_auto_archive: false,
   save_screenshots_locally: false,
   save_viewport_screenshots_locally: true,
@@ -47,7 +50,9 @@ export async function getConfig(): Promise<ConfigState> {
     ...registry,
   };
   if (!['auto', 'en', 'es', 'zh_CN'].includes(config.ui_language)
-    || ![60000, 86400000, 2592000000, 7776000000, 'never'].includes(config.local_retention_ms)
+    || !retentionDurations.includes(config.local_retention_ms)
+    || !config.capture_retention_ms || typeof config.capture_retention_ms !== 'object' || Array.isArray(config.capture_retention_ms)
+    || Object.entries(config.capture_retention_ms).some(([kind, value]) => !(kind in capturePlugins) || !retentionDurations.includes(value))
     || [config.match_urls, config.exclude_urls, config.singlefile_extension_id, config.tab_manager_plus_extension_id].some((value) => typeof value !== 'string')
     || [config.enable_auto_archive, config.save_screenshots_locally, config.save_viewport_screenshots_locally, config.save_mhtml_locally, config.save_singlefile_locally].some((value) => typeof value !== 'boolean')) {
     throw new Error('Saved extension settings are invalid.');
@@ -60,6 +65,14 @@ export async function setConfig(config: Partial<ConfigState>): Promise<void> {
   const { schema_version, servers, active_server_id, default_server_ids, server_policies, ...preferences } = config;
   if (server_policies !== undefined || servers !== undefined || active_server_id !== undefined || default_server_ids !== undefined || schema_version !== undefined) {
     throw new Error('Use server registry operations to change destinations.');
+  }
+  if (preferences.local_retention_ms !== undefined || preferences.capture_retention_ms !== undefined) {
+    const current = await getConfig();
+    const limit = preferences.local_retention_ms ?? current.local_retention_ms;
+    const captures = preferences.capture_retention_ms ?? current.capture_retention_ms;
+    preferences.capture_retention_ms = Object.fromEntries(Object.entries(captures).map(([kind, value]) => [kind,
+      limit !== 'never' && (value === 'never' || value > limit) ? limit : value,
+    ]));
   }
   await browser.storage.local.set(preferences);
 }

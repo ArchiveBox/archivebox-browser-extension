@@ -136,9 +136,9 @@ try {
   const acceptedMsIsUpperBound = await popup.evaluate('window.testSubmissionWasAlreadyVisible');
   const savedRow = options.locator('.saved-url-table tbody tr').filter({ has: options.locator('a[href="' + url + '"]') });
   // URL acceptance is independent of capture/upload completion and survives reload.
-  await expect(savedRow.locator('.sync-icon')).toHaveAttribute('aria-label', 'Submitted');
+  await expect(savedRow.locator('[data-sync-kind="url"]')).toHaveAttribute('data-state', 'uploaded');
   await options.reload();
-  await expect(savedRow.locator('.sync-icon')).toHaveAttribute('aria-label', 'Submitted');
+  await expect(savedRow.locator('[data-sync-kind="url"]')).toHaveAttribute('data-state', 'uploaded');
   console.log(JSON.stringify({ event: 'accepted', acceptedMs, acceptedMsIsUpperBound, acceptanceTtfbMs, url }));
   for (const seconds of [1, 2]) {
     await expect.poll(() => popup.evaluate(`window.testStatusHistory.some(text => text.includes('Submitted ${seconds}s ago'))`), { intervals: [100], timeout: 5000 }).toBe(true);

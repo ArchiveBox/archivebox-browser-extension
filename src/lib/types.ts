@@ -29,11 +29,28 @@ export type RemoteCopy = {
   crawl_id?: string;
   snapshot_id?: string;
   snapshot_crawl_id?: string;
+  // Original crawl that created this snapshot, retained across ONLY_NEW retries.
+  owned_crawl_id?: string;
   submitted_at?: string;
   submitted_to: string;
   status: 'accepted' | 'complete';
   delivery_error?: string;
+  // Per-server receipts for the exact local capture that was delivered.
+  // Absent on older receipts, where file delivery has not been verified.
+  artifacts?: Partial<Record<CaptureKind, ArtifactDelivery>>;
   persona?: string | null;
+};
+
+export type CaptureKind = 'viewport_screenshot' | 'screenshot' | 'mhtml' | 'singlefile';
+export const retentionDurations = [60000, 86400000, 2592000000, 7776000000, 'never'] as const;
+export type RetentionDuration = typeof retentionDurations[number];
+export type ArtifactDelivery = {
+  status: 'uploaded' | 'failed';
+  path?: string;
+  captured_at?: string;
+  archive_result_id?: string;
+  uploaded_at?: string;
+  error?: string;
 };
 
 export type Snapshot = {
@@ -134,7 +151,9 @@ export type ConfigState = ServerRegistry & {
   ui_language: 'auto' | 'en' | 'es' | 'zh_CN';
   match_urls: string;
   exclude_urls: string;
-  local_retention_ms: 60000 | 86400000 | 2592000000 | 7776000000 | 'never';
+  local_retention_ms: RetentionDuration;
+  // Missing entries inherit the snapshot TTL. Explicit values cannot exceed it.
+  capture_retention_ms: Partial<Record<CaptureKind, RetentionDuration>>;
   enable_auto_archive: boolean;
   save_screenshots_locally: boolean;
   save_viewport_screenshots_locally: boolean;

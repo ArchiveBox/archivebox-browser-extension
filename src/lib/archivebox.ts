@@ -22,6 +22,7 @@ export type ArchiveResultOutputFile = {
 
 export type ArchiveResultUploadResponse = {
   id?: string;
+  status?: string;
   output_files?: Record<string, ArchiveResultOutputFile>;
 };
 
@@ -79,7 +80,7 @@ function serverUrlError(message: string, serverUrl: string): Error {
   return new Error(`${message}. ${t("If your ArchiveBox uses the other security mode, try $1", alternate.origin)}`);
 }
 
-async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = serverTestTimeoutMs): Promise<Response> {
+export async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = serverTestTimeoutMs): Promise<Response> {
   const serverUrl = new URL(String(input)).origin;
   const controller = new AbortController();
   const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
@@ -178,8 +179,12 @@ export async function addToArchiveBox(
       await mutateSnapshots((entries) => entries.map((snapshot) => {
         const index = archiveableSnapshotIds.indexOf(snapshot.id);
         if (index < 0 || snapshot.url !== archiveableUrls[index]) return snapshot;
+        const previous = snapshot.remote_copies?.[server.id];
         return { ...snapshot, remote_copies: { ...snapshot.remote_copies, [server.id]: {
+          ...previous,
           status: 'accepted', submitted_at, submitted_to: archiveboxServerUrl,
+          artifacts: previous ? previous.artifacts : {},
+          owned_crawl_id: previous?.owned_crawl_id || (previous?.snapshot_crawl_id === previous?.crawl_id ? previous?.crawl_id : undefined),
           ...(result.crawl_id ? { crawl_id: result.crawl_id } : {}), persona: server.persona,
         } } };
       }));
@@ -469,8 +474,8 @@ export async function addFilesToSnapshotArchiveResult(server: ServerConfiguratio
     output_json?: Record<string, unknown>;
     status?: string;
   } = {},
-): Promise<void> {
-  if (files.length === 0) return;
+): Promise<ArchiveResultUploadResponse> {
+  if (files.length === 0) return {};
   const archiveboxServerUrl = serverBaseUrl(server.server);
   const token = server.token;
   if (!token) {
@@ -510,6 +515,7 @@ export async function addFilesToSnapshotArchiveResult(server: ServerConfiguratio
     const error = await response.json().catch(() => null) as { detail?: string } | null;
     throw new Error(`HTTP ${response.status}: ${error?.detail || response.statusText}`);
   }
+  return await response.json() as ArchiveResultUploadResponse;
 }
 
 export async function addFileToSnapshotArchiveResultChunked(server: ServerConfiguration,
@@ -522,7 +528,7 @@ export async function addFileToSnapshotArchiveResultChunked(server: ServerConfig
     interimStatus?: string;
     finalStatus?: string;
   } = {},
-): Promise<void> {
+): Promise<ArchiveResultUploadResponse> {
   const archiveboxServerUrl = serverBaseUrl(server.server);
   const token = server.token;
   if (!token) {
@@ -535,6 +541,7 @@ export async function addFileToSnapshotArchiveResultChunked(server: ServerConfig
   const totalSize = file.blob.size;
   const chunkCount = Math.max(1, Math.ceil(totalSize / chunkSize));
   const mimeType = file.mimeType || file.blob.type || 'application/octet-stream';
+  let confirmation: ArchiveResultUploadResponse = {};
 
   for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
     const chunkOffset = chunkIndex * chunkSize;
@@ -575,7 +582,9 @@ export async function addFileToSnapshotArchiveResultChunked(server: ServerConfig
       const error = await response.json().catch(() => null) as { detail?: string } | null;
       throw new Error(`HTTP ${response.status}: ${error?.detail || response.statusText}`);
     }
+    if (finalChunk) confirmation = await response.json() as ArchiveResultUploadResponse;
   }
+  return confirmation;
 }
 
 async function postArchiveBoxApi(server: ServerConfiguration, path: string, body: Record<string, unknown>): Promise<void> {
@@ -751,15 +760,24 @@ export async function submitSnapshot(
       const metadata = await syncArchiveBoxSnapshotMetadata(server, accepted);
       if (!metadata.id) throw new Error('Server did not confirm the saved snapshot.');
       const reused = Boolean(metadata.crawl_id && result.crawl_id && metadata.crawl_id.replaceAll('-', '') !== result.crawl_id.replaceAll('-', ''));
+      const previous = snapshot.remote_copies?.[server.id];
+      const sameSnapshot = previous?.snapshot_id?.replaceAll('-', '') === metadata.id.replaceAll('-', '');
+      const previousOwner = previous?.owned_crawl_id || previous?.crawl_id;
+      const owned = !reused || (sameSnapshot && Boolean(metadata.crawl_id && previousOwner
+        && metadata.crawl_id.replaceAll('-', '') === previousOwner.replaceAll('-', '')));
       await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
         ...item, remote_copies: { ...item.remote_copies, [server.id]: {
           ...item.remote_copies?.[server.id], status: 'accepted', submitted_to: serverBaseUrl(server.server), snapshot_id: metadata.id, snapshot_crawl_id: metadata.crawl_id,
+          owned_crawl_id: owned ? metadata.crawl_id : undefined,
+          artifacts: sameSnapshot ? previous?.artifacts : {},
           ...(metadata.persona !== undefined ? { persona: metadata.persona } : reused ? { persona: snapshot.remote_copies?.[server.id]?.persona } : {}),
           ...(reused ? { submitted_at: metadata.created_at } : {}),
         } },
       } : item));
       // ONLY_NEW can resolve to somebody else's older capture. Its artifacts and persona are immutable here.
-      await captureAndDeliver(reused ? undefined : metadata.id);
+      // A retry of our own snapshot may finish its uploads. A URL resolving to
+      // another submission's older snapshot still must not overwrite its files.
+      await captureAndDeliver(owned ? metadata.id : undefined);
       await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
         ...item, remote_copies: { ...item.remote_copies, [server.id]: { ...item.remote_copies[server.id]!, status: 'complete' } },
       } : item));

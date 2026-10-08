@@ -880,6 +880,9 @@ async function autoArchive(
   await captureConfiguredSnapshotArtifacts(tab, snapshot, true).catch((error) => {
     console.error(`Failed to capture local artifacts for ${snapshot.url}:`, error);
   });
+  // Capture can outlive a settings change. Do not submit a URL after the user
+  // disables automatic archiving or excludes it while its capture is running.
+  if (!(await shouldAutoArchive(snapshot.url))) return;
   await syncSnapshotToServer(snapshot);
 }
 

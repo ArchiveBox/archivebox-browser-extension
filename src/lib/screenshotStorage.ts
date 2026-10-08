@@ -1,4 +1,5 @@
-import type { Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotScreenshotPart, SnapshotSingleFile } from './types';
+import type { CaptureKind, Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotScreenshotPart, SnapshotSingleFile } from './types';
+import { capturePlugins } from './captureStatus';
 import { t } from './i18n';
 
 function pathSafeSegment(value: string): string {
@@ -533,7 +534,7 @@ export async function readSnapshotSingleFileBlob(singlefile?: SnapshotSingleFile
 }
 
 /** Delete the entire UUID tree, including unindexed/partial captures and empty host directories. */
-export async function deleteSnapshotOpfs(snapshot: Snapshot): Promise<void> {
+export async function deleteSnapshotOpfs(snapshot: Snapshot, kinds?: CaptureKind[]): Promise<void> {
   const root = await navigator.storage.getDirectory();
   const id = pathSafeSegment(snapshot.id);
   const isMissing = (error: unknown) => error instanceof DOMException && error.name === 'NotFoundError';
@@ -546,7 +547,14 @@ export async function deleteSnapshotOpfs(snapshot: Snapshot): Promise<void> {
     for await (const [name, handle] of (directory as FileSystemDirectoryHandleWithEntries).entries()) {
       if (handle.kind !== 'directory') continue;
       if (name.toLowerCase() === id) {
-        await directory.removeEntry(name, { recursive: true });
+        if (kinds) {
+          const captureDirectory = handle as FileSystemDirectoryHandle;
+          for (const plugin of [...kinds.map(kind => capturePlugins[kind]), ...(kinds.includes('mhtml') ? ['chrome_mhtml'] : [])]) {
+            try { await captureDirectory.removeEntry(plugin, { recursive: true }); }
+            catch (error) { if (!isMissing(error)) throw error; }
+          }
+          if (await isEmpty(captureDirectory)) await directory.removeEntry(name);
+        } else await directory.removeEntry(name, { recursive: true });
         removed = true;
       } else if (await removeTree(handle as FileSystemDirectoryHandle)) {
         if (await isEmpty(handle as FileSystemDirectoryHandle)) await directory.removeEntry(name);
@@ -563,8 +571,10 @@ export async function deleteSnapshotOpfs(snapshot: Snapshot): Promise<void> {
     if (!isMissing(error)) throw error;
   }
   // Also remove explicitly referenced files from older storage layouts.
-  const paths = [snapshot.viewport_screenshot?.path, ...(snapshot.viewport_screenshot?.parts || []).map((part) => part.path), snapshot.screenshot?.path, ...(snapshot.screenshot?.parts || []).map((part) => part.path),
-    snapshot.mhtml?.path, snapshot.singlefile?.path];
+  const paths = (kinds || Object.keys(capturePlugins) as CaptureKind[]).flatMap(kind => {
+    const capture = snapshot[kind];
+    return [capture?.path, ...(capture && 'parts' in capture ? capture.parts?.map(part => part.path) || [] : [])];
+  });
   for (const path of new Set(paths.filter((path): path is string => Boolean(path)))) {
     const segments = path.split('/');
     if (segments.some((segment) => !segment || segment === '.' || segment === '..')) throw new Error('Invalid capture path');

@@ -58,7 +58,15 @@ The extension stores capture artifacts in the browser's extension-local OPFS sto
 
 Older local MHTML files retain their recorded `chrome_mhtml` paths. Uploads use the separate `chrome_extension_mhtml` server directory so server-side MHTML captures cannot overwrite browser-captured files.
 
-Local copies in OPFS are removed after 30 days by default; you can configure the extension to keep them indefinitely or remove them as soon as the server receives the URL.
+Local snapshot retention defaults to 30 days after submission and confirmed file uploads. Each capture type can inherit that duration or use a shorter TTL (1 minute, 1 day, 30 days, or 90 days, up to the snapshot limit). Keep snapshots forever and give MHTML/screenshots a short TTL to retain cheap metadata and upload receipts while removing heavy local files.
+
+File timers start after confirmed upload of that exact capture version. Cleanup checks the configured server again before deleting local data. Offline, unauthorized, missing, and unverified server copies are preserved, as are files that were never uploaded and their snapshot rows. Server files are never deleted by local retention. Expiration runs on the extension's recurring one-minute alarm, including after browser or worker restart.
+
+To stop automatically collecting and submitting visited URLs, turn off **Configuration → Automatic Archiving → Enable automatic archiving**. The local screenshot/HTML switches only control capture files. **Exclude URL regex** blocks automatic background archiving. Toolbar clicks, context-menu saves, keyboard shortcuts, and Sync are explicit overrides. Automatic captures recheck the current enable switch and URL patterns before submitting, so a capture already in progress will stay local if its URL is now excluded or automatic archiving is disabled.
+
+Patterns use JavaScript regular-expression source, without surrounding `/` delimiters. Both `.*` and `(.*)` exclude every URL. Invalid patterns block automatic archiving and show an error in the URL tester.
+
+The Saved URLs list uses the admin's output icon stacks for URL submission, HTML, and screenshots. A check means confirmed delivery to the configured server; a minus means local-only or not captured, and an exclamation marks a failure, mixed delivery, or unverified older upload. Click a stack for separate MHTML, viewport, and full-page screenshot details. Each receipt survives refresh and is tied to the capture version and server ID. Changing upload preferences does not rewrite past delivery. Older receipts are checked against the server; an older file with no capture-version metadata is labeled **On server; local version unverified**.
 
 ## Setup
 
@@ -100,7 +108,9 @@ pnpm dev:safari    # Safari WebExtension build
 
 For a production-style local build, load `.output/chrome-mv3` into Chrome / Chromium using the [Load Unpacked Extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) UI, load `.output/edge-mv3` into Edge using `edge://extensions`, load `.output/firefox-mv3` into Firefox using `about:debugging`, or load `.output/safari-mv3` in Safari with Settings → Developer → Add Temporary Extension.
 
-To verify local retention with real server responses and the real one-minute clock, start a disposable ArchiveBox server without archive workers (so submissions remain queued), build the extension, and run:
+`pnpm test` builds the extension and runs the full browser suite, including the live automatic-archiving, delivery, and retention commands below. API tests start a disposable real ArchiveBox collection using `uv` and the pinned `archivebox==0.9.74rc34` package. Set `ARCHIVEBOX_TEST_PROJECT` to use a local ArchiveBox project instead. No API responses are mocked. Retention tests wait for actual minute-long TTLs and recurring alarms.
+
+To verify per-type retention with real server responses and the real one-minute clock, build the extension and run:
 
 ```bash
 ARCHIVEBOX_TEST_SERVER=http://127.0.0.1:5797 \
@@ -108,7 +118,19 @@ ARCHIVEBOX_TEST_KEY_FILE=/path/to/disposable-server-api-key \
 node scripts/test-retention-live.mjs
 ```
 
-The live test imports bookmarks through the options UI, submits them, checks disconnected/missing-server preservation, verifies OPFS and metadata deletion, restarts the service worker, and waits for automatic expiration after resubmission. It creates server test records and deletes one of its own records to test a missing snapshot; use a disposable collection. UI default/persistence and layout checks run with `pnpm exec playwright test tests/retention.test.ts tests/options-responsive.test.ts`.
+The live test captures unique example.com URLs through the popup, uploads real viewport/full-page screenshots and MHTML, and compares server replay bytes with the original captures. It checks offline/authentication-failure preservation, selective file expiration, receipt persistence after refresh, whole-row expiration, and preservation of unuploaded files. It then restarts the worker and waits for the recurring alarm to expire a new capture without changing settings. It creates test records but never deletes server records; it can run against a hosted server with workers. Set `ARCHIVEBOX_TEST_EVIDENCE` to save JSON results and a screenshot. UI default/persistence and layout checks run with `pnpm exec playwright test tests/retention.test.ts tests/options-responsive.test.ts`.
+
+Automatic-archiving controls are tested with `pnpm exec playwright test tests/auto-archive.test.ts`. To verify that a settings change during a real full-page capture prevents a later upload, use a disposable server without archive workers (and a different hostname from the captured `127.0.0.1` pages):
+
+```bash
+ARCHIVEBOX_TEST_SERVER=http://localhost:5797 \
+ARCHIVEBOX_TEST_KEY_FILE=/path/to/disposable-server-api-key \
+node scripts/test-auto-archive-live.mjs
+```
+
+This verifies a successful automatic submission first, then disables archiving or changes URL patterns during capture and checks both outbound requests and the server's snapshot API. It also verifies that subsequent navigation stays blocked and explicit Sync still works. It uses the real options UI, screenshots, storage, and server; no mocked API or clock.
+
+To test the list's individual upload states, run `node scripts/test-sync-status-live.mjs` with the same disposable server environment variables. It captures real screenshot/MHTML files, verifies server bytes for URL-only and mixed upload choices, then checks a real upload failure, retry, offline refresh, and responsive icon-stack details. Set `ARCHIVEBOX_TEST_CAPTURE_URL=https://example.com` when testing a hosted server so its workers can also reach the captured URLs. Local capture/layout coverage runs in CI via `tests/sync-status.test.ts`.
 
 To verify native popup submission and real capture uploads, start a disposable collection with `archivebox server` (including its normal crawler worker):
 

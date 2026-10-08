@@ -1,4 +1,6 @@
-import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { test } from './helpers/archivebox';
+import type { Snapshot } from '../src/lib/types';
+import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { chromium } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -6,6 +8,7 @@ import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 
 type CdpTarget = {
   targetId: string;
@@ -97,9 +100,9 @@ function serverSettings(server: string, token = '') {
 }
 
 const builtExtensionPath = path.resolve('.output/chrome-mv3');
-const testExtensionBasePath = path.resolve('tmp/chrome-mv3-playwright');
+const testExtensionBasePath = path.join(tmpdir(), 'archivebox-popup-test-extensions');
 const canaryPath = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary';
-const chromeProfileBasePath = path.resolve('tmp/chrome_profile');
+const chromeProfileBasePath = path.join(tmpdir(), 'archivebox-popup-test-profiles');
 const shortDelay = 50;
 
 function selectedBrowserExecutable(): string {
@@ -878,7 +881,7 @@ async function clickPopupButtonText(harness: BrowserHarness, popup: NativePopup,
         const pattern = ${JSON.stringify(pattern)};
         const normalize = (value) => value.replace(/\\s+/g, ' ').trim();
         for (const element of document.querySelectorAll('button')) {
-          const text = normalize(element.textContent || '');
+          const text = normalize(element.getAttribute('aria-label') || element.innerText || '');
           const matches = pattern.kind === 'string'
             ? text === pattern.value
             : new RegExp(pattern.source, pattern.flags).test(text);
@@ -916,49 +919,6 @@ async function typeTag(harness: BrowserHarness, popup: NativePopup, tag: string)
 
 async function savedEntries(harness: BrowserHarness): Promise<Array<Record<string, unknown>>> {
   return (await getExtensionStorage<Array<Record<string, unknown>>>(harness, 'entries')) || [];
-}
-
-async function writeOpfsFile(harness: BrowserHarness, filePath: string, content: string, type: string): Promise<void> {
-  await harness.storagePage.evaluate(async ({ path: opfsPath, text, mimeType }) => {
-    const root = await navigator.storage.getDirectory();
-    const segments = opfsPath.split('/');
-    const fileName = segments.pop();
-    if (!fileName) throw new Error('Invalid OPFS test path');
-    let directory = root;
-    for (const segment of segments) {
-      directory = await directory.getDirectoryHandle(segment, { create: true });
-    }
-    const file = await directory.getFileHandle(fileName, { create: true });
-    const writable = await file.createWritable();
-    await writable.write(new Blob([text], { type: mimeType }));
-    await writable.close();
-  }, {
-    path: filePath,
-    text: content,
-    mimeType: type,
-  });
-}
-
-async function listOpfsFiles(harness: BrowserHarness, directoryPath: string): Promise<string[]> {
-  return await harness.storagePage.evaluate(async (pathPrefix) => {
-    const root = await navigator.storage.getDirectory();
-    let directory = root;
-    for (const segment of pathPrefix.split('/')) {
-      directory = await directory.getDirectoryHandle(segment);
-    }
-    const files: string[] = [];
-    async function walk(dir: FileSystemDirectoryHandle, prefix: string): Promise<void> {
-      for await (const [name, handle] of (dir as FileSystemDirectoryHandle & {
-        entries(): AsyncIterableIterator<[string, FileSystemDirectoryHandle | FileSystemFileHandle]>;
-      }).entries()) {
-        const nextPath = `${prefix}/${name}`;
-        if (handle.kind === 'directory') await walk(handle as FileSystemDirectoryHandle, nextPath);
-        else files.push(nextPath);
-      }
-    }
-    await walk(directory, pathPrefix);
-    return files;
-  }, directoryPath);
 }
 
 async function waitForSavedEntry(
@@ -1057,289 +1017,158 @@ test('ArchiveBox server URLs are ignored before archive requests', async () => {
   }
 });
 
-test('saved URL bulk delete is local-first when server remove fails', async () => {
-  const harness = await launchHarness();
+async function configureServer(harness: BrowserHarness, server: string, key: string): Promise<string> {
+  const page = harness.storagePage;
+  await page.getByRole('button', { name: 'Configuration', exact: true }).click();
+  const address = page.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com');
+  await address.fill(server); await address.blur();
+  const token = page.getByPlaceholder('... abcexamplekey1234 ...');
+  await token.fill(key); await token.blur();
+  await expect.poll(() => page.evaluate(async key => {
+    const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
+    const { server_registry } = await api.storage.local.get('server_registry');
+    return (server_registry as { servers: Array<{ token: string }> }).servers.some(server => server.token === key);
+  }, key)).toBe(true);
+  return page.evaluate(async () => {
+    const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
+    return ((await api.storage.local.get('server_registry')).server_registry as { active_server_id: string }).active_server_id;
+  });
+}
 
+test('saved URL bulk delete is local-first when server remove fails', async ({ archivebox }) => {
+  const harness = await launchHarness();
+  const source = await startFixtureServer();
   try {
-    await setExtensionStorage(harness, {
-      entries: [
-        {
-          id: 'remote-entry',
-          url: 'https://remote-delete-failure.example/',
-          timestamp: new Date('2026-01-01T00:00:00.000Z').toISOString(),
-          tags: [],
-          title: 'Remote delete failure',
-          favIconUrl: null,
-          depth: 0,
-          remote_copies: { [server_id]: { crawl_id: 'crawl-id', snapshot_id: 'remote-entry', submitted_to: 'https://api.example.com', status: 'complete' } },
-        },
-        {
-          id: 'local-entry',
-          url: 'https://local-delete.example/',
-          timestamp: new Date('2026-01-02T00:00:00.000Z').toISOString(),
-          tags: [],
-          title: 'Local delete',
-          favIconUrl: null,
-          depth: 0,
-        },
-      ],
-      ...serverSettings('https://api.example.com', 'test-key'),
-    });
-    await harness.storagePage.route('https://api.example.com/api/v1/crawls/crawl/crawl-id', (route) => {
-      route.fulfill({ status: 502, body: 'Bad Gateway' });
-    });
-    await harness.storagePage.reload({ waitUntil: 'domcontentloaded' });
-    await expect(harness.storagePage.locator('tbody tr')).toHaveCount(2);
-    await harness.storagePage.locator('thead input[type="checkbox"]').check();
-    await expect(harness.storagePage.locator('text=2 selected')).toBeVisible();
-    harness.storagePage.once('dialog', (dialog) => dialog.accept());
-    await harness.storagePage.getByRole('button', { name: 'Delete' }).click();
-    await expect(harness.storagePage.locator('tbody tr')).toHaveCount(0);
-    await expect(harness.storagePage.locator('text=0 selected')).toBeVisible();
-    await expect(harness.storagePage.locator('.status.warning')).toContainText('Failed to delete 1 from server');
+    const id = await configureServer(harness, archivebox.server, archivebox.key);
+    const target = await harness.context.newPage();
+    const first = `${source.url}?remote-delete=${Date.now()}`;
+    await target.goto(first);
+    let popup = await openNativePopup(harness, target);
+    const submitted = await waitForSavedEntry(harness, first, entry => Boolean((entry as Snapshot).remote_copies?.[id]?.snapshot_id), 'real submission');
+    await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId }); popup.cdp.close();
+    await configureServer(harness, archivebox.server, 'invalid-delete-test-token');
+    const second = `${source.url}?local-delete=${Date.now()}`;
+    await target.goto(second); popup = await openNativePopup(harness, target);
+    await waitForSavedEntry(harness, second, () => true, 'local-only save');
+    await waitForPopupText(harness, popup, '401');
+    await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId }); popup.cdp.close();
+    const page = harness.storagePage;
+    await page.getByRole('button', { name: 'Saved URLs', exact: true }).click();
+    await expect(page.locator('tbody tr')).toHaveCount(2);
+    await page.getByRole('checkbox', { name: 'Select all visible URLs' }).check();
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(page.locator('tbody tr')).toHaveCount(0);
+    await expect(page.locator('.status.warning')).toContainText('Failed to delete 1 from server');
     expect(await savedEntries(harness)).toEqual([]);
-  } finally {
-    await closeHarness(harness);
-  }
+    expect((await archivebox.api('/api/v1/core/snapshot/' + (submitted as Snapshot).remote_copies![id]!.snapshot_id)).url).toBe(first);
+  } finally { await closeHarness(harness); await new Promise<void>(resolve => source.server.close(() => resolve())); }
 });
 
-test('persona sync can update an already synced remote persona after detecting settings', async () => {
+test('persona sync updates the real remote persona while location permission is pending', async ({ archivebox }) => {
   const harness = await launchHarness();
-  const persona_id = '019e77ba63c270009000000000000201';
-  const payloads: Array<Record<string, unknown>> = [];
-
   try {
-    await setExtensionStorage(harness, {
-      ...serverSettings('https://api.example.com', 'test-key'),
-      personas: [{
-        id: persona_id,
-        name: 'Persona update test',
-        created: new Date('2026-01-04T00:00:00.000Z').toISOString(),
-        last_used: null,
-        cookies: {},
-        settings: {
-          userAgent: 'stale-user-agent',
-          viewport: '800x600',
-          viewportScale: '2',
-          language: 'zz-ZZ',
-          timezone: 'Etc/UTC',
-          geolocation: {
-            latitude: 37.7749,
-            longitude: -122.4194,
-            accuracy: 25,
-          },
-        },
-      }],
-      active_persona: persona_id,
-    });
-    await harness.storagePage.route('https://ipapi.co/json/', (route) => {
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ city: 'Test City', country_name: 'Test Country' }),
-      });
-    });
-    await harness.storagePage.route('https://api.example.com/api/v1/personas/sync', async (route) => {
-      const payload = route.request().postDataJSON() as Record<string, unknown>;
-      payloads.push(payload);
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          created: payloads.length === 1,
-          persona: {
-            id: '019e77ba63c270009000000000000301',
-            name: 'Persona update test',
-          },
-        }),
-      });
-    });
-    await harness.storagePage.reload({ waitUntil: 'domcontentloaded' });
-    await harness.storagePage.getByRole('button', { name: 'Cookies' }).click({ timeout: 5_000 });
-
-    await harness.storagePage.getByRole('button', { name: 'Sync to Server' }).click({ timeout: 5_000 });
-    await expect(harness.storagePage.locator('.persona-sync-link--synced')).toBeVisible();
-    await expect.poll(() => payloads.length).toBe(1);
-    const firstPayload = payloads[0];
-    if (!firstPayload) throw new Error('Missing first persona sync payload');
-    expect((firstPayload.settings as Record<string, unknown>).user_agent).toBe('stale-user-agent');
-
-    await harness.storagePage.getByRole('button', { name: 'Detect Settings' }).click({ timeout: 5_000 });
-    await expect(harness.storagePage.locator('.status.success')).toContainText('Updated browser settings');
-    const detectedSettings = await harness.storagePage.evaluate(() => ({
-      userAgent: navigator.userAgent,
-      language: navigator.language,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      viewport: `${window.innerWidth},${window.innerHeight}`,
-      viewportScale: window.devicePixelRatio || 1,
-    }));
-
-    await harness.storagePage.getByRole('button', { name: 'Sync to Server' }).click({ timeout: 5_000 });
-    await expect.poll(() => payloads.length).toBe(2);
-    const secondPayload = payloads[1];
-    if (!secondPayload) throw new Error('Missing second persona sync payload');
-    const secondSettings = secondPayload.settings as Record<string, unknown>;
-    expect(secondPayload.extension_persona_id).toBe(persona_id);
-    expect(secondSettings.user_agent).toBe(detectedSettings.userAgent);
-    expect(secondSettings.language).toBe(detectedSettings.language);
-    expect(secondSettings.timezone).toBe(detectedSettings.timezone);
-    expect(secondSettings.viewport_size).toBe(detectedSettings.viewport);
-    expect(secondSettings.viewport_device_scale_factor).toBe(detectedSettings.viewportScale);
-    await expect(harness.storagePage.locator('.persona-sync-link--synced')).toHaveAttribute('href', 'https://api.example.com/admin/personas/persona/019e77ba63c270009000000000000301/change/');
-  } finally {
-    await closeHarness(harness);
-  }
+    const serverId = await configureServer(harness, archivebox.server, archivebox.key);
+    const page = harness.storagePage;
+    await page.getByRole('button', { name: 'Cookies', exact: true }).click();
+    const name = `extension-settings-${Date.now()}`;
+    page.once('dialog', dialog => dialog.accept(name));
+    await page.getByRole('button', { name: 'New Profile', exact: true }).click();
+    const profile = page.locator('.persona.active');
+    await profile.getByLabel('User Agent', { exact: true }).fill('stale-user-agent');
+    await profile.getByLabel('Viewport Size', { exact: true }).fill('800x600');
+    await profile.getByLabel('Language', { exact: true }).fill('zz-ZZ');
+    await profile.getByRole('button', { name: 'Sync to Server', exact: true }).click();
+    await expect(profile.locator('.persona-sync-link--synced')).toBeVisible();
+    const list = async () => (await archivebox.api('/api/v1/personas/personas')).items;
+    let remote = (await list()).find((item: { name: string }) => item.name === name);
+    expect(remote.config.USER_AGENT).toBe('stale-user-agent');
+    const remoteId = remote.id;
+    await profile.getByRole('button', { name: 'Detect Settings', exact: true }).click();
+    const detected = await page.evaluate(() => ({ userAgent: navigator.userAgent, viewport: `${innerWidth}x${innerHeight}`, language: navigator.language, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, scale: devicePixelRatio }));
+    await expect(profile.getByLabel('User Agent', { exact: true })).toHaveValue(detected.userAgent);
+    await expect(profile.getByLabel('Viewport Size', { exact: true })).toHaveValue(detected.viewport);
+    await expect(profile.getByLabel('Language', { exact: true })).toHaveValue(detected.language);
+    await expect(page.locator('.status').filter({ hasText: /[Bb]rowser settings updated|Updated browser settings/ })).toBeVisible();
+    await profile.getByRole('button', { name: 'Sync to Server', exact: true }).click();
+    await expect.poll(async () => (await list()).find((item: { id: string }) => item.id === remoteId)?.config.USER_AGENT).toBe(detected.userAgent);
+    remote = (await list()).find((item: { id: string }) => item.id === remoteId);
+    expect(remote.config.CHROME_RESOLUTION).toBe(detected.viewport.replace('x', ','));
+    expect(remote.config.BROWSER_LANGUAGE).toBe(detected.language);
+    expect(remote.config.BROWSER_TIMEZONE).toBe(detected.timezone);
+    expect(remote.config.BROWSER_DEVICE_SCALE_FACTOR).toBe(detected.scale);
+    await expect(profile.locator('.persona-sync-link--synced')).toHaveAttribute('href', `${archivebox.server}/admin/personas/persona/${remoteId}/change/`);
+    expect(serverId).toBeTruthy();
+  } finally { await closeHarness(harness); }
 });
 
-test('saved URL sync uploads local OPFS artifacts', async () => {
+test('saved URL sync uploads real local OPFS artifacts', async ({ archivebox }) => {
   const harness = await launchHarness();
-  const snapshot_id = '019e77ba63c270009000000000000002';
-  const serverSnapshotId = '019e77ba63c270009000000000000102';
-  const snapshotUrl = 'https://upload-artifacts.example/';
-  const screenshotPath = `snapshots/20260103/upload-artifacts.example/${snapshot_id}/chrome_extension_screenshot/screenshot.png`;
-  const mhtmlPath = `snapshots/20260103/upload-artifacts.example/${snapshot_id}/chrome_mhtml/snapshot.mhtml`;
-  const archiveResultBodies: string[] = [];
-  const patchedBodies: string[] = [];
-
+  const source = await startFixtureServer();
   try {
-    await setExtensionStorage(harness, {
-      entries: [{
-        id: snapshot_id,
-        url: snapshotUrl,
-        timestamp: new Date('2026-01-03T12:00:00.000Z').toISOString(),
-        tags: ['local-artifact'],
-        title: 'Upload artifacts',
-        favIconUrl: null,
-        depth: 1,
-        screenshot: {
-          storage: 'opfs',
-          path: screenshotPath,
-          parts: [{ path: screenshotPath, x: 0, y: 0, width: 1, height: 1 }],
-          mimeType: 'image/png',
-          capturedAt: new Date('2026-01-03T00:00:01.000Z').toISOString(),
-          width: 1,
-          height: 1,
-        },
-        mhtml: {
-          storage: 'opfs',
-          path: mhtmlPath,
-          mimeType: 'multipart/related',
-          capturedAt: new Date('2026-01-03T00:00:02.000Z').toISOString(),
-          size: 12,
-        },
-      }],
-      ...serverSettings('https://api.example.com', 'test-key'),
-    });
-    await writeOpfsFile(harness, screenshotPath, 'png-bytes', 'image/png');
-    await writeOpfsFile(harness, mhtmlPath, 'mhtml-bytes', 'multipart/related');
-    expect(await listOpfsFiles(harness, `snapshots/20260103/upload-artifacts.example/${snapshot_id}`)).toEqual(expect.arrayContaining([
-      screenshotPath,
-      mhtmlPath,
-    ]));
-
-    await harness.storagePage.route('https://api.example.com/api/v1/cli/add', async (route) => {
-      const body = route.request().postDataJSON() as {
-        depth?: number;
-        snapshot_ids?: string[];
-        titles?: string[];
-      };
-      expect(body.depth).toBe(1);
-      expect(body.snapshot_ids).toBeUndefined();
-      expect(body.titles).toBeUndefined();
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: true, errors: [],
-          result: { crawl_id: 'crawl-id', queued_urls: [snapshotUrl] },
-        }),
-      });
-    });
-    await harness.storagePage.route('https://api.example.com/api/v1/core/snapshots', (route) => {
-      const body = route.request().postDataJSON() as { id?: string };
-      expect(body.id).toBeUndefined();
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: serverSnapshotId }) });
-    });
-    await harness.storagePage.route('https://api.example.com/api/v1/core/archiveresults', async (route) => {
-      const body = route.request().postDataBuffer()?.toString('latin1') || '';
-      expect(body).toContain(`name="snapshot_id"\r\n\r\n${serverSnapshotId}`);
-      archiveResultBodies.push(body);
-      const plugin = body.includes('chrome_extension_mhtml') ? 'chrome_extension_mhtml' : 'chrome_extension_screenshot';
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ id: `${plugin}-result`, output_files: {} }),
-      });
-    });
-    await harness.storagePage.route(/https:\/\/api\.example\.com\/api\/v1\/core\/archiveresult\/.+/, async (route) => {
-      patchedBodies.push(route.request().postDataBuffer()?.toString('latin1') || '');
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-    });
-
-    await harness.storagePage.reload({ waitUntil: 'domcontentloaded' });
-    expect(await listOpfsFiles(harness, `snapshots/20260103/upload-artifacts.example/${snapshot_id}`)).toEqual(expect.arrayContaining([
-      screenshotPath,
-      mhtmlPath,
-    ]));
-    await expect(harness.storagePage.locator('tbody tr')).toHaveCount(1);
-    await harness.storagePage.locator('tbody input[type="checkbox"]').check();
-    await harness.storagePage.getByRole('button', { name: 'Sync' }).click();
-    await expect(harness.storagePage.locator('.status.success')).toContainText('Finished syncing 1 snapshots');
-
-    expect(archiveResultBodies.length).toBeGreaterThan(0);
-    expect(patchedBodies.length).toBeGreaterThan(0);
-    expect(patchedBodies.some((body) => body.includes('screenshot.png'))).toBe(true);
-    expect(patchedBodies.some((body) => body.includes('snapshot.mhtml'))).toBe(true);
-    expect(patchedBodies.every((body) => !body.includes('.part-000000'))).toBe(true);
-  } finally {
-    await closeHarness(harness);
-  }
+    const id = await configureServer(harness, archivebox.server, 'invalid-local-capture-token');
+    const page = harness.storagePage;
+    const fullPage = page.getByLabel('Save full-page screenshots locally', { exact: true });
+    await fullPage.click(); await expect(fullPage).toBeChecked();
+    await page.getByLabel('Upload full-page screenshots to server', { exact: true }).check();
+    const target = await harness.context.newPage(); await target.setViewportSize({ width: 1100, height: 360 });
+    const url = `${source.url}?upload-artifacts=${Date.now()}`; await target.goto(url);
+    const popup = await openNativePopup(harness, target);
+    const captured = await waitForSavedEntry(harness, url, entry => Boolean(entry.screenshot && entry.mhtml), 'real local captures');
+    await waitForPopupText(harness, popup, '401');
+    await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId }); popup.cdp.close();
+    await configureServer(harness, archivebox.server, archivebox.key);
+    await page.getByRole('button', { name: 'Saved URLs', exact: true }).click();
+    await page.locator('tbody input[type="checkbox"]').check();
+    await page.getByRole('button', { name: 'Sync', exact: true }).click();
+    await expect(page.locator('.status.success')).toContainText('Finished syncing 1 snapshots');
+    const entry = (await savedEntries(harness)).find(entry => entry.id === captured.id) as Snapshot;
+    const copy = entry.remote_copies![id]!;
+    const remote = await archivebox.api('/api/v1/core/snapshot/' + copy.snapshot_id);
+    for (const kind of ['viewport_screenshot', 'screenshot', 'mhtml'] as const) {
+      expect(copy.artifacts?.[kind]?.status).toBe('uploaded');
+      const result = remote.archiveresults.find((result: { id: string }) => result.id === copy.artifacts![kind]!.archive_result_id);
+      expect(result.status).toBe('succeeded'); expect(result.output_size).toBeGreaterThan(0);
+      const capture = entry[kind]!;
+      const paths = 'parts' in capture && capture.parts?.length ? capture.parts.map(part => part.path) : [capture.path];
+      for (const filePath of paths) {
+        const local = await page.evaluate(async filePath => {
+          let dir = await navigator.storage.getDirectory(); const segments = filePath.split('/'); const name = segments.pop()!;
+          for (const segment of segments) dir = await dir.getDirectoryHandle(segment);
+          return [...new Uint8Array(await (await (await dir.getFileHandle(name)).getFile()).arrayBuffer())];
+        }, filePath);
+        const response = await fetch(`${archivebox.server}/snapshot/${remote.id}/${result.plugin}/${filePath.split('/').at(-1)}`, { headers: { Authorization: `Bearer ${archivebox.key}` } });
+        expect(response.status).toBe(200);
+        expect(Buffer.from(await response.arrayBuffer())).toEqual(Buffer.from(local));
+      }
+    }
+  } finally { await closeHarness(harness); await new Promise<void>(resolve => source.server.close(() => resolve())); }
 });
 
-test('an already-synced URL without a server shows its connection is unavailable', async () => {
-  const server = await startFixtureServer();
-  const harness = await launchHarness();
-
+test('a real submitted URL survives removing and restoring its server configuration', async ({ archivebox }) => {
+  const source = await startFixtureServer(); const harness = await launchHarness();
   try {
-    const page = await harness.context.newPage();
-    const testPageUrl = `${server.url}?already_synced=1`;
-    await page.goto(testPageUrl, { waitUntil: 'domcontentloaded' });
-    await setExtensionStorage(harness, {
-      entries: [{
-        id: '019e77ba63c270009000000000000301',
-        url: testPageUrl,
-        timestamp: new Date('2026-01-04T00:00:00.000Z').toISOString(),
-        tags: [],
-        title: 'Already synced fixture',
-        favIconUrl: null,
-        depth: 0,
-        remote_copies: { [server_id]: { crawl_id: '019e77ba63c270009000000000000401', snapshot_id: '019e77ba63c270009000000000000301', submitted_to: server.url, status: 'complete' } },
-      }],
-      ...serverSettings(''),
-    });
-
-    const popup = await openNativePopup(harness, page);
-    await waitForPopupText(harness, popup, testPageUrl);
-    const popupText = htmlText(await popupHtml(harness, popup));
-    expect(popupText).toContain('ServerConnection unavailable');
-    expect(popupText).not.toContain('ServerArchived');
-    expect(popupText).not.toContain('Saved to ArchiveBox Server');
+    const id = await configureServer(harness, archivebox.server, archivebox.key);
+    const target = await harness.context.newPage(); const url = `${source.url}?connection=${Date.now()}`; await target.goto(url);
+    let popup = await openNativePopup(harness, target);
+    const submitted = await waitForSavedEntry(harness, url, entry => Boolean((entry as Snapshot).remote_copies?.[id]?.snapshot_id), 'real submission');
+    await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId }); popup.cdp.close();
+    const page = harness.storagePage;
+    const address = page.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com');
+    await address.fill(''); await address.blur();
+    await expect(address).toHaveValue('');
+    popup = await openNativePopup(harness, target);
+    await waitForPopupText(harness, popup, 'Connection unavailable');
     expect(await popupElementsHtml(popup, '[title="View archived copy on server"]')).toHaveLength(0);
-    expect(popupText).not.toContain('Sync failed');
+    expect((await savedEntries(harness)).find(item => item.id === submitted.id)).toBeTruthy();
+    await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId }); popup.cdp.close();
+    await configureServer(harness, archivebox.server, archivebox.key);
+    popup = await openNativePopup(harness, target);
+    await waitForPopupText(harness, popup, 'Submitted');
+    expect(await popupElementsHtml(popup, '.archivebox-overlay__pill--archived')).toHaveLength(1);
+    expect((await archivebox.api('/api/v1/core/snapshot/' + (submitted as Snapshot).remote_copies![id]!.snapshot_id)).url).toBe(url);
     popup.cdp.close();
-
-    await setExtensionStorage(harness, serverSettings(server.url.replace('127.0.0.1', 'localhost')));
-    const reopened = await openNativePopup(harness, page);
-    await waitForPopupText(harness, reopened, 'Submitted');
-    expect(await popupElementsHtml(reopened, '.archivebox-overlay__pill--archived')).toHaveLength(1);
-    expect(htmlText(await popupHtml(harness, reopened))).not.toContain('Previously submitted');
-    expect(htmlText(await popupHtml(harness, reopened))).not.toContain('Saved to ArchiveBox Server');
-    reopened.cdp.close();
-  } finally {
-    await closeHarness(harness);
-    await new Promise<void>((resolve) => server.server.close(() => resolve()));
-  }
+  } finally { await closeHarness(harness); await new Promise<void>(resolve => source.server.close(() => resolve())); }
 });
 
 test('native action popup supports local save, tags, depth, captures, navigation, and dismissal', async () => {
@@ -1359,10 +1188,15 @@ test('native action popup supports local save, tags, depth, captures, navigation
         depth: 0,
       }],
       ...serverSettings(''),
-      archivebox_test_fast_capture: true,
     });
 
+    await harness.storagePage.reload();
+    await harness.storagePage.getByRole('button', { name: 'Configuration', exact: true }).click();
+    const fullPage = harness.storagePage.getByLabel('Save full-page screenshots locally', { exact: true });
+    await fullPage.click(); await expect(fullPage).toBeChecked();
+
     const page = await harness.context.newPage();
+    await page.setViewportSize({ width: 1100, height: 360 });
     const testPageUrl = `${server.url}?archivebox_test=1`;
     await page.goto(testPageUrl, { waitUntil: 'domcontentloaded' });
     expect(await extensionHasPermission(harness, 'scripting')).toBe(true);
@@ -1372,7 +1206,7 @@ test('native action popup supports local save, tags, depth, captures, navigation
     await waitForPopupText(harness, popup, 'ArchiveBox Playwright Fixture');
     await waitForPopupText(harness, popup, testPageUrl);
     await waitForPopupText(harness, popup, 'Saved');
-    await waitForPopupText(harness, popup, 'Sync failed');
+    await waitForPopupText(harness, popup, 'Saved locally. Server connection unavailable.');
 
     await clickPopupButtonText(harness, popup, /^existing\s*\+$/);
     await waitForPopupElementsCondition(
@@ -1453,12 +1287,12 @@ test('native action popup supports local save, tags, depth, captures, navigation
 
     popup = await openNativePopup(harness, page);
     await waitForPopupText(harness, popup, testPageUrl);
-    const optionsFromGear = harness.context.waitForEvent('page');
     await clickPopupTitle(harness, popup, 'Open options');
-    const gearPage = await optionsFromGear;
-    await gearPage.waitForLoadState('domcontentloaded');
-    await expect(gearPage).toHaveURL(/chrome-extension:\/\/[^/]+\/options\.html/);
-    await gearPage.close();
+    // runtime.openOptionsPage focuses the already-open options tab.
+    await expect.poll(() => harness.storagePage.evaluate(async () => {
+      const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
+      return (await api.tabs.query({ active: true, lastFocusedWindow: true }))[0]?.url;
+    })).toBe(`chrome-extension://${harness.extensionId}/options.html`);
     await waitForNoNativePopup(harness);
 
     popup = await openNativePopup(harness, page);
@@ -1492,7 +1326,7 @@ test('auto-archive captures MHTML + screenshots on page load without console err
   const messages: ConsoleMessage[] = [];
 
   try {
-    // Real local capture (no archivebox_test_fast_capture) so this exercises the
+    // Real local capture exercises the
     // genuine pageCapture.saveAsMHTML + captureVisibleTab paths the user hits.
     await setExtensionStorage(harness, {
       entries: [],
@@ -1536,7 +1370,7 @@ test('auto-archive captures MHTML + screenshots on page load without console err
     await waitForConsoleMessage(messages, /ArchiveBox: auto-archiving/);
     await waitForConsoleMessage(messages, /ArchiveBox: saved MHTML for/);
     await waitForConsoleMessage(messages, /ArchiveBox: saved screenshot for/);
-    await waitForConsoleMessage(messages, /no ArchiveBox server configured/);
+    expect((entry as Snapshot).remote_copies).toBeUndefined();
 
     // No "Scripts may close..." attempt from any injected script.
     expect(consoleMessagesMatching(messages, /scripts may close/i)).toEqual([]);
@@ -1631,6 +1465,9 @@ test('popup fits mobile viewports without horizontal overflow', async () => {
     await popupPage.getByPlaceholder('+ tag', { exact: true }).fill(longTag);
     await popupPage.getByPlaceholder('+ tag', { exact: true }).press('Enter');
     await expect(popupPage.locator('.archivebox-tag-chip--current')).toContainText(longTag);
+    const touch = await harness.context.newCDPSession(popupPage);
+    await touch.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+    expect(await popupPage.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
     for (const width of [320, 375, 390, 430, 560, 800]) {
       await popupPage.setViewportSize({ width, height: 900 });
       for (const menuOpen of [false, true]) {

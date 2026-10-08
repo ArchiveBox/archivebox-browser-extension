@@ -16,6 +16,48 @@ async function expectPageFits(page: Page) {
   expect(dimensions.overflowing).toEqual([]);
 }
 
+test('capture retention inherits the snapshot limit and persists shorter per-type choices', async ({}, testInfo) => {
+  const harness = await launchExtension();
+  try {
+    const page = await harness.context.newPage();
+    await page.goto(`chrome-extension://${harness.id}/options.html`);
+    const configure = () => page.getByRole('button', { name: 'Configuration', exact: true }).click();
+    await configure();
+    const snapshot = page.getByLabel('After saving on server, remove local copies after:');
+    const viewport = page.getByLabel('Viewport screenshot retention', { exact: true });
+    const fullPage = page.getByLabel('Full-page screenshot retention', { exact: true });
+    const mhtml = page.getByLabel('MHTML retention', { exact: true });
+    for (const select of [viewport, fullPage, mhtml]) {
+      await expect(select).toHaveValue('snapshot');
+      await expect(select.locator('option')).toHaveText(['Default (same as snapshot)', '1 minute', '1 day', '30 days']);
+    }
+    await snapshot.selectOption('never');
+    await mhtml.selectOption('60000');
+    await viewport.selectOption('86400000');
+    await fullPage.selectOption('7776000000');
+    await page.reload(); await configure();
+    await expect(snapshot).toHaveValue('never');
+    await expect(mhtml).toHaveValue('60000');
+    await expect(viewport).toHaveValue('86400000');
+    await expect(fullPage).toHaveValue('7776000000');
+    await snapshot.selectOption('86400000');
+    await expect(fullPage).toHaveValue('86400000');
+    for (const select of [viewport, fullPage, mhtml]) {
+      await expect(select.locator('option')).toHaveText(['Default (same as snapshot)', '1 minute', '1 day']);
+    }
+    await fullPage.selectOption('snapshot');
+    await page.reload(); await configure();
+    await expect(fullPage).toHaveValue('snapshot');
+    await expect(mhtml).toHaveValue('60000');
+    await expect(viewport).toHaveValue('86400000');
+    for (const width of [320, 1280]) {
+      await page.setViewportSize({ width, height: 844 });
+      await expectPageFits(page);
+      await page.screenshot({ path: testInfo.outputPath(`capture-retention-${width}.png`), fullPage: true });
+    }
+  } finally { await harness.close(); }
+});
+
 test('local retention defaults to 30 days and persists every choice', async ({}, testInfo) => {
   const harness = await launchExtension();
   const { context, id } = harness;

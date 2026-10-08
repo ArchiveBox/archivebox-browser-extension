@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
-  CircleDashed,
   Database,
   Download,
   ExternalLink,
@@ -19,6 +18,8 @@ import {
 } from 'lucide-react';
 import { strToU8, zipSync } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
+import { SnapshotSyncStatus } from '@/src/components/SnapshotSyncStatus';
+import { refreshSnapshotArtifactReceipts } from '@/src/lib/archiveboxArtifacts';
 import { getServerPersonas, submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotTags, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { defaultSingleFileExtensionId, defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, singleFileCaptureUnavailableMessage, supportsMhtmlCapture, supportsDirectBrowserImport } from '@/src/lib/browserCapabilities';
 import { loadBookmarkSnapshots, loadHistorySnapshots, loadSafariExportSnapshots, type SafariImportSource } from '@/src/lib/browserData';
@@ -61,17 +62,18 @@ import {
   mutateSnapshots,
 } from '@/src/lib/storage';
 import type { ConfigState, Persona, RuntimeMessage, RuntimeResponse, Snapshot, StoredCookie } from '@/src/lib/types';
+import { retentionDurations, type CaptureKind } from '@/src/lib/types';
 
 type Tab = 'urls' | 'config' | 'profiles' | 'import';
 type Status = { kind: 'idle' | 'success' | 'error' | 'warning'; text: string };
 
-function snapshotSyncStatus(snapshot: Snapshot, serverId: string, pending?: Status): Status {
-  if (pending) return pending;
+function snapshotSyncStatus(snapshot: Snapshot, serverId: string, pending?: Status & { serverId: string }): Status {
   // Popup/background submissions never populate this page's transient sync map.
   // Acceptance is durable even while uploads run; use the selected server's receipt.
   const receipt = snapshot.remote_copies?.[serverId];
   if (receipt?.delivery_error) return { kind: 'warning', text: t("URL submitted. Capture upload failed: $1", receipt.delivery_error) };
   if (receipt) return { kind: 'success', text: t("Submitted") };
+  if (pending?.serverId === serverId) return pending;
   return { kind: 'idle', text: t("Not synced") };
 }
 type ImportItem = Snapshot & { selected: boolean; isNew: boolean };
@@ -791,7 +793,8 @@ function OptionsMain() {
   const [cookieStatus, setCookieStatus] = useState<Status>({ kind: 'idle', text: '' });
   const [cookieSyncStates, setCookieSyncStates] = useState<Record<string, CookieSyncState>>({});
   const [personaStatus, setPersonaStatus] = useState<Status>({ kind: 'idle', text: '' });
-  const [syncStatuses, setSyncStatuses] = useState<Record<string, Status>>({});
+  const [syncStatuses, setSyncStatuses] = useState<Record<string, Status & { serverId: string }>>({});
+  const checkedArtifactReceipts = useRef(new Set<string>());
   const [personas, setPersonasState] = useState<Persona[]>([]);
   const [active_persona, setActivePersonaState] = useState('');
   const [cookiesByDomain, setCookiesByDomain] = useState<Record<string, StoredCookie[]>>({});
@@ -876,7 +879,7 @@ function OptionsMain() {
       });
       if (Object.keys(changes).some((key) => key.startsWith('cookie_sync:'))) getCookieSyncStates().then(setCookieSyncStates);
       if (changes.personas) getPersonas().then((state) => setPersonasState(state.personas));
-      if (changes.server_registry || changes.server_policies) getConfig().then(setConfigState);
+      if (changes.server_registry || changes.server_policies || changes.local_retention_ms || changes.capture_retention_ms) getConfig().then(setConfigState);
       if (changes.active_persona) setActivePersonaState(String(changes.active_persona.newValue || ''));
     }
     browser.storage.onChanged.addListener(refreshPersonas);
@@ -983,6 +986,20 @@ function OptionsMain() {
   const [serverDraft, setServerDraft] = useState<string | null>(null);
   const [tokenDraft, setTokenDraft] = useState<string | null>(null);
   const server_id = server?.id || '';
+  useEffect(() => {
+    if (!server) return;
+    const candidates = snapshots.filter(snapshot => {
+      const copy = snapshot.remote_copies?.[server.id];
+      const key = `${server.id}:${snapshot.id}:${copy?.snapshot_id}:${copy?.crawl_id}`;
+      if (!copy?.snapshot_id || copy.artifacts !== undefined || checkedArtifactReceipts.current.has(key)) return false;
+      checkedArtifactReceipts.current.add(key);
+      return true;
+    });
+    // Recover historical receipts sequentially; the list stays usable offline.
+    void (async () => {
+      for (const snapshot of candidates) await refreshSnapshotArtifactReceipts(server, snapshot).catch(() => undefined);
+    })();
+  }, [snapshots, server_id]);
   const [server_personas, setServerPersonas] = useState<Array<{ id: string; name: string }>>([]);
   const [persona_error, setPersonaError] = useState('');
   useEffect(() => {
@@ -1530,6 +1547,8 @@ function OptionsMain() {
     const location = detectPersonaLocation().then((geolocation) => ({ geolocation, error: '' }),
       (error: GeolocationPositionError) => ({ geolocation: null, error: error.message }));
     await updatePersona(persona.id, (item) => ({ ...item, settings: { ...item.settings, ...currentPersonaSettings() } }));
+    setPersonasState((await getPersonas()).personas);
+    setPersonaStatus({ kind: 'idle', text: t('Browser settings updated; waiting for location permission or position.') });
     const result = await location;
     if (result.geolocation) {
       await updatePersona(persona.id, (item) => ({ ...item, settings: {
@@ -1709,7 +1728,7 @@ function OptionsMain() {
         ...current,
         ...Object.fromEntries(ignoredSelected.map((snapshot) => [
           snapshot.id,
-          { kind: 'warning' as const, text: t("ArchiveBox server URLs are ignored.") },
+          { kind: 'warning' as const, text: t("ArchiveBox server URLs are ignored."), serverId: server_id },
         ])),
       }));
     }
@@ -1733,19 +1752,19 @@ function OptionsMain() {
     for (const snapshot of archiveableSelected) {
       setSyncStatuses((current) => ({
         ...current,
-        [snapshot.id]: { kind: 'warning', text: t("Syncing...") },
+        [snapshot.id]: { kind: 'warning', text: t("Syncing..."), serverId: server_id },
       }));
       try {
         await submitSnapshot(destination(), snapshot);
         setSyncStatuses((current) => ({
           ...current,
-          [snapshot.id]: { kind: 'success', text: t("Synced") },
+          [snapshot.id]: { kind: 'success', text: t("Synced"), serverId: server_id },
         }));
       } catch (error) {
         failed += 1;
         setSyncStatuses((current) => ({
           ...current,
-          [snapshot.id]: { kind: 'error', text: (error as Error).message },
+          [snapshot.id]: { kind: 'error', text: (error as Error).message, serverId: server_id },
         }));
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -2046,7 +2065,7 @@ function OptionsMain() {
                           </TagList>
                         </td>
                         <td className="saved-url-sync">
-                          <SyncStatusIcon status={syncStatus} />
+                          <SnapshotSyncStatus snapshot={snapshot} serverId={server_id} serverName={server?.name || ''} urlStatus={syncStatus} />
                         </td>
                       </tr>
                     );
@@ -2223,7 +2242,26 @@ function OptionsMain() {
               <option value="never">{t("never")}</option>
             </select>
           </Field>
-          <p className="help-text">{t("Starts after successful submission. Local copies are removed only while connected to the same server and after confirming the snapshot still exists there. Server copies are kept.")}</p>
+          <p className="help-text">{t('Snapshot retention starts after submission and confirmed file uploads. Cleanup verifies the same server still has the snapshot and each file before deleting local data.')}</p>
+          {([
+            ['viewport_screenshot', t('Viewport screenshot retention')],
+            ['screenshot', t('Full-page screenshot retention')],
+            ['mhtml', t('MHTML retention')],
+            ...(config.save_singlefile_locally ? [['singlefile', t('SingleFile retention')]] : []),
+          ] as Array<[CaptureKind, string]>).map(([kind, label]) => <Field label={label} key={kind}>
+            <select aria-label={label} value={config.capture_retention_ms[kind] ?? 'snapshot'} onChange={event => {
+              const captures = { ...config.capture_retention_ms };
+              const value = event.currentTarget.value;
+              if (value === 'snapshot') delete captures[kind];
+              else captures[kind] = value === 'never' ? 'never' : Number(value) as ConfigState['local_retention_ms'];
+              void saveConfig({ capture_retention_ms: captures });
+            }}>
+              <option value="snapshot">{t('Default (same as snapshot)')}</option>
+              {retentionDurations.filter(value => config.local_retention_ms === 'never' || (value !== 'never' && value <= config.local_retention_ms)).map(value =>
+                <option key={value} value={value}>{t(value === 'never' ? 'never' : value === 60000 ? '1 minute' : value === 86400000 ? '1 day' : value === 2592000000 ? '30 days' : '90 days')}</option>)}
+            </select>
+          </Field>)}
+          <p className="help-text">{t('File timers start after confirmed upload. Expired files are removed locally; the snapshot row and upload receipts remain until the snapshot expires. Unuploaded files and their rows are kept. Server copies are kept.')}</p>
           <div className="section-divider" />
           <SectionHeader title={t("Automatic Archiving")} detail={t("Automatically archive visited pages whose URLs match your patterns.")} />
           <label className="toggle">
@@ -2550,19 +2588,4 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function StatusBadge({ status }: { status: Status }) {
   if (!status.text) return null;
   return <span className={`status ${status.kind}`}>{status.text}</span>;
-}
-
-function SyncStatusIcon({ status }: { status?: Status }) {
-  const label = status?.text || t("Not synced");
-  const kind = status?.kind || 'idle';
-  const icon = kind === 'success'
-    ? <CheckCircle2 size={15} aria-hidden="true" />
-    : kind === 'error' || kind === 'warning'
-      ? <AlertTriangle size={15} aria-hidden="true" />
-      : <CircleDashed size={15} aria-hidden="true" />;
-  return (
-    <span className={`sync-icon sync-icon--${kind}`} title={label} aria-label={label} role="img">
-      {icon}
-    </span>
-  );
 }
