@@ -17,6 +17,7 @@ export type CookieSyncState = {
   domains: string[];
   fingerprint: string;
   pending: boolean;
+  enabled?: boolean;
   error?: string;
   last_synced_at?: string;
   retry_count?: number;
@@ -108,7 +109,7 @@ async function recordFailure(id: string, state: CookieSyncState, error: unknown)
 
 async function syncCookiesUnlocked(id: string, refresh: boolean, destination?: ServerConfiguration): Promise<boolean> {
   const state = await getState(id);
-  if (!state) return false; // A successful manual sync is the consent boundary.
+  if (!state || state.enabled === false) return false; // A successful manual sync is the consent boundary.
   const server = destination || (await getConfig()).servers.find((item) => item.id === state.server_id);
   if (!server || server.id !== state.server_id || serverOrigin(server.server) !== state.server_origin) return false;
   let persona: Persona | undefined;
@@ -152,6 +153,18 @@ export async function syncPersonaCookies(server: ServerConfiguration, id: string
   return navigator.locks.request('archivebox-cookie-sync', () => syncCookiesUnlocked(`${server.id}:${id}`, true, server));
 }
 
+export async function disablePersonaCookieSync(serverId: string, personaId: string): Promise<void> {
+  const id = `${serverId}:${personaId}`;
+  await navigator.locks.request('archivebox-cookie-sync', async () => {
+    const state = await getState(id);
+    if (!state) return;
+    clearTimeout(syncTimers.get(id));
+    syncTimers.delete(id);
+    await saveState(id, { ...state, enabled: false, pending: false, error: undefined, next_retry_at: undefined, retry_count: 0 });
+    await browser.alarms.clear(retryAlarmPrefix + id);
+  });
+}
+
 export async function syncPersonaManually(server: ServerConfiguration, persona_id: string) {
   return navigator.locks.request('archivebox-cookie-sync', async () => {
     const origin = serverOrigin(server.server);
@@ -160,12 +173,29 @@ export async function syncPersonaManually(server: ServerConfiguration, persona_i
     if (!original) throw new Error('Persona not found');
     const persona = await refreshCookies(persona_id, Object.keys(original.cookies));
     if (!persona) throw new Error('Persona not found');
-    const response = await syncPersonaToArchiveBox(server, persona, origin);
+    const previous = await getState(id);
+    // An enabled profile's explicit edits extend its selected domains immediately.
+    // Keep failed edits pending, so they use the existing worker recovery path.
+    const pending = previous && previous.enabled !== false && previous.server_origin === origin
+      ? { ...previous, domains: Object.keys(persona.cookies), pending: true, error: undefined, next_retry_at: Date.now() + retryDelayMs }
+      : undefined;
+    if (pending) {
+      await saveState(id, pending);
+      await armRetry(id, pending);
+    }
+    let response;
+    try {
+      response = await syncPersonaToArchiveBox(server, persona, origin);
+    } catch (error) {
+      if (pending) await recordFailure(id, pending, error);
+      throw error;
+    }
     await saveState(id, {
       server_id: server.id, persona_id, server_origin: origin,
       domains: Object.keys(persona.cookies),
       fingerprint: await fingerprint(persona.cookies),
       pending: false,
+      enabled: true,
       last_synced_at: new Date().toISOString(),
     });
     await browser.alarms.clear(retryAlarmPrefix + id);
@@ -184,7 +214,7 @@ function scheduleUpload(id: string, state: CookieSyncState): void {
 async function queueCookieChange(id: string, cookie: StoredCookie): Promise<void> {
   await navigator.locks.request('archivebox-cookie-sync', async () => {
     const state = await getState(id);
-    if (!state) return;
+    if (!state || state.enabled === false) return;
     const server = (await getConfig()).servers.find((item) => item.id === state.server_id);
     if (!server || state.server_origin !== serverOrigin(server.server)) return;
     const domain = cookie.domain.replace(/^\./, '');
@@ -217,6 +247,7 @@ export function configureCookieSync(): void {
   const getRouting = () => routing ||= getCookieSyncStates();
   const catchUp = async () => {
     for (const [id, state] of Object.entries(await getRouting())) {
+      if (state.enabled === false) continue;
       if (state.pending && (state.next_retry_at || 0) > Date.now()) await armRetry(id, state);
       else await navigator.locks.request('archivebox-cookie-sync', () => syncCookiesUnlocked(id, true)).catch(() => undefined);
     }
@@ -226,7 +257,7 @@ export function configureCookieSync(): void {
     const domain = change.cookie.domain.replace(/^\./, '');
     void getRouting().then(async (states) => {
       for (const [id, state] of Object.entries(states)) {
-        if (state.domains.some((item) => item.replace(/^\./, '') === domain)) {
+        if (state.enabled !== false && state.domains.some((item) => item.replace(/^\./, '') === domain)) {
           await queueCookieChange(id, normalizeCookie(change.cookie));
         }
       }

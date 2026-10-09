@@ -8,9 +8,12 @@ import {
   HardDrive,
   Server,
   Zap,
-  Clock3,
-  ShieldCheck,
   CheckCircle2,
+  Cookie,
+  Plus,
+  RefreshCw,
+  ShieldCheck,
+  Clock3,
   ChevronDown,
   Database,
   Download,
@@ -32,6 +35,8 @@ import { getServerPersonas, submitSnapshot, addToArchiveBox, archiveBoxServerUrl
 import { defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture, supportsDirectBrowserImport } from '@/src/lib/browserCapabilities';
 import { loadBookmarkSnapshots, loadHistorySnapshots, loadSafariExportSnapshots, type SafariImportSource } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
+import { CookieSitePicker } from './CookieSitePicker';
+import { cookieSiteDomain, groupCookieSites } from '@/src/lib/cookieSites';
 import {
   archiveboxExportBaseName,
   downloadCsv,
@@ -51,7 +56,7 @@ import { renderMhtmlToHtml } from '@/src/lib/mhtml';
 import { createSnapshot, filterSnapshots, uniqueTags } from '@/src/lib/snapshots';
 import { matchingTagSuggestions } from '@/src/lib/tags';
 import { setUiLanguage, t } from '@/src/lib/i18n';
-import { getCookieSyncStates, syncPersonaManually, type CookieSyncState } from '@/src/lib/cookieSync';
+import { getCookieSyncStates, disablePersonaCookieSync, syncPersonaManually, type CookieSyncState } from '@/src/lib/cookieSync';
 import { currentPersonaSettings, detectPersonaLocation } from '@/src/lib/personaSettings';
 import { compactUuid, uuidv7 } from '@/src/lib/uuid';
 import {
@@ -806,8 +811,11 @@ function OptionsMain() {
   const [active_persona, setActivePersonaState] = useState('');
   const [cookiesByDomain, setCookiesByDomain] = useState<Record<string, StoredCookie[]>>({});
   const [selectedCookieDomains, setSelectedCookieDomains] = useState<Set<string>>(new Set());
-  const [cookieFilter, setCookieFilter] = useState('');
-  const [cookieProfileMenuOpen, setCookieProfileMenuOpen] = useState(false);
+  const [viewedPersonaId, setViewedPersonaId] = useState('');
+  const [cookiesLoaded, setCookiesLoaded] = useState(false);
+  const [cookiesLoading, setCookiesLoading] = useState(false);
+  const [tabIcons, setTabIcons] = useState<Record<string, string>>({});
+  const [syncingPersonas, setSyncingPersonas] = useState<Set<string>>(new Set());
   const [importItems, setImportItems] = useState<ImportItem[]>([]);
   const [safariImportSource, setSafariImportSource] = useState<SafariImportSource>('all');
   const [importLoading, setImportLoading] = useState(false);
@@ -974,20 +982,25 @@ function OptionsMain() {
     [filteredImportItems],
   );
 
-  const filteredCookies = useMemo(() => {
-    const lowered = cookieFilter.toLowerCase();
-    return Object.entries(cookiesByDomain)
-      .filter(([domain]) => domain.toLowerCase().includes(lowered))
-      .sort(([a], [b]) => a.localeCompare(b));
-  }, [cookiesByDomain, cookieFilter]);
+  const viewedPersona = personas.find(item => item.id === viewedPersonaId)
+    || personas.find(item => item.id === active_persona) || personas[0];
+  const savedCookieSites = useMemo(() => groupCookieSites(viewedPersona?.cookies || {}), [viewedPersona?.cookies]);
+  const cachedCookieIcons = useMemo(() => {
+    const icons: Record<string, string> = {};
+    for (const snapshot of snapshots) {
+      if (!snapshot.favIconUrl) continue;
+      try { icons[cookieSiteDomain(new URL(snapshot.url).hostname)] = snapshot.favIconUrl; } catch { /* Invalid saved URL. */ }
+    }
+    return { ...icons, ...tabIcons };
+  }, [snapshots, tabIcons]);
 
-  const activePersonaStats = useMemo(() => {
-    const persona = personas.find((item) => item.id === active_persona);
-    if (!persona) return t("No active profile selected");
-    const domains = Object.keys(persona.cookies || {});
-    const cookieCount = Object.values(persona.cookies || {}).reduce((sum, cookies) => sum + cookies.length, 0);
-    return t("$1 domains / $2 cookies", domains.length, cookieCount);
-  }, [active_persona, personas]);
+  useEffect(() => {
+    if (tab !== 'profiles' || cookiesLoaded) return;
+    void browser.permissions.contains({ permissions: ['cookies', 'tabs'], origins: ['*://*/*'] })
+      .then(granted => { if (granted) void loadCookies(false); });
+  }, [tab]);
+
+  useEffect(() => { setSelectedCookieDomains(new Set()); }, [viewedPersona?.id]);
 
   const server = activeServer(config);
   const [serverDraft, setServerDraft] = useState<string | null>(null);
@@ -1463,31 +1476,42 @@ function OptionsMain() {
     }
   }
 
-  async function loadCookies() {
-    setCookieStatus({ kind: 'idle', text: t("Cookie import needs cookie and site access so selected login cookies can be copied into an archiving profile.") });
-    const granted = await browser.permissions.request({
-      permissions: ['cookies'],
-      origins: ['*://*/*'],
-    });
-    if (!granted && !(await browser.permissions.contains({ permissions: ['cookies'], origins: ['*://*/*'] }).catch(() => false))) {
-      setCookieStatus({ kind: 'error', text: t("Cookie permission denied") });
-      return;
+  async function loadCookies(requestPermission = true) {
+    setCookiesLoading(true);
+    setCookieStatus({ kind: 'idle', text: '' });
+    try {
+      const granted = requestPermission && await browser.permissions.request({
+        permissions: ['cookies', 'tabs'], origins: ['*://*/*'],
+      });
+      if (!granted && !(await browser.permissions.contains({ permissions: ['cookies', 'tabs'], origins: ['*://*/*'] }))) {
+        setCookieStatus({ kind: 'error', text: t("Cookie permission denied") });
+        return;
+      }
+      const nextCookies = await getCookiesByDomain();
+      setCookiesByDomain(nextCookies);
+      setSelectedCookieDomains(current => new Set([...current].filter(domain => domain in nextCookies)));
+      setCookiesLoaded(true);
+      const icons: Record<string, string> = {};
+      for (const tab of await browser.tabs.query({})) {
+        if (!tab.url || !tab.favIconUrl) continue;
+        try { icons[cookieSiteDomain(new URL(tab.url).hostname)] = tab.favIconUrl; } catch { /* Non-web tab. */ }
+      }
+      setTabIcons(icons);
+    } catch (error) {
+      setCookieStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setCookiesLoading(false);
     }
-    const nextCookies = await getCookiesByDomain();
-    setCookiesByDomain(nextCookies);
-    setCookieStatus({ kind: 'success', text: t("Loaded cookies for $1 domains", Object.keys(nextCookies).length) });
   }
 
   async function importSelectedCookies(targetPersonaId: string) {
     const targetPersona = personas.find((persona) => persona.id === targetPersonaId);
     if (!targetPersona) {
       setCookieStatus({ kind: 'warning', text: t("Select a profile to copy cookies into") });
-      setCookieProfileMenuOpen(false);
       return;
     }
     if (selectedCookieDomains.size === 0) {
       setCookieStatus({ kind: 'warning', text: t("No cookie domains selected") });
-      setCookieProfileMenuOpen(false);
       return;
     }
     const selectedCount = selectedCookieDomains.size;
@@ -1495,30 +1519,22 @@ function OptionsMain() {
       if (persona.id !== targetPersonaId) return persona;
       const cookies = { ...persona.cookies };
       selectedCookieDomains.forEach((domain) => {
-        cookies[domain] = cookiesByDomain[domain] || [];
+        const available = cookiesByDomain[domain] || cookies[domain];
+        if (available) cookies[domain] = available;
       });
       return { ...persona, cookies, last_used: new Date().toISOString() };
     }));
     setPersonasState(nextPersonas);
     setSelectedCookieDomains(new Set());
-    setCookieProfileMenuOpen(false);
     const persona = nextPersonas.find((item) => item.id === targetPersonaId);
     setCookieStatus({
       kind: 'success',
       text: t("Copied $1 domain cookies to $2", selectedCount, persona?.name || targetPersona.name),
     });
-  }
-
-  function setAllVisibleCookies(selected: boolean) {
-    const domains = filteredCookies.map(([domain]) => domain);
-    setSelectedCookieDomains((current) => {
-      const next = new Set(current);
-      domains.forEach((domain) => {
-        if (selected) next.add(domain);
-        else next.delete(domain);
-      });
-      return next;
-    });
+    const syncState = cookieSyncStates[`${server_id}:${targetPersonaId}`];
+    if (persona && syncState && syncState.enabled !== false && syncState.server_origin === archiveboxServerBaseUrl) {
+      await syncPersona(persona);
+    }
   }
 
   async function createPersona() {
@@ -1530,7 +1546,8 @@ function OptionsMain() {
     };
     const nextPersonas = await mutatePersonas((items) => [...items, persona]);
     setPersonasState(nextPersonas);
-    await chooseActivePersona(persona.id);
+    setViewedPersonaId(persona.id);
+    await chooseActivePersona(persona);
     setPersonaStatus({ kind: 'success', text: t("Created profile \"$1\"", name) });
   }
 
@@ -1551,10 +1568,10 @@ function OptionsMain() {
     setPersonaStatus({ kind: 'success', text: t("Profile deleted") });
   }
 
-  async function chooseActivePersona(id: string) {
-    setActivePersonaState(id);
-    await setActivePersona(id);
-    if (server) await saveServer({ persona: personas.find((item) => item.id === id)?.name ?? null, policy: { local_persona_id: id } });
+  async function chooseActivePersona(persona: Persona) {
+    setActivePersonaState(persona.id);
+    await setActivePersona(persona.id);
+    if (server) await saveServer({ persona: persona.name, policy: { local_persona_id: persona.id } });
   }
 
   async function detectPersonaSettings(persona: Persona) {
@@ -1578,10 +1595,11 @@ function OptionsMain() {
   }
 
   async function syncPersona(persona: Persona) {
-    const latestPersonas = (await getPersonas()).personas;
-    const personaToSync = latestPersonas.find((item) => item.id === persona.id) || persona;
-    setPersonaStatus({ kind: 'idle', text: t("Syncing $1 to ArchiveBox...", personaToSync.name) });
+    setSyncingPersonas(current => new Set(current).add(persona.id));
     try {
+      const latestPersonas = (await getPersonas()).personas;
+      const personaToSync = latestPersonas.find((item) => item.id === persona.id) || persona;
+      setPersonaStatus({ kind: 'idle', text: '' });
       await requestServerHostPermission(archiveboxServerBaseUrl);
       const response = await syncPersonaManually(destination(), personaToSync.id);
       const persona_id = response.persona?.id;
@@ -1592,14 +1610,25 @@ function OptionsMain() {
         last_used: new Date().toISOString(),
         remote_personas: { ...personaToSync.remote_personas, ...(persona_id && persona_url ? { [server_id]: { id: persona_id, url: persona_url } } : {}) },
       });
-      setPersonaStatus({
-        kind: 'success',
-        text: response.created
-          ? t("Created ArchiveBox persona $1", response.persona?.name || personaToSync.name)
-          : t("Updated ArchiveBox persona $1", response.persona?.name || personaToSync.name),
-      });
+      setPersonaStatus({ kind: 'idle', text: '' });
     } catch (error) {
       setPersonaStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setSyncingPersonas(current => { const next = new Set(current); next.delete(persona.id); return next; });
+      setCookieSyncStates(await getCookieSyncStates());
+    }
+  }
+
+  async function togglePersonaSync(persona: Persona, enabled: boolean) {
+    if (enabled) return syncPersona(persona);
+    const id = `${server_id}:${persona.id}`;
+    setCookieSyncStates(current => ({ ...current, [id]: { ...current[id]!, enabled: false } }));
+    try {
+      await disablePersonaCookieSync(server_id, persona.id);
+    } catch (error) {
+      setPersonaStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setCookieSyncStates(await getCookieSyncStates());
     }
   }
 
@@ -1614,6 +1643,7 @@ function OptionsMain() {
       delete cookies[domain];
       return { ...item, cookies };
     });
+    setSelectedCookieDomains(current => { const next = new Set(current); next.delete(domain); return next; });
     setPersonasState((await getPersonas()).personas);
   }
 
@@ -2233,152 +2263,91 @@ function OptionsMain() {
       )}
 
       {tab === 'profiles' && (
-        <section className="panel">
-          <SectionHeader title={t("Cookies")} detail={t("Manage cookies and browser-like settings used for logged-in archiving.")} />
-          <div className="notice">
-            {t("For logged-in archiving, import credentials into one or more archiving profiles. A profile is ArchiveBox's equivalent to a browser profile: cookies plus browser settings for the sites you want to capture.")}
-            <pre>{`archivebox config --set COOKIE_FILE=$PWD/cookies.txt
-archivebox config --set CHROME_USER_DATA_DIR=$PWD/chrome-user-data`}</pre>
+        <section className="panel cookies-panel">
+          <div className="cookies-heading">
+            <div className="cookies-heading-title"><Cookie size={19} aria-hidden="true" /><h2>{t('Cookies & profiles')}</h2></div>
+            <button onClick={createPersona}><Plus size={15} aria-hidden="true" />{t('New Profile')}</button>
           </div>
-          <div className="notice warning">
-            {t("Use dedicated archiving accounts where possible so archives do not embed personal browsing data or normal-account cookies.")}
+          <div className="persona-tabs" role="tablist" aria-label={t('Archiving profiles')}>
+            {personas.map((persona, index) => <button key={persona.id} id={`persona-tab-${persona.id}`} role="tab" aria-label={persona.name} title={persona.name}
+              aria-selected={viewedPersona?.id === persona.id} aria-controls="persona-panel" tabIndex={viewedPersona?.id === persona.id ? 0 : -1}
+              onClick={() => { setViewedPersonaId(persona.id); setPersonaStatus({ kind: 'idle', text: '' }); }}
+              onKeyDown={event => {
+                let next = index;
+                if (event.key === 'ArrowRight') next = (index + 1) % personas.length;
+                else if (event.key === 'ArrowLeft') next = (index - 1 + personas.length) % personas.length;
+                else if (event.key === 'Home') next = 0;
+                else if (event.key === 'End') next = personas.length - 1;
+                else return;
+                event.preventDefault(); setViewedPersonaId(personas[next]!.id);
+                document.getElementById(`persona-tab-${personas[next]!.id}`)?.focus();
+              }}>
+              <UserRoundCog size={15} aria-hidden="true" /><span>{persona.name}</span>
+              {persona.id === active_persona && <span className="persona-active-dot" title={t('Used for archiving')} />}
+              <small aria-hidden="true">{groupCookieSites(persona.cookies || {}).length}</small>
+            </button>)}
           </div>
-          <div className="toolbar">
-            <select value={active_persona} onChange={(event) => chooseActivePersona(event.currentTarget.value)}>
-              <option value="">{t("Select a profile...")}</option>
-              {personas.map((persona) => <option key={persona.id} value={persona.id}>{persona.name}</option>)}
-            </select>
-            <button onClick={createPersona}>{t("New Profile")}</button>
-          </div>
-          <div className="notice compact">{t("Active profile: $1", activePersonaStats)}</div>
-          <StatusBadge status={personaStatus} />
-          <div className="persona-list">
-            {personas.map((persona) => (
-              <article className={persona.id === active_persona ? 'persona active' : 'persona'} key={persona.id}>
-                <input value={persona.name} onChange={(event) => savePersona(persona, { name: event.currentTarget.value })} />
-                <p>{t("$1 domains · Last used $2", Object.keys(persona.cookies || {}).length, persona.last_used ? new Date(persona.last_used).toLocaleString() : t("never"))}</p>
-                <div className="settings-grid">
-                  {([
-                    ['userAgent', t("User Agent")],
-                    ['geography', t("Geography")],
-                    ['timezone', t("Timezone")],
-                    ['language', t("Language")],
-                    ['operatingSystem', t("Operating System")],
-                    ['viewport', t("Viewport Size")],
-                    ['viewportScale', t("CSS Pixel Scale")],
-                    ['colorScheme', t("Color Scheme")],
-                  ] satisfies Array<[EditablePersonaSettingKey, string]>).map(([key, label]) => (
-                    <label key={key}>
-                      <span>{label}</span>
-                      {key === 'colorScheme' ? (
-                        <select value={persona.settings[key] || ''} onChange={(event) => updatePersonaSetting(persona, key, event.currentTarget.value)}>
-                          <option value="">{t("Not set")}</option>
-                          <option value="light">{t("Light")}</option>
-                          <option value="dark">{t("Dark")}</option>
-                        </select>
-                      ) : <input value={persona.settings[key] || ''} onChange={(event) => updatePersonaSetting(persona, key, event.currentTarget.value)} />}
-                    </label>
-                  ))}
+          {viewedPersona && (() => {
+            const persona = viewedPersona;
+            const syncState = cookieSyncStates[`${server_id}:${persona.id}`];
+            const sameServer = syncState?.server_origin === archiveboxServerBaseUrl;
+            const autoSync = !!syncState && sameServer && syncState.enabled !== false;
+            const syncing = syncingPersonas.has(persona.id);
+            const cookieCount = savedCookieSites.reduce((sum, site) => sum + site.cookieCount, 0);
+            return <article className={`persona${persona.id === active_persona ? ' active' : ''}`} key={persona.id} id="persona-panel" role="tabpanel" aria-labelledby={`persona-tab-${persona.id}`}>
+              <div className="persona-overview">
+                <div className="persona-identity"><input aria-label={t('Profile name')} value={persona.name} onChange={event => savePersona(persona, { name: event.currentTarget.value })} />
+                  <span>{t('$1 sites', savedCookieSites.length)}<span aria-hidden="true"> · </span>{t('$1 cookies', cookieCount)}</span></div>
+                <div className="persona-actions">
+                  {persona.id === active_persona ? <span className="persona-current"><CheckCircle2 size={14} aria-hidden="true" />{t('Used for archiving')}</span>
+                    : <button onClick={() => chooseActivePersona(persona)}>{t('Use for archiving')}</button>}
+                  <button className="cookie-icon-button" title={t('Export cookies.txt')} aria-label={t('Export cookies.txt')} onClick={() => copyPersonaCookies(persona)}><Download size={16} aria-hidden="true" /></button>
+                  <button className="cookie-icon-button" title={t('Delete profile')} aria-label={t('Delete profile')} onClick={() => deletePersona(persona.id)}><Trash2 size={15} aria-hidden="true" /></button>
                 </div>
-                <div className="domain-chips">
-                  {Object.keys(persona.cookies || {}).map((domain) => (
-                    <button key={domain} onClick={() => removePersonaDomain(persona, domain)}>{domain} ×</button>
-                  ))}
-                </div>
-                {cookieSyncStates[`${server_id}:${persona.id}`] && cookieSyncStates[`${server_id}:${persona.id}`]?.server_origin !== archiveboxServerBaseUrl ? (
-                  <p role="status" className="status warning">{t("Cookie sync paused: sync this profile to the new server manually.")}</p>
-                ) : cookieSyncStates[`${server_id}:${persona.id}`]?.pending && (
-                  <p role="status" className={cookieSyncStates[`${server_id}:${persona.id}`]?.error ? 'status error' : 'status'}>
-                    {cookieSyncStates[`${server_id}:${persona.id}`]?.error
-                      ? t("Cookie sync failed; retrying automatically: $1", cookieSyncStates[`${server_id}:${persona.id}`]?.error || '')
-                      : t("Cookie sync pending")}
-                  </p>
-                )}
-                <div className="row-actions">
-                  {persona.remote_personas?.[server_id]?.url ? (
-                    <a className="persona-sync-link persona-sync-link--synced" href={persona.remote_personas?.[server_id]?.url} target="_blank" rel="noopener noreferrer" title={t("Open ArchiveBox persona")}>
-                      <CheckCircle2 size={15} aria-hidden="true" />
-                      <span>{t("Synced")}</span>
-                      <ExternalLink size={13} aria-hidden="true" />
-                    </a>
-                  ) : (
-                    <span className="persona-sync-link">{t("Not synced")}</span>
-                  )}
-                  <button onClick={() => syncPersona(persona)}>{t("Sync to Server")}</button>
-                  <button onClick={() => detectPersonaSettings(persona)}>{t("Detect Settings")}</button>
-                  <button onClick={() => copyPersonaCookies(persona)}>{t("Export cookies.txt")}</button>
-                  <button onClick={() => deletePersona(persona.id)}>{t("Delete")}</button>
-                </div>
-              </article>
-            ))}
-          </div>
-          <div className="section-heading cookie-import-heading">
-            <div>
-              <h2>{t("Import Browser Cookies to Archiving Profile")}</h2>
-              <p>{t("Load browser cookies, filter by domain, then copy selected domains into an archiving profile.")}</p>
-            </div>
-            <div className="cookie-import-actions">
-              <button onClick={loadCookies}>{t("Load Browser Cookies")}</button>
-              <div className="profile-menu">
-                <button
-                  disabled={selectedCookieDomains.size === 0 || personas.length === 0}
-                  onClick={() => setCookieProfileMenuOpen((open) => !open)}
-                >
-                  {t("Copy Cookies to Profile ⌄")}
-                </button>
-                {cookieProfileMenuOpen && (
-                  <div className="profile-menu__dropdown" role="menu">
-                    {personas.map((persona) => (
-                      <button key={persona.id} role="menuitem" onClick={() => importSelectedCookies(persona.id)}>
-                        {persona.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
-              <StatusBadge status={cookieStatus} />
-            </div>
+              <div className="persona-sync-bar">
+                <label className="toggle"><input type="checkbox" checked={autoSync || syncing} disabled={!server?.token || syncing}
+                  onChange={event => togglePersonaSync(persona, event.currentTarget.checked)} />{t('Auto-sync')}</label>
+                <span className="persona-sync-destination" title={server?.server || t('Connect a server in Configuration')}>{server?.name || t('No server connected')}</span>
+                <span className="persona-sync-time" role="status"><Clock3 size={13} aria-hidden="true" />{sameServer && syncState?.last_synced_at
+                    ? <span>{t('Last synced')} <time dateTime={syncState.last_synced_at} title={new Date(syncState.last_synced_at).toLocaleString()}>{new Date(syncState.last_synced_at).toLocaleTimeString()}</time></span>
+                    : t('Never synced')}</span>
+                {persona.remote_personas?.[server_id]?.url && <a className="persona-sync-link persona-sync-link--synced" href={persona.remote_personas[server_id]!.url} target="_blank" rel="noopener noreferrer" title={t('Open ArchiveBox persona')} aria-label={t('Open ArchiveBox persona')}><ExternalLink size={14} aria-hidden="true" /></a>}
+                <button aria-label={t('Sync now')} disabled={!server?.token || syncing} onClick={() => syncPersona(persona)}><RefreshCw size={14} className={syncing || (autoSync && syncState?.pending) ? 'is-spinning' : ''} aria-hidden="true" />{syncing ? t('Syncing…') : t('Sync now')}</button>
+              </div>
+              {syncState && !sameServer && <p role="status" className="status warning">{t('Cookie sync paused: sync this profile to the new server manually.')}</p>}
+              {autoSync && syncState?.error && <p role="status" className="status error">{t('Cookie sync failed; retrying automatically: $1', syncState.error)}</p>}
+              <div className="persona-details-row">
+                <details className="persona-settings"><summary><Settings2 size={13} aria-hidden="true" />{t('Browser settings')}<span>{[persona.settings.language, persona.settings.timezone].filter(Boolean).join(' · ')}</span></summary>
+                  <div className="settings-grid">
+                    {([
+                      ['userAgent', t('User Agent')], ['geography', t('Geography')],
+                      ['timezone', t('Timezone')], ['language', t('Language')], ['operatingSystem', t('Operating System')],
+                      ['viewport', t('Viewport Size')], ['viewportScale', t('CSS Pixel Scale')], ['colorScheme', t('Color Scheme')],
+                    ] satisfies Array<[EditablePersonaSettingKey, string]>).map(([key, label]) => <label key={key}><span>{label}</span>
+                      {key === 'colorScheme' ? <select value={persona.settings[key] || ''} onChange={event => updatePersonaSetting(persona, key, event.currentTarget.value)}>
+                        <option value="">{t('Not set')}</option><option value="light">{t('Light')}</option><option value="dark">{t('Dark')}</option>
+                      </select> : <input value={persona.settings[key] || ''} onChange={event => updatePersonaSetting(persona, key, event.currentTarget.value)} />}
+                    </label>)}
+                  </div>
+                  <button onClick={() => detectPersonaSettings(persona)}><RefreshCw size={13} aria-hidden="true" />{t('Detect Settings')}</button>
+                </details>
+              </div>
+            </article>;
+          })()}
+          <StatusBadge status={personaStatus} />
+          <div className="cookie-library-heading"><span>{t('Select sites to add · Expand for individual domains')}</span>
+            <button disabled={cookiesLoading} onClick={() => loadCookies()}><RefreshCw size={13} className={cookiesLoading ? 'is-spinning' : ''} aria-hidden="true" />{cookiesLoading ? t('Loading…') : cookiesLoaded ? t('Refresh cookies') : t('Load Browser Cookies')}</button>
           </div>
-          <div className="table-controls">
-            <label className="search-field">
-              <Search size={14} aria-hidden="true" />
-              <input value={cookieFilter} onChange={(event) => setCookieFilter(event.currentTarget.value)} placeholder={t("Filter cookie domains")} />
-            </label>
-            <span className="selected-count">{t("$1 selected", selectedCookieDomains.size)}</span>
-          </div>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>
-                  <input
-                    type="checkbox"
-                    aria-label={t("Select all visible cookie domains")}
-                    checked={filteredCookies.length > 0 && filteredCookies.every(([domain]) => selectedCookieDomains.has(domain))}
-                    onChange={(event) => setAllVisibleCookies(event.currentTarget.checked)}
-                  />
-                </th>
-                <th>{t("Domain")}</th>
-                <th>{t("Cookies")}</th>
-                <th>{t("Export cookies.txt")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredCookies.map(([domain, cookies]) => (
-                <tr key={domain}>
-                  <td><input type="checkbox" checked={selectedCookieDomains.has(domain)} onChange={() => setSelectedCookieDomains((current) => {
-                    const next = new Set(current);
-                    if (next.has(domain)) next.delete(domain);
-                    else next.add(domain);
-                    return next;
-                  })} /></td>
-                  <td data-label={t("Domain")}>{domain}</td>
-                  <td data-label={t("Cookies")}>{cookies.length}</td>
-                  <td data-label={t("Export cookies.txt")}><button onClick={() => copyDomainCookies(domain, cookies)}>{t("Copy cookies.txt")}</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {filteredCookies.length === 0 && <EmptyState title={t("No browser cookies loaded")} detail={t("Click Load Browser Cookies and accept the permission prompt to populate this table.")} />}
+          <StatusBadge status={cookieStatus} />
+          <CookieSitePicker cookies={{ ...viewedPersona?.cookies, ...cookiesByDomain }} selected={selectedCookieDomains} setSelected={setSelectedCookieDomains} cachedIcons={cachedCookieIcons}
+            savedDomains={new Set(Object.keys(viewedPersona?.cookies || {}))} loaded={cookiesLoaded} onCopy={copyDomainCookies} onRemove={domain => viewedPersona && removePersonaDomain(viewedPersona, domain)} />
+          {selectedCookieDomains.size > 0 && <div className="cookie-selection-bar">
+            <span><Cookie size={16} aria-hidden="true" /><strong>{selectedCookieDomains.size === 1 ? t('1 domain selected') : t('$1 domains selected', selectedCookieDomains.size)}</strong></span>
+            <button className="cookie-add-button" disabled={!viewedPersona || selectedCookieDomains.size === 0 || syncingPersonas.has(viewedPersona.id)} onClick={() => viewedPersona && importSelectedCookies(viewedPersona.id)}>
+              <Plus size={16} aria-hidden="true" />{t('Add to $1', viewedPersona?.name || t('profile'))}
+            </button>
+          </div>}
         </section>
       )}
 
