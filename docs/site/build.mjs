@@ -30,7 +30,7 @@ for (const capture of manifest.screenshots) {
   }
 }
 
-const expected = ['chrome-web-store', 'firefox-add-ons', 'popup', 'popup-crawl-menu', 'saved-urls', 'export-menu', 'edit-tags', 'configuration', 'cookies', 'import-bookmarks', 'import-history', 'snapshot-viewer', 'screenshot-viewer'];
+const expected = ['chrome-web-store', 'firefox-add-ons', 'popup', 'popup-ai-task', 'popup-crawl-menu', 'saved-urls', 'export-menu', 'edit-tags', 'configuration', 'cookies', 'import-bookmarks', 'import-history', 'snapshot-viewer', 'screenshot-viewer'];
 for (const id of expected) if (!ids.has(id)) throw new Error(`Missing required screenshot view: ${id}`);
 
 manifest.screenshots.sort((a, b) => (expected.indexOf(a.id) < 0 ? expected.length : expected.indexOf(a.id)) - (expected.indexOf(b.id) < 0 ? expected.length : expected.indexOf(b.id)));
