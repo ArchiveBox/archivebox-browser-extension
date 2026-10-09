@@ -1,7 +1,7 @@
 import { getConfig, getPersonas, getSnapshots, mutateSnapshots } from './storage';
 import { t } from './i18n';
 import { archiveBoxServerUrlMatches, isArchiveablePageUrl } from './archiveboxUrlExclusions';
-import type { ArchiveSubmissionReceipt, SubmissionReceipt, ArchiveDepth, ServerConfiguration, ServerDestination, Snapshot } from './types';
+import type { AgentTaskReceipt, ArchiveSubmissionReceipt, SubmissionReceipt, ArchiveDepth, ServerConfiguration, ServerDestination, Snapshot } from './types';
 
 export { archiveBoxServerUrlMatches, isArchiveablePageUrl } from './archiveboxUrlExclusions';
 
@@ -820,4 +820,32 @@ export async function removeFreshOwnedCapture(server: ServerDestination, snapsho
       }
     }
   });
+}
+
+// Separate from URL/capture submission; the server resolves authoritative context.
+export async function submitAgentTask(server: ServerDestination, snapshot: Snapshot, task: string): Promise<AgentTaskReceipt> {
+  if (!server.token) throw new Error(t("An administrator API key is required for AI tasks."));
+  const snapshotId = snapshot.remote_copies?.[server.id]?.snapshot_id;
+  if (!snapshotId) throw new Error(t("Wait for this capture to be submitted before sending an AI task."));
+  await ensureServerHostPermission(server.server);
+  // The API alias works on split API/admin origins without forwarding keys across redirects.
+  const response = await fetchWithTimeout(`${serverBaseUrl(server.server)}/api/v1/agent/tasks/`, {
+    method: 'POST', headers: apiHeaders(server.token), credentials: 'omit', redirect: 'error',
+    body: JSON.stringify({ snapshot_id: snapshotId, task }),
+  }, 120_000);
+  const result = await response.json().catch(() => null);
+  if (!response.ok) {
+    if (typeof result?.error === 'string') throw new Error(result.error);
+    if (response.status === 404 || response.status === 405) throw new Error(t("Upgrade this ArchiveBox server to use capture AI tasks."));
+    throw new Error(t("Unable to submit AI task ($1).", response.status));
+  }
+  if (!result || typeof result.session_id !== 'string' || !/^ses_[A-Za-z0-9]+$/.test(result.session_id)
+    || result.snapshot_id?.replaceAll('-', '') !== snapshotId.replaceAll('-', '')
+    || typeof result.session_url !== 'string') throw new Error(t("Invalid AI task response from server."));
+  const sessionUrl = new URL(result.session_url);
+  requireHttpServerUrl(sessionUrl.href);
+  if (!sessionUrl.pathname.endsWith('/admin/agent/') || sessionUrl.searchParams.get('session') !== result.session_id) {
+    throw new Error(t("Invalid AI session link from server."));
+  }
+  return result as AgentTaskReceipt;
 }
