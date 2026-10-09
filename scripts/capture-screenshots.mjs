@@ -26,6 +26,9 @@ let harness;
 const screenshots = [];
 async function capture(page, id, title, source, url = page.url().replace(/^chrome-extension:\/\/[^/]+\//, '')) {
   const entry = { id, title, url, source, images: [] };
+  // Capturing a background tab can stall Chromium's compositor on Linux.
+  await page.bringToFront();
+  await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe('visible');
   for (const size of sizes) {
     await page.setViewportSize({ width: size.width, height: size.height });
     await page.evaluate(() => document.fonts.ready);
