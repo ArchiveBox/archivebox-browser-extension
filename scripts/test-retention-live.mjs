@@ -23,7 +23,7 @@ try {
   const configure = () => options.getByRole('button', { name: 'Configuration', exact: true }).click();
   const saved = () => options.getByRole('button', { name: 'Saved URLs', exact: true }).click();
   await configure();
-  const rowTtl = options.getByLabel('After saving on server, remove local copies after:');
+  const rowTtl = options.getByLabel('Snapshot metadata retention');
   await rowTtl.selectOption('never');
   const address = options.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com');
   await address.fill(server); await address.blur();
@@ -182,5 +182,33 @@ try {
   for (const kind of ['viewport_screenshot', 'screenshot']) for (const path of filePaths(periodic[kind])) expect(await paths()).toContain(path);
   expect((await api('/api/v1/core/snapshot/' + periodic.remote_copies[serverId].snapshot_id)).url).toBe(periodic.url);
   console.log('PASS: the recurring alarm removed only uploaded MHTML after its TTL; unuploaded screenshots and metadata remain.');
+
+  // The metadata switch controls post-upload retention, without losing pending
+  // files or their parent rows. Create another real submission with no files.
+  for (const label of ['Save viewport screenshots locally', 'Save full-page screenshots locally', 'Save MHTML snapshots locally']) {
+    await options.getByLabel(label, { exact: true }).uncheck();
+  }
+  const metadata = options.getByLabel('Save snapshot metadata locally', { exact: true });
+  await expect(metadata).toBeChecked();
+  const metadataUrl = `https://example.com/?archivebox-extension-metadata=${Date.now()}`;
+  const metadataPage = await context.newPage(); await metadataPage.goto(metadataUrl);
+  const metadataPopup = await context.newPage(); await metadataPage.bringToFront();
+  await metadataPopup.goto(`chrome-extension://${id}/popup.html`);
+  await expect.poll(async () => (await entries()).find(item => item.url === metadataUrl)?.remote_copies?.[serverId]?.status, { timeout: 60000 }).toBe('complete');
+  const metadataEntry = (await entries()).find(item => item.url === metadataUrl);
+  for (const kind of captures) expect(metadataEntry[kind]).toBeUndefined();
+  await metadataPopup.close(); await metadataPage.close();
+  await metadata.uncheck();
+  await expect.poll(async () => (await entries()).some(item => item.id === metadataEntry.id)).toBe(false);
+  for (const entry of [records['url-only'], afterAlarm]) {
+    const kept = (await entries()).find(item => item.id === entry.id);
+    expect(kept).toBeTruthy();
+    for (const kind of captures) if (entry[kind]) {
+      expect(kept[kind]).toEqual(entry[kind]);
+      for (const path of filePaths(entry[kind])) expect(await paths()).toContain(path);
+    }
+  }
+  expect((await api('/api/v1/core/snapshot/' + metadataEntry.remote_copies[serverId].snapshot_id)).url).toBe(metadataUrl);
+  console.log('PASS: disabling metadata removes the confirmed metadata-only row and preserves every unuploaded file, its metadata, and the server snapshot.');
   if (evidence) await writeFile(`${evidence}/result.json`, JSON.stringify({ server, tested_at: new Date().toISOString(), periodic_alarm_verified: true, records, files: results }, null, 2));
 } finally { await harness.close(); }

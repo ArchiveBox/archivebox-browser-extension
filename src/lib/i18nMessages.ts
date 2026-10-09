@@ -1,5 +1,13 @@
 export const translations = {
   "es": {
+    "Snapshot metadata": "Metadatos de la instantánea",
+    "Save snapshot metadata locally": "Guardar metadatos de la instantánea localmente",
+    "Snapshot metadata retention": "Conservación de metadatos de la instantánea",
+    "URL, title, tags & upload history": "URL, título, etiquetas e historial de subidas",
+    "Metadata is included with every upload": "Los metadatos se incluyen en cada subida",
+    "Included": "Incluido",
+    "Until uploaded": "Hasta la subida",
+    "Same as metadata": "Igual que los metadatos",
     "Invalid AI session link from server.": "Enlace de sesión de IA no válido del servidor.",
     "Invalid AI task response from server.": "Respuesta de tarea de IA no válida del servidor.",
     "Unable to submit AI task ($1).": "No se pudo enviar la tarea de IA ($1).",
@@ -407,6 +415,14 @@ export const translations = {
     "MHTML file does not contain any readable parts": "El archivo MHTML no contiene ninguna parte legible."
   },
   "zh_CN": {
+    "Snapshot metadata": "快照元数据",
+    "Save snapshot metadata locally": "在本地保存快照元数据",
+    "Snapshot metadata retention": "快照元数据保留时间",
+    "URL, title, tags & upload history": "网址、标题、标签和上传记录",
+    "Metadata is included with every upload": "每次上传均包含元数据",
+    "Included": "已包含",
+    "Until uploaded": "保留至上传完成",
+    "Same as metadata": "与元数据相同",
     "Invalid AI session link from server.": "服务器返回了无效的 AI 会话链接。",
     "Invalid AI task response from server.": "服务器返回了无效的 AI 任务响应。",
     "Unable to submit AI task ($1).": "无法提交 AI 任务（$1）。",

@@ -8,18 +8,20 @@ import type { CaptureKind, ConfigState, Snapshot, ServerConfiguration } from './
 const alarmName = 'archivebox-local-retention';
 
 function isExpired(snapshot: Snapshot, config: ConfigState, server: ServerConfiguration): boolean {
-  if (config.local_retention_ms === 'never' || snapshot.remote_copies?.[server.id]?.status !== 'complete') return false;
+  const ttl = config.save_snapshots_locally ? config.local_retention_ms : 0;
+  if (ttl === 'never' || snapshot.remote_copies?.[server.id]?.status !== 'complete') return false;
   const copy = snapshot.remote_copies?.[server.id];
   const submitted = Math.max(Date.parse(copy?.submitted_at || ''), ...Object.values(copy?.artifacts || {}).map(receipt => Date.parse(receipt.uploaded_at || '')).filter(Number.isFinite));
   return Number.isFinite(submitted)
     && snapshot.remote_copies?.[server.id]?.submitted_to === new URL(server.server).toString().replace(/\/$/, '')
-    && Date.now() - submitted >= config.local_retention_ms;
+    && Date.now() - submitted >= ttl;
 }
 
 function captureExpired(snapshot: Snapshot, kind: CaptureKind, config: ConfigState, servers: ServerConfiguration[]): boolean {
   const capture = snapshot[kind];
-  let ttl = config.capture_retention_ms[kind] ?? config.local_retention_ms;
+  let ttl: number | 'never' = config.capture_retention_ms[kind] ?? config.local_retention_ms;
   if (config.local_retention_ms !== 'never' && (ttl === 'never' || ttl > config.local_retention_ms)) ttl = config.local_retention_ms;
+  if (!config.save_snapshots_locally) ttl = 0;
   if (!capture || ttl === 'never' || !servers.length) return false;
   return servers.every(server => {
     const copy = snapshot.remote_copies?.[server.id];
@@ -40,7 +42,7 @@ export async function cleanupExpiredSnapshots(): Promise<void> {
   await navigator.locks.request(alarmName, { ifAvailable: true }, async (lock) => {
     if (!lock) return;
     const config = await getConfig();
-    if (config.local_retention_ms === 'never' && Object.values(config.capture_retention_ms).every(value => value === 'never')) return;
+    if (config.save_snapshots_locally && config.local_retention_ms === 'never' && Object.values(config.capture_retention_ms).every(value => value === 'never')) return;
     for (const candidate of await getSnapshots()) {
       if (candidate.unassigned_remote_copy) continue;
       const ids = Object.keys(candidate.remote_copies || {});
@@ -69,6 +71,7 @@ export async function cleanupExpiredSnapshots(): Promise<void> {
             const currentConfig = await getConfig();
             if (JSON.stringify(currentConfig.servers) !== JSON.stringify(config.servers)
               || currentConfig.local_retention_ms !== config.local_retention_ms
+              || currentConfig.save_snapshots_locally !== config.save_snapshots_locally
               || JSON.stringify(currentConfig.capture_retention_ms) !== JSON.stringify(config.capture_retention_ms)) return entries;
             const snapshot = entries.find((item) => item.id === candidate.id);
             if (!snapshot || JSON.stringify(snapshot) !== JSON.stringify(candidate)) return entries;
@@ -112,7 +115,7 @@ export function configureLocalRetention(): void {
   browser.runtime.onStartup.addListener(() => { void schedule(); });
   browser.runtime.onInstalled.addListener(() => { void schedule(); });
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && ['local_retention_ms', 'capture_retention_ms', 'server_registry'].some((key) => key in changes)) {
+    if (area === 'local' && ['save_snapshots_locally', 'local_retention_ms', 'capture_retention_ms', 'server_registry'].some((key) => key in changes)) {
       void run();
     }
   });

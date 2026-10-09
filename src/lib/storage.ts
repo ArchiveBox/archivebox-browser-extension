@@ -16,6 +16,7 @@ const defaultConfig: ConfigState = {
   local_retention_ms: 2592000000,
   capture_retention_ms: {},
   enable_auto_archive: false,
+  save_snapshots_locally: true,
   save_screenshots_locally: false,
   save_viewport_screenshots_locally: true,
   save_mhtml_locally: supportsMhtmlCapture,
@@ -23,6 +24,8 @@ const defaultConfig: ConfigState = {
   singlefile_extension_id: '',
   tab_manager_plus_extension_id: '',
 };
+
+const localOutputSettings = ['save_viewport_screenshots_locally', 'save_screenshots_locally', 'save_mhtml_locally', 'save_singlefile_locally'] as const;
 
 async function getServerRegistry(): Promise<ServerRegistry> {
   await migratePublishedStorage();
@@ -54,9 +57,10 @@ export async function getConfig(): Promise<ConfigState> {
     || !config.capture_retention_ms || typeof config.capture_retention_ms !== 'object' || Array.isArray(config.capture_retention_ms)
     || Object.entries(config.capture_retention_ms).some(([kind, value]) => !(kind in capturePlugins) || !retentionDurations.includes(value))
     || [config.match_urls, config.exclude_urls, config.singlefile_extension_id, config.tab_manager_plus_extension_id].some((value) => typeof value !== 'string')
-    || [config.enable_auto_archive, config.save_screenshots_locally, config.save_viewport_screenshots_locally, config.save_mhtml_locally, config.save_singlefile_locally].some((value) => typeof value !== 'boolean')) {
+    || [config.enable_auto_archive, config.save_snapshots_locally, ...localOutputSettings.map(key => config[key])].some((value) => typeof value !== 'boolean')) {
     throw new Error('Saved extension settings are invalid.');
   }
+  if (localOutputSettings.some(key => config[key])) config.save_snapshots_locally = true;
   return config;
 }
 
@@ -69,6 +73,11 @@ export async function setConfig(config: ConfigPatch): Promise<void> {
   // The background owns this transaction so closing/reloading options cannot
   // cancel a read-modify-write, and concurrent tabs cannot lose other types.
   await navigator.locks.request('archivebox-config', async () => {
+    if (preferences.save_snapshots_locally === false) {
+      for (const key of localOutputSettings) preferences[key] = false;
+    } else if (localOutputSettings.some(key => preferences[key] === true)) {
+      preferences.save_snapshots_locally = true;
+    }
     if (preferences.local_retention_ms !== undefined || preferences.capture_retention_ms !== undefined) {
       const current = await getConfig();
       const limit = preferences.local_retention_ms ?? current.local_retention_ms;

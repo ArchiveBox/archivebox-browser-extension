@@ -16,6 +16,48 @@ async function expectPageFits(page: Page) {
   expect(dimensions.overflowing).toEqual([]);
 }
 
+test('snapshot metadata is the parent of local outputs and keeps their retention bounded', async ({}, testInfo) => {
+  const harness = await launchExtension(['tabs', 'scripting', 'pageCapture'], ['<all_urls>']);
+  try {
+    const page = await harness.context.newPage();
+    await page.goto(`chrome-extension://${harness.id}/options.html`);
+    const configure = () => page.getByRole('button', { name: 'Configuration', exact: true }).click();
+    await configure();
+    const rows = page.locator('.capture-output');
+    await expect(rows.first().getByRole('heading', { name: 'Snapshot metadata', exact: true })).toBeVisible();
+    const metadata = page.getByLabel('Save snapshot metadata locally', { exact: true });
+    const ttl = page.getByLabel('Snapshot metadata retention', { exact: true });
+    const outputLabels = ['Save viewport screenshots locally', 'Save full-page screenshots locally', 'Save MHTML snapshots locally'];
+    await expect(metadata).toBeChecked();
+    await expect(ttl).toHaveValue('2592000000');
+    await metadata.uncheck();
+    for (const label of outputLabels) await expect(page.getByLabel(label, { exact: true })).not.toBeChecked();
+    await expect(ttl).toBeDisabled();
+    await page.reload(); await configure();
+    await expect(metadata).not.toBeChecked();
+    await page.getByLabel(outputLabels[0]!, { exact: true }).check();
+    await expect(metadata).toBeChecked();
+    await expect(ttl).toBeEnabled();
+    await ttl.selectOption('86400000');
+    for (const label of ['Viewport screenshot retention', 'Full-page screenshot retention', 'MHTML retention']) {
+      const select = page.getByLabel(label, { exact: true });
+      await expect(select).toHaveValue('snapshot');
+      await expect(select.locator('option')).toHaveText(['Same as metadata', '1 minute', '1 day']);
+    }
+    await page.reload(); await configure();
+    await expect(metadata).toBeChecked();
+    await expect(ttl).toHaveValue('86400000');
+    for (const width of [320, 390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expectPageFits(page);
+      const parent = await rows.first().locator('.capture-output-name').boundingBox();
+      const child = await rows.nth(1).locator('.capture-output-name').boundingBox();
+      expect(parent && child && parent.x < child.x && parent.y < child.y).toBeTruthy();
+      await page.locator('section[aria-labelledby="outputs-heading"]').screenshot({ path: testInfo.outputPath(`snapshot-metadata-${width}.png`) });
+    }
+  } finally { await harness.close(); }
+});
+
 test('capture retention inherits the snapshot limit and persists shorter per-type choices', async ({}, testInfo) => {
   const harness = await launchExtension();
   try {
@@ -23,13 +65,13 @@ test('capture retention inherits the snapshot limit and persists shorter per-typ
     await page.goto(`chrome-extension://${harness.id}/options.html`);
     const configure = () => page.getByRole('button', { name: 'Configuration', exact: true }).click();
     await configure();
-    const snapshot = page.getByLabel('After saving on server, remove local copies after:');
+    const snapshot = page.getByLabel('Snapshot metadata retention');
     const viewport = page.getByLabel('Viewport screenshot retention', { exact: true });
     const fullPage = page.getByLabel('Full-page screenshot retention', { exact: true });
     const mhtml = page.getByLabel('MHTML retention', { exact: true });
     for (const select of [viewport, fullPage, mhtml]) {
       await expect(select).toHaveValue('snapshot');
-      await expect(select.locator('option')).toHaveText(['Default (same as snapshot)', '1 minute', '1 day', '30 days']);
+      await expect(select.locator('option')).toHaveText(['Same as metadata', '1 minute', '1 day', '30 days']);
     }
     await snapshot.selectOption('never');
     await mhtml.selectOption('60000');
@@ -43,7 +85,7 @@ test('capture retention inherits the snapshot limit and persists shorter per-typ
     await snapshot.selectOption('86400000');
     await expect(fullPage).toHaveValue('86400000');
     for (const select of [viewport, fullPage, mhtml]) {
-      await expect(select.locator('option')).toHaveText(['Default (same as snapshot)', '1 minute', '1 day']);
+      await expect(select.locator('option')).toHaveText(['Same as metadata', '1 minute', '1 day']);
     }
     await fullPage.selectOption('snapshot');
     await page.reload(); await configure();
@@ -68,7 +110,7 @@ test('concurrent retention edits survive closing their options tabs immediately'
       return page;
     };
     const first = await openSettings();
-    await first.getByLabel('After saving on server, remove local copies after:').selectOption('never');
+    await first.getByLabel('Snapshot metadata retention').selectOption('never');
     const pages = [first, await openSettings(), await openSettings()];
     const choices = [
       ['MHTML retention', '60000'],
@@ -81,7 +123,7 @@ test('concurrent retention edits survive closing their options tabs immediately'
       await page.close();
     }));
     const reopened = await openSettings();
-    await expect(reopened.getByLabel('After saving on server, remove local copies after:')).toHaveValue('never');
+    await expect(reopened.getByLabel('Snapshot metadata retention')).toHaveValue('never');
     for (const [label, value] of choices) await expect(reopened.getByLabel(label, { exact: true })).toHaveValue(value);
   } finally { await harness.close(); }
 });
@@ -96,7 +138,7 @@ test('local retention defaults to 30 days and persists every choice', async ({},
     await expect(page.getByLabel('Save viewport screenshots locally', { exact: true })).toBeChecked();
     await expect(page.getByLabel('Save full-page screenshots locally', { exact: true })).not.toBeChecked();
     await expect(page.getByLabel('Save MHTML snapshots locally', { exact: true })).toBeChecked();
-    const retention = page.getByLabel('After saving on server, remove local copies after:');
+    const retention = page.getByLabel('Snapshot metadata retention');
     await expect(retention).toHaveValue('2592000000');
     await expect(retention.locator('option')).toHaveText(['1 minute', '1 day', '30 days', '90 days', 'never']);
     for (const value of ['60000', '86400000', '7776000000', 'never', '2592000000']) {

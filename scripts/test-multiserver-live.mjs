@@ -48,7 +48,7 @@ try {
   await page.goto(`chrome-extension://${id}/options.html`);
   const readEntries = () => page.evaluate(async () => (await chrome.storage.local.get('entries')).entries || []);
   const config = async () => page.getByRole('navigation').getByRole('button', { name: 'Configuration', exact: true }).click();
-  const retention = page.getByLabel('After saving on server, remove local copies after:');
+  const retention = page.getByLabel('Snapshot metadata retention');
   const serverInput = page.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com');
   const keyInput = page.getByPlaceholder('... abcexamplekey1234 ...');
   const registry = () => page.evaluate(async () => (await chrome.storage.local.get('server_registry')).server_registry);

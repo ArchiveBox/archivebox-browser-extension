@@ -24,7 +24,7 @@ try {
   const configure = () => options.getByRole('button', { name: 'Configuration', exact: true }).click();
   const saved = () => options.getByRole('button', { name: 'Saved URLs', exact: true }).click();
   await configure();
-  await options.getByLabel('After saving on server, remove local copies after:').selectOption('never');
+  await options.getByLabel('Snapshot metadata retention').selectOption('never');
   const address = options.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com');
   await address.fill(server); await address.blur();
   const token = options.getByPlaceholder('... abcexamplekey1234 ...');

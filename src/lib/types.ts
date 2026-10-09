@@ -162,6 +162,7 @@ export type ConfigState = ServerRegistry & {
   // Missing entries inherit the snapshot TTL. Explicit values cannot exceed it.
   capture_retention_ms: Partial<Record<CaptureKind, RetentionDuration>>;
   enable_auto_archive: boolean;
+  save_snapshots_locally: boolean;
   save_screenshots_locally: boolean;
   save_viewport_screenshots_locally: boolean;
   save_mhtml_locally: boolean;

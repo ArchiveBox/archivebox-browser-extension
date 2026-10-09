@@ -894,7 +894,7 @@ function OptionsMain() {
       });
       if (Object.keys(changes).some((key) => key.startsWith('cookie_sync:'))) getCookieSyncStates().then(setCookieSyncStates);
       if (changes.personas) getPersonas().then((state) => setPersonasState(state.personas));
-      if (changes.server_registry || changes.server_policies || changes.local_retention_ms || changes.capture_retention_ms) getConfig().then(setConfigState);
+      if (changes.server_registry || changes.server_policies || changes.local_retention_ms || changes.capture_retention_ms || Object.keys(changes).some(key => key.startsWith('save_'))) getConfig().then(setConfigState);
       if (changes.active_persona) setActivePersonaState(String(changes.active_persona.newValue || ''));
     }
     browser.storage.onChanged.addListener(refreshPersonas);
@@ -2183,6 +2183,15 @@ function OptionsMain() {
             <div className="config-card-heading"><span className="config-section-icon"><HardDrive size={20} aria-hidden="true" /></span><div><h2 id="outputs-heading">{t('Capture & storage')}</h2><p>{t('Choose local captures and uploads for each output type.')}</p></div></div>
             <div className="capture-grid">
               <div className="capture-grid-head" aria-hidden="true"><span>{t('Output type')}</span><span><HardDrive size={13} />{t('Save locally')}</span><span><Upload size={13} />{t('Upload')}</span><span><Clock3 size={13} />{t('Keep locally')}</span></div>
+              <div className="capture-output capture-output--metadata">
+                <div className="capture-output-name"><span className="capture-output-icon capture-output-icon--metadata"><Database size={21} aria-hidden="true" /></span><div><h3>{t('Snapshot metadata')}</h3><p>{t('URL, title, tags & upload history')}</p></div></div>
+                <label className="capture-choice"><span>{t('Save locally')}</span><input className="config-switch" type="checkbox" aria-label={t('Save snapshot metadata locally')} checked={config.save_snapshots_locally} onChange={event => saveConfig({ save_snapshots_locally: event.currentTarget.checked })} /></label>
+                <div className="capture-choice"><span>{t('Upload')}</span><div className="capture-metadata-upload" title={t('Metadata is included with every upload')}><CheckCircle2 size={15} aria-hidden="true" />{t('Included')}</div></div>
+                <label className="capture-retention"><span>{t('Keep locally')}</span><select aria-label={t('Snapshot metadata retention')} disabled={!config.save_snapshots_locally} value={config.save_snapshots_locally ? config.local_retention_ms : 'uploaded'} onChange={event => saveConfig({ local_retention_ms: event.currentTarget.value === 'never' ? 'never' : Number(event.currentTarget.value) as ConfigState['local_retention_ms'] })}>
+                  {!config.save_snapshots_locally && <option value="uploaded">{t('Until uploaded')}</option>}
+                  <option value="60000">{t('1 minute')}</option><option value="86400000">{t('1 day')}</option><option value="2592000000">{t('30 days')}</option><option value="7776000000">{t('90 days')}</option><option value="never">{t('never')}</option>
+                </select></label>
+              </div>
               {([
                 { kind: 'viewport_screenshot', icon: Camera, title: t('Viewport screenshot'), detail: t('The visible part of the page · PNG'), local: 'save_viewport_screenshots_locally', upload: 'upload_viewport_screenshots_to_server', localLabel: t('Save viewport screenshots locally'), uploadLabel: t('Upload viewport screenshots to server'), retentionLabel: t('Viewport screenshot retention') },
                 { kind: 'screenshot', icon: ScanLine, title: t('Full-page screenshot'), detail: t('The entire page, top to bottom · PNG'), local: 'save_screenshots_locally', upload: 'upload_screenshots_to_server', localLabel: t('Save full-page screenshots locally'), uploadLabel: t('Upload full-page screenshots to server'), retentionLabel: t('Full-page screenshot retention') },
@@ -2197,24 +2206,18 @@ function OptionsMain() {
                     const value = event.currentTarget.value;
                     void saveConfig({ capture_retention_ms: { [output.kind]: value === 'snapshot' ? null : value === 'never' ? 'never' : Number(value) as ConfigState['local_retention_ms'] } });
                   }}>
-                    <option value="snapshot">{t('Default (same as snapshot)')}</option>
+                    <option value="snapshot">{t('Same as metadata')}</option>
                     {retentionDurations.filter(value => config.local_retention_ms === 'never' || (value !== 'never' && value <= config.local_retention_ms)).map(value => <option key={value} value={value}>{t(value === 'never' ? 'never' : value === 60000 ? '1 minute' : value === 86400000 ? '1 day' : value === 2592000000 ? '30 days' : '90 days')}</option>)}
                   </select></label>
                 </div>;
               })}
             </div>
             <StatusBadge status={localCaptureStatus} />
-            <div className="config-retention-default">
-              <div className="config-setting-description"><Clock3 size={18} aria-hidden="true" /><div><h3>{t('Default local retention')}</h3><p>{t('Remove the local snapshot and its files after successful upload.')}</p></div></div>
-              <select aria-label={t('After saving on server, remove local copies after:')} value={config.local_retention_ms} onChange={event => saveConfig({ local_retention_ms: event.currentTarget.value === 'never' ? 'never' : Number(event.currentTarget.value) as ConfigState['local_retention_ms'] })}>
-                <option value="60000">{t('1 minute')}</option><option value="86400000">{t('1 day')}</option><option value="2592000000">{t('30 days')}</option><option value="7776000000">{t('90 days')}</option><option value="never">{t('never')}</option>
-              </select>
-            </div>
             {config.save_singlefile_locally && <Field label={t('SingleFile retention')}>
               <select aria-label={t('SingleFile retention')} value={config.capture_retention_ms.singlefile ?? 'snapshot'} onChange={event => {
                 const value = event.currentTarget.value;
                 void saveConfig({ capture_retention_ms: { singlefile: value === 'snapshot' ? null : value === 'never' ? 'never' : Number(value) as ConfigState['local_retention_ms'] } });
-              }}><option value="snapshot">{t('Default (same as snapshot)')}</option>{retentionDurations.filter(value => config.local_retention_ms === 'never' || (value !== 'never' && value <= config.local_retention_ms)).map(value => <option key={value} value={value}>{t(value === 'never' ? 'never' : value === 60000 ? '1 minute' : value === 86400000 ? '1 day' : value === 2592000000 ? '30 days' : '90 days')}</option>)}</select>
+              }}><option value="snapshot">{t('Same as metadata')}</option>{retentionDurations.filter(value => config.local_retention_ms === 'never' || (value !== 'never' && value <= config.local_retention_ms)).map(value => <option key={value} value={value}>{t(value === 'never' ? 'never' : value === 60000 ? '1 minute' : value === 86400000 ? '1 day' : value === 2592000000 ? '30 days' : '90 days')}</option>)}</select>
             </Field>}
             <details className="config-cleanup-help"><summary><ShieldCheck size={15} aria-hidden="true" />{t('Safe cleanup: server copies are always kept')}</summary><p>{t('File timers start after confirmed upload. Cleanup verifies the same server still has each file before deleting local data. Unuploaded files are kept. Individual file retention can be shorter than the snapshot default; the snapshot row and upload receipts remain until the snapshot expires.')}</p></details>
           </section>
