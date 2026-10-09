@@ -6,6 +6,9 @@ import { version } from './package.json';
 export default defineConfig({
   modules: ['@wxt-dev/module-react', '@wxt-dev/i18n/module'],
   manifestVersion: 3,
+  // Chrome rejects literal Unicode noncharacters (Dexie's \uffff key sentinel)
+  // in injected scripts. Keep their equivalent JavaScript escape sequences.
+  vite: () => ({ build: { rolldownOptions: { output: { minify: { codegen: { asciiOnly: true } } } } } }),
   zip: {
     excludeSources: ['tmp/**', 'dist/**', 'test-results/**', 'docs/**'],
   },

@@ -114,6 +114,7 @@ export type SnapshotSingleFile = {
 
 export type PersonaSettings = {
   userAgent?: string;
+  platform?: string;
   language?: string;
   timezone?: string;
   viewport?: string;
@@ -143,6 +144,23 @@ export type StoredCookie = {
   expirationDate?: number;
 };
 
+export type PersonaOriginStorage = {
+  origin: string;
+  localStorage: Array<{ name: string; value: string }>;
+  indexedDB: Array<{
+    name: string;
+    version: number;
+    stores: Array<{ name: string; keyPath: string | string[] | null; autoIncrement: boolean;
+      indexes: Array<{ name: string; keyPath: string | string[]; unique: boolean; multiEntry: boolean }> }>;
+    data: string; // Dexie structured-clone export, with exact native schema above.
+  }>;
+};
+
+export type PersonaTabStorage = {
+  url: string;
+  sessionStorage: Array<{ name: string; value: string }>;
+};
+
 export type Persona = {
   id: string;
   name: string;
@@ -151,6 +169,7 @@ export type Persona = {
   remote_personas?: Record<string, { id: string; url: string }>;
   cookies: Record<string, StoredCookie[]>;
   settings: PersonaSettings;
+  storage?: { origins: PersonaOriginStorage[]; tabs: PersonaTabStorage[] };
 };
 
 export type ConfigState = ServerRegistry & {

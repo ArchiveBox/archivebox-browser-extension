@@ -996,7 +996,7 @@ function OptionsMain() {
 
   useEffect(() => {
     if (tab !== 'profiles' || cookiesLoaded) return;
-    void browser.permissions.contains({ permissions: ['cookies', 'tabs'], origins: ['*://*/*'] })
+    void browser.permissions.contains({ permissions: ['cookies', 'tabs', 'scripting'], origins: ['*://*/*'] })
       .then(granted => { if (granted) void loadCookies(false); });
   }, [tab]);
 
@@ -1481,9 +1481,9 @@ function OptionsMain() {
     setCookieStatus({ kind: 'idle', text: '' });
     try {
       const granted = requestPermission && await browser.permissions.request({
-        permissions: ['cookies', 'tabs'], origins: ['*://*/*'],
+        permissions: ['cookies', 'tabs', 'scripting'], origins: ['*://*/*'],
       });
-      if (!granted && !(await browser.permissions.contains({ permissions: ['cookies', 'tabs'], origins: ['*://*/*'] }))) {
+      if (!granted && !(await browser.permissions.contains({ permissions: ['cookies', 'tabs', 'scripting'], origins: ['*://*/*'] }))) {
         setCookieStatus({ kind: 'error', text: t("Cookie permission denied") });
         return;
       }
@@ -1633,7 +1633,16 @@ function OptionsMain() {
   }
 
   async function updatePersonaSetting(persona: Persona, key: EditablePersonaSettingKey, value: string) {
-    await updatePersona(persona.id, (item) => ({ ...item, settings: { ...item.settings, [key]: value } }));
+    await updatePersona(persona.id, (item) => {
+      const settings = { ...item.settings, [key]: value };
+      if (key === 'geography') {
+        const parts = value.split(',').map(part => Number(part.trim()));
+        settings.geolocation = parts.length === 2 && value.trim() && parts.every(Number.isFinite)
+          && Math.abs(parts[0]!) <= 90 && Math.abs(parts[1]!) <= 180
+          ? { latitude: parts[0]!, longitude: parts[1]! } : null;
+      }
+      return { ...item, settings };
+    });
     setPersonasState((await getPersonas()).personas);
   }
 
@@ -2324,7 +2333,7 @@ function OptionsMain() {
                 <details className="persona-settings"><summary><Settings2 size={13} aria-hidden="true" />{t('Browser settings')}<span>{[persona.settings.language, persona.settings.timezone].filter(Boolean).join(' · ')}</span></summary>
                   <div className="settings-grid">
                     {([
-                      ['userAgent', t('User Agent')], ['geography', t('Geography')],
+                      ['userAgent', t('User Agent')], ['platform', t('Platform')], ['geography', t('Geography')],
                       ['timezone', t('Timezone')], ['language', t('Language')], ['operatingSystem', t('Operating System')],
                       ['viewport', t('Viewport Size')], ['viewportScale', t('CSS Pixel Scale')], ['colorScheme', t('Color Scheme')],
                     ] satisfies Array<[EditablePersonaSettingKey, string]>).map(([key, label]) => <label key={key}><span>{label}</span>

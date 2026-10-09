@@ -1088,7 +1088,7 @@ test('persona sync updates the real remote persona while location permission is 
     expect(remote.config.USER_AGENT).toBe('stale-user-agent');
     const remoteId = remote.id;
     await profile.getByRole('button', { name: 'Detect Settings', exact: true }).click();
-    const detected = await page.evaluate(() => ({ userAgent: navigator.userAgent, viewport: `${innerWidth}x${innerHeight}`, language: navigator.language, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, scale: devicePixelRatio }));
+    const detected = await page.evaluate(() => ({ userAgent: navigator.userAgent, platform: navigator.platform, viewport: `${innerWidth}x${innerHeight}`, language: navigator.language, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, scale: devicePixelRatio }));
     await expect(profile.getByLabel('User Agent', { exact: true })).toHaveValue(detected.userAgent);
     await expect(profile.getByLabel('Viewport Size', { exact: true })).toHaveValue(detected.viewport);
     await expect(profile.getByLabel('Language', { exact: true })).toHaveValue(detected.language);
@@ -1100,9 +1100,61 @@ test('persona sync updates the real remote persona while location permission is 
     expect(remote.config.BROWSER_LANGUAGE).toBe(detected.language);
     expect(remote.config.BROWSER_TIMEZONE).toBe(detected.timezone);
     expect(remote.config.BROWSER_DEVICE_SCALE_FACTOR).toBe(detected.scale);
+    expect(remote.config.BROWSER_PLATFORM).toBe(detected.platform);
     await expect(profile.locator('.persona-sync-link--synced')).toHaveAttribute('href', `${archivebox.server}/admin/personas/persona/${remoteId}/change/`);
     expect(serverId).toBeTruthy();
   } finally { await closeHarness(harness); }
+});
+
+test('persona sync exports real localStorage, sessionStorage and IndexedDB without expiring session cookies', async ({ archivebox }) => {
+  const harness = await launchHarness();
+  const source = await startFixtureServer();
+  try {
+    await configureServer(harness, archivebox.server, archivebox.key);
+    const target = await harness.context.newPage(); await target.goto(source.url);
+    await target.evaluate(async () => {
+      localStorage.setItem('login', 'local-token'); sessionStorage.setItem('login', 'tab-token');
+      document.cookie = 'login=session-token; SameSite=Lax';
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('persona-login', 3);
+        request.onupgradeneeded = () => {
+          const store = request.result.createObjectStore('sessions', { keyPath: 'id', autoIncrement: true });
+          store.createIndex('byAccount', 'account', { unique: true });
+        };
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result, tx = db.transaction('sessions', 'readwrite');
+          tx.objectStore('sessions').put({ id: 7, account: 'alice', token: 'database-token', blob: new Blob(['binary-token']) });
+          tx.oncomplete = () => { db.close(); resolve(); }; tx.onerror = () => reject(tx.error);
+        };
+      });
+    });
+    const cookies = await harness.context.cookies(source.url);
+    const domain = new URL(source.url).hostname;
+    const name = `storage-${Date.now()}`;
+    // Persist the selected cookie domain through the same extension storage used by import.
+    await setExtensionStorage(harness, { personas: [{ id: name, name, created: new Date().toISOString(), last_used: null,
+      settings: { language: 'fr-FR', timezone: 'Europe/Paris', geography: '48.85,2.35', geolocation: { latitude: 48.85, longitude: 2.35 } },
+      cookies: { [domain]: cookies.map(({ expires, sameSite, ...cookie }) => ({ ...cookie, sameSite: sameSite.toLowerCase(), ...(expires > 0 ? { expirationDate: expires } : {}) })) } }], active_persona: name });
+    const page = harness.storagePage; await page.reload();
+    await page.getByRole('button', { name: 'Cookies', exact: true }).click();
+    const requests: unknown[] = [];
+    page.on('request', request => { if (request.url().endsWith('/api/v1/personas/sync') && request.method() === 'POST') requests.push(request.postDataJSON()); });
+    await page.locator('.persona.active').getByRole('button', { name: 'Sync now', exact: true }).click();
+    await expect.poll(async () => await page.locator('.persona-sync-link--synced').count() ? 'synced' : (await page.locator('.status').allTextContents()).join('; ')).toBe('synced');
+    expect(requests).toHaveLength(1);
+    const sent = requests[0] as { settings: { geolocation: unknown }; auth_json: { cookies: Array<{ expirationDate?: number }>; origins: Array<{ localStorage: unknown; indexedDB: Array<{ name: string; version: number; stores: Array<{ indexes: unknown[] }>; data: string }> }>; tabs: unknown } };
+    expect(sent.settings.geolocation).toEqual({ latitude: 48.85, longitude: 2.35 });
+    expect(sent.auth_json.cookies[0]!.expirationDate).toBeNull();
+    expect(sent.auth_json.origins[0]!.localStorage).toEqual([{ name: 'login', value: 'local-token' }]);
+    expect(sent.auth_json.tabs).toEqual([{ url: source.url, sessionStorage: [{ name: 'login', value: 'tab-token' }] }]);
+    const database = sent.auth_json.origins[0]!.indexedDB[0]!;
+    expect(database.name).toBe('persona-login'); expect(database.version).toBe(3);
+    expect(database.stores[0]!.indexes[0]).toEqual({ name: 'byAccount', keyPath: 'account', unique: true, multiEntry: false });
+    expect(database.data).toContain('database-token');
+    expect(await target.evaluate(() => ({ local: localStorage.getItem('login'), session: sessionStorage.getItem('login'), cookie: document.cookie })))
+      .toEqual({ local: 'local-token', session: 'tab-token', cookie: 'login=session-token' });
+  } finally { await closeHarness(harness); await new Promise<void>(resolve => source.server.close(() => resolve())); }
 });
 
 test('saved URL sync uploads real local OPFS artifacts', async ({ archivebox }) => {

@@ -10,6 +10,7 @@ export function currentPersonaSettings(): PersonaSettings {
           : ua.includes('Linux') ? 'Linux' : '';
   return {
     userAgent: ua,
+    platform: navigator.platform,
     language: navigator.language,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     viewport: `${window.innerWidth}x${window.innerHeight}`,

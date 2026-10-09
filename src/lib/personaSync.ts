@@ -1,6 +1,8 @@
 import { formatCookiesAsNetscape } from './cookies';
 import { t } from './i18n';
 import { hasServerHostPermission } from './archivebox';
+import { capturePersonaStorage } from './personaStorage';
+import { updatePersona } from './storage';
 import type { Persona, StoredCookie, ServerConfiguration } from './types';
 
 type Serializable = string | number | boolean | null | Serializable[] | { [key: string]: Serializable };
@@ -49,6 +51,8 @@ function cookieForAuthJson(cookie: StoredCookie): Record<string, Serializable> {
 }
 
 async function buildPersonaSyncPayload(persona: Persona) {
+  const storage = await capturePersonaStorage(persona);
+  if (storage) await updatePersona(persona.id, item => ({ ...item, storage }));
   const cookies = Object.values(persona.cookies || {}).flat().map(cookieForAuthJson);
   const viewportScale = Number(persona.settings.viewportScale || 1);
 
@@ -57,6 +61,7 @@ async function buildPersonaSyncPayload(persona: Persona) {
     name: persona.name,
     settings: {
       user_agent: persona.settings.userAgent || '',
+      platform: persona.settings.platform || '',
       viewport_size: toViewportSize(persona.settings.viewport),
       viewport_device_scale_factor: Number.isFinite(viewportScale) ? viewportScale : 1,
       language: persona.settings.language || '',
@@ -72,6 +77,7 @@ async function buildPersonaSyncPayload(persona: Persona) {
       captured_at: new Date().toISOString(),
       user_agent: persona.settings.userAgent || '',
       cookies,
+      ...(storage || {}),
     },
   };
 }

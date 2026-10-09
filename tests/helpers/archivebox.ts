@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, open, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
 
 export type ArchiveBoxApi = { server: string; key: string; keyFile: string; api: (route: string, init?: RequestInit) => Promise<any> };
@@ -15,9 +16,8 @@ export async function withArchiveBox(use: (archivebox: ArchiveBoxApi) => Promise
     const root = await mkdtemp(path.join(tmpdir(), 'archivebox-api-test-'));
     const collection = path.join(root, 'collection');
     await mkdir(collection);
-    const runtime = process.env.ARCHIVEBOX_TEST_PROJECT
-      ? ['run', '--project', process.env.ARCHIVEBOX_TEST_PROJECT]
-      : ['run', '--no-project', '--python', '3.13', '--with', 'archivebox==0.9.74rc34'];
+    const runtime = ['run', '--project', process.env.ARCHIVEBOX_TEST_PROJECT
+      || fileURLToPath(new URL('../archivebox-server', import.meta.url))];
     const run = promisify(execFile);
     let child: ReturnType<typeof spawn> | undefined;
     const log = await open(path.join(root, 'server.log'), 'a');

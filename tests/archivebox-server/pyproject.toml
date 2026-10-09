@@ -1,0 +1,14 @@
+[project]
+name = "archivebox-extension-test-server"
+version = "0.0.0"
+requires-python = "==3.13.*"
+dependencies = [
+  "archivebox @ git+https://github.com/ArchiveBox/ArchiveBox.git@619d4d547587ddba48a53a3487e889f75b065125",
+]
+
+# The server's persona APIs and importer module need the matching plugin source
+# until this pair is available in published PyPI releases.
+[tool.uv]
+override-dependencies = [
+  "abx-plugins[opencode] @ git+https://github.com/ArchiveBox/abx-plugins.git@15492c8d462aa00809bfa86d9ec45f317b8a48c4",
+]
