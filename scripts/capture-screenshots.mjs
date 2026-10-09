@@ -1,6 +1,7 @@
 /** Real-browser gallery. Run after pnpm build; never writes extension state fixtures. */
 import { expect } from '@playwright/test';
 import { launchExtension } from '../tests/helpers/extension.ts';
+import { withArchiveBox } from '../tests/helpers/archivebox.ts';
 import { execFileSync } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -126,6 +127,28 @@ try {
   await page.locator('.saved-url-table thead input').uncheck();
   await capture(page, 'saved-urls', 'Saved URLs', 'src/options/OptionsApp.tsx');
   await popup.close();
+  await withArchiveBox(async archivebox => {
+    await nav('Configuration');
+    const address = page.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com');
+    await address.fill(archivebox.server); await address.blur();
+    const token = page.getByPlaceholder('... abcexamplekey1234 ...');
+    await token.fill(archivebox.key); await token.blur();
+    await expect.poll(() => page.evaluate(async () => Boolean((await chrome.storage.local.get('server_registry')).server_registry?.servers[0]?.token))).toBe(true);
+    const agentPopup = await context.newPage();
+    await article.bringToFront();
+    await agentPopup.goto(`chrome-extension://${id}/popup.html`);
+    await expect(agentPopup.locator('.archivebox-overlay__pill--archived')).toBeVisible({ timeout: 30000 });
+    const aiButton = agentPopup.getByRole('button', { name: 'Ask AI about this capture', exact: true });
+    await aiButton.click();
+    await expect(aiButton).toHaveAttribute('aria-expanded', 'true');
+    const prompt = agentPopup.getByPlaceholder('Archive this whole site...', { exact: true });
+    await expect(prompt).toBeVisible();
+    await expect(prompt).toBeFocused();
+    await expect(prompt).toHaveValue('');
+    await expect(agentPopup.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+    await capture(agentPopup, 'popup-ai-task', 'Ask AI to archive this whole site', 'entrypoints/popup/main.tsx');
+    await agentPopup.close();
+  });
   const stores = [
     ['chrome-web-store', 'Chrome Web Store', 'https://chromewebstore.google.com/detail/archivebox-exporter/habonpimjphpdnmcfkaockjnffodikoj?hl=en', /Add to Chrome/],
     ['firefox-add-ons', 'Firefox Add-ons', 'https://addons.mozilla.org/en-US/firefox/addon/archivebox-exporter/', /Download Firefox|Add to Firefox/],

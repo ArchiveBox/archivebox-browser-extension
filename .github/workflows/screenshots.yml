@@ -13,6 +13,7 @@ on:
       - 'pnpm-lock.yaml'
       - 'scripts/capture-screenshots.mjs'
       - 'tests/helpers/extension.ts'
+      - 'tests/helpers/archivebox.ts'
       - '.github/actions/setup-browser/**'
       - '.github/workflows/screenshots.yml'
   schedule:
@@ -59,9 +60,9 @@ jobs:
       - uses: ./.github/actions/setup-browser
       - run: pnpm compile
       - run: pnpm build
+      - uses: astral-sh/setup-uv@v7
       - name: Capture real extension screens and public store listings
         run: pnpm screenshots
-      - uses: astral-sh/setup-uv@v7
       - name: Render README and screenshot gallery
         run: pnpm site:build
       - name: Verify published paths, images, and responsive gallery

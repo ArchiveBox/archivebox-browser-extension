@@ -1126,7 +1126,7 @@ function ArchiveBoxOverlay() {
         <label htmlFor="capture-agent-task">{t("What should AI do with this capture?")}</label>
         <div>
           <input id="capture-agent-task" ref={agentInput} value={agentPrompt} maxLength={8000} required disabled={agentSubmitting}
-            placeholder={t("Save this entire site…")} onChange={event => setAgentPrompt(event.target.value)}
+            placeholder={t("Archive this whole site...")} onChange={event => setAgentPrompt(event.target.value)}
             onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setAgentOpen(false); } }} />
           <button type="submit" disabled={agentSubmitting || !agentPrompt.trim() || !agentCopy?.snapshot_id}>
             {agentSubmitting ? t("Sending…") : t("Send")}

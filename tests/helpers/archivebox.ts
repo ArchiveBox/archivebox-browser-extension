@@ -8,8 +8,7 @@ import { createServer } from 'node:net';
 
 export type ArchiveBoxApi = { server: string; key: string; keyFile: string; api: (route: string, init?: RequestInit) => Promise<any> };
 
-export const test = base.extend<{}, { archivebox: ArchiveBoxApi }>({
-  archivebox: [async ({}, use) => {
+export async function withArchiveBox(use: (archivebox: ArchiveBoxApi) => Promise<void>): Promise<void> {
     const configured = process.env.ARCHIVEBOX_TEST_SERVER;
     const keyFile = process.env.ARCHIVEBOX_TEST_KEY_FILE;
     if (configured && !keyFile) throw new Error('ARCHIVEBOX_TEST_KEY_FILE is required with ARCHIVEBOX_TEST_SERVER');
@@ -60,5 +59,8 @@ export const test = base.extend<{}, { archivebox: ArchiveBoxApi }>({
       await log.close();
       await rm(root, { recursive: true, force: true });
     }
-  }, { scope: 'worker', timeout: 180000 }],
+}
+
+export const test = base.extend<{}, { archivebox: ArchiveBoxApi }>({
+  archivebox: [async ({}, use) => withArchiveBox(use), { scope: 'worker', timeout: 180000 }],
 });
