@@ -1,0 +1,103 @@
+// Exercise the task form against real ArchiveBox and OpenCode, with no mocked API.
+import { expect } from '@playwright/test';
+import { readFile, mkdir } from 'node:fs/promises';
+import { launchExtension } from '../tests/helpers/extension.ts';
+
+const server = process.env.ARCHIVEBOX_TEST_SERVER;
+const keyFile = process.env.ARCHIVEBOX_TEST_KEY_FILE;
+if (!server || !keyFile) throw new Error('Set ARCHIVEBOX_TEST_SERVER and ARCHIVEBOX_TEST_KEY_FILE. Enable OpenCode on that disposable server.');
+const key = (await readFile(keyFile, 'utf8')).trim();
+const evidence = process.env.ARCHIVEBOX_TEST_EVIDENCE;
+if (evidence) await mkdir(evidence, { recursive: true });
+const harness = await launchExtension(['tabs'], ['<all_urls>']);
+try {
+  const { context, id } = harness;
+  const options = await context.newPage();
+  await options.goto(`chrome-extension://${id}/options.html`);
+  await options.getByRole('button', { name: 'Configuration', exact: true }).click();
+  await options.getByLabel('Save viewport screenshots locally', { exact: true }).uncheck();
+  await options.getByLabel('Save MHTML snapshots locally', { exact: true }).uncheck();
+  const address = options.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com');
+  await address.fill(server); await address.blur();
+  const token = options.getByPlaceholder('... abcexamplekey1234 ...');
+  await token.fill(key); await token.blur();
+  const registry = () => options.evaluate(async () => (await chrome.storage.local.get('server_registry')).server_registry);
+  await expect.poll(async () => Boolean((await registry())?.servers[0]?.token)).toBe(true);
+  const serverId = (await registry()).active_server_id;
+  const entries = () => options.evaluate(async () => (await chrome.storage.local.get('entries')).entries || []);
+  const target = await context.newPage();
+  const url = `https://example.com/?archivebox-agent-task=${Date.now()}`;
+  await target.goto(url);
+  const popup = await context.newPage();
+  await target.bringToFront();
+  await popup.goto(`chrome-extension://${id}/popup.html`);
+  const entry = async () => (await entries()).find(item => item.url === url);
+  await expect.poll(async () => (await entry())?.remote_copies?.[serverId]?.snapshot_id, { timeout: 30000 }).toBeTruthy();
+  const before = (await entry()).remote_copies[serverId];
+  await popup.getByRole('button', { name: 'Ask AI about this capture' }).click();
+  const task = popup.getByLabel('What should AI do with this capture?');
+  await expect(task).toBeFocused();
+  await expect(popup.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+  const prompt = 'Reply with CAPTURE_TASK_ACCEPTED. Do not modify files or start other captures.';
+  await task.fill(prompt);
+  const touch = await context.newCDPSession(popup);
+  await touch.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+  for (const width of [320, 375, 480, 560]) {
+    await popup.setViewportSize({ width, height: 600 });
+    expect(await popup.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    const controls = await popup.locator('.archivebox-overlay__header > *').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().y));
+    expect(new Set(controls).size).toBe(1);
+    if (evidence && width === 320) await popup.locator('.archivebox-overlay').screenshot({ path: `${evidence}/agent-task-mobile.png` });
+  }
+  await touch.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+  if (evidence) await popup.locator('.archivebox-overlay').screenshot({ path: `${evidence}/agent-task-form.png` });
+  await context.setOffline(true);
+  await task.press('Enter');
+  await expect(popup.getByRole('alert')).toBeVisible();
+  await expect(task).toHaveValue(prompt);
+  expect((await entry()).remote_copies[serverId].agent_task).toBeUndefined();
+  await context.setOffline(false);
+  await task.press('Enter');
+  await expect(popup.getByRole('button', { name: 'AI task submitted — open session' })).toBeVisible({ timeout: 120000 });
+  await expect(task).toHaveCount(0);
+  const after = (await entry()).remote_copies[serverId];
+  expect(after.snapshot_id).toBe(before.snapshot_id);
+  expect(after.crawl_id).toBe(before.crawl_id);
+  expect(after.submitted_at).toBe(before.submitted_at);
+  const receipt = after.agent_task;
+  expect(receipt.session_id).toMatch(/^ses_/);
+  const tabs = await options.evaluate(async () => chrome.tabs.query({}));
+  const sessionTab = tabs.find(tab => tab.url?.includes(encodeURIComponent(receipt.session_id)) || tab.url?.includes(receipt.session_id));
+  expect(sessionTab).toBeTruthy();
+  expect(sessionTab.active).toBe(false);
+
+  // Authenticate the real admin UI and verify the persisted OpenCode message.
+  const login = await fetch(`${server}/api/v1/auth/browser_session`, { method: 'POST', headers: { Authorization: `Bearer ${key}` } });
+  expect(login.status).toBe(200);
+  const auth = await login.json();
+  await context.addCookies([{ name: auth.cookie.name, value: auth.cookie.value, url: auth.admin_url, httpOnly: true, secure: auth.cookie.secure, sameSite: 'Lax' }]);
+  const admin = new URL(auth.admin_url).origin;
+  const messages = await context.request.get(`${admin}/admin/agent/opencode/session/${receipt.session_id}/message`);
+  expect(messages.status()).toBe(200);
+  const stored = await messages.json();
+  const text = stored.filter(message => message.info.role === 'user').flatMap(message => message.parts).filter(part => part.type === 'text').map(part => part.text).join('\n');
+  expect(text).toContain(prompt);
+  expect(text.replaceAll('-', '')).toContain(before.snapshot_id.replaceAll('-', ''));
+  expect(text).toContain(url);
+  expect(text).toContain('Example Domain');
+  const wrapper = await context.request.get(receipt.session_url);
+  expect(wrapper.status()).toBe(200);
+  expect(await wrapper.text()).toContain(`/session/${receipt.session_id}`);
+  if (evidence) await popup.locator('.archivebox-overlay').screenshot({ path: `${evidence}/agent-task-submitted.png` });
+  await popup.close();
+  const reopened = await context.newPage();
+  await target.bringToFront();
+  await reopened.goto(`chrome-extension://${id}/popup.html`);
+  await expect(reopened.getByRole('button', { name: 'AI task submitted — open session' })).toBeVisible();
+  const opened = context.waitForEvent('page');
+  await reopened.getByRole('button', { name: 'AI task submitted — open session' }).click();
+  await expect(await opened).toHaveURL(receipt.session_url);
+  console.log('PASS: real task form, offline failure/retry, independent capture, persisted OpenCode prompt, background tab, and reopened session link.');
+} finally {
+  await harness.close();
+}

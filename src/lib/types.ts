@@ -25,7 +25,14 @@ export type ServerRegistry = {
   default_server_ids: string[];
 };
 
+export type AgentTaskReceipt = {
+  session_id: string;
+  session_url: string;
+  snapshot_id: string;
+};
+
 export type RemoteCopy = {
+  agent_task?: AgentTaskReceipt;
   crawl_id?: string;
   snapshot_id?: string;
   snapshot_crawl_id?: string;
@@ -270,6 +277,7 @@ export type ScreenshotRestoreScrollMessage = {
 };
 
 export type RuntimeMessage =
+  | { type: 'submit_agent_task'; server_id: string; snapshot_id: string; task: string }
   | { type: 'set_config'; patch: ConfigPatch }
   | ArchiveboxAddMessage
   | ArchiveboxRemoveMessage
@@ -290,6 +298,7 @@ export type RuntimeMessage =
 export type RuntimeResponse = {
   ok: boolean;
   receipt?: ArchiveSubmissionReceipt | null;
+  agentTask?: AgentTaskReceipt;
   error?: string;
   errorMessage?: string;
   user_id?: string | number;

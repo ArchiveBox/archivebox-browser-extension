@@ -1,6 +1,7 @@
 import { defaultServers } from '@/src/lib/server_registry';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
+import { Sparkles, LoaderCircle, Check } from 'lucide-react';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { archiveBoxServerUrlMatches, findSubmittedSnapshot, getServerPersonas, hasServerHostPermission, isArchiveablePageUrl, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
@@ -125,6 +126,40 @@ function ArchiveBoxOverlay() {
   const [personasError, setPersonasError] = useState('');
   const [changingPersona, setChangingPersona] = useState(false);
   const [personaMenuOpen, setPersonaMenuOpen] = useState(false);
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [agentPrompt, setAgentPrompt] = useState('');
+  const [agentSubmitting, setAgentSubmitting] = useState(false);
+  const [agentError, setAgentError] = useState('');
+  const agentInput = useRef<HTMLInputElement>(null);
+  const agentCopy = snapshot?.remote_copies?.[server_id];
+  const agentReceipt = agentCopy?.agent_task;
+  const agentTask = agentReceipt?.snapshot_id.replaceAll('-', '') === agentCopy?.snapshot_id?.replaceAll('-', '') ? agentReceipt : undefined;
+  useEffect(() => { if (agentOpen) agentInput.current?.focus(); }, [agentOpen]);
+
+  async function submitCaptureTask(event: React.FormEvent) {
+    event.preventDefault();
+    if (!snapshot || !server || agentSubmitting || !agentPrompt.trim()) return;
+    setAgentSubmitting(true);
+    setAgentError('');
+    try {
+      await requestServerHostPermission(server.server);
+      const response: RuntimeResponse = await browser.runtime.sendMessage({
+        type: 'submit_agent_task', server_id: server.id, snapshot_id: snapshot.id, task: agentPrompt.trim(),
+      } satisfies RuntimeMessage);
+      if (!response.ok || !response.agentTask) throw new Error(response.errorMessage || t("Unable to submit AI task."));
+      setSnapshot(current => {
+        const copy = current?.remote_copies?.[server.id];
+        return current && copy ? { ...current, remote_copies: { ...current.remote_copies, [server.id]: { ...copy, agent_task: response.agentTask } } } : current;
+      });
+      setAgentOpen(false);
+      setAgentPrompt('');
+    } catch (error) {
+      setAgentError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAgentSubmitting(false);
+    }
+  }
+
   const selectedPersona = snapshot?.persona_overrides?.[server_id] ?? (snapshot?.remote_copies?.[server_id]?.persona !== undefined ? snapshot.remote_copies[server_id].persona || 'Default' : server?.persona || 'Default');
   useEffect(() => {
     let current = true;
@@ -1074,8 +1109,32 @@ function ArchiveBoxOverlay() {
               ))}
             </div>}
           </div>
-
+          <button type="button" className={`archivebox-overlay__agent-button${agentTask ? ' archivebox-overlay__agent-button--submitted' : ''}`}
+            aria-label={agentTask ? t("AI task submitted — open session") : t("Ask AI about this capture")}
+            title={agentTask ? t("AI task submitted — open session") : t("Ask AI about this capture")}
+            aria-expanded={agentTask ? undefined : agentOpen} aria-controls={agentTask ? undefined : 'capture-agent-form'}
+            disabled={!server || !snapshot || agentSubmitting}
+            onClick={() => {
+              if (agentTask) void browser.tabs.create({ url: agentTask.session_url });
+              else { setAgentOpen(open => !open); setCrawlMenuOpen(false); setPersonaMenuOpen(false); }
+            }}>
+            {agentSubmitting ? <LoaderCircle size={16} className="archivebox-overlay__agent-spinner" aria-hidden="true" />
+              : agentTask ? <Check size={16} aria-hidden="true" /> : <Sparkles size={16} aria-hidden="true" />}
+          </button>
       </div>
+      {agentOpen && <form id="capture-agent-form" className="archivebox-overlay__agent-form" onSubmit={submitCaptureTask} aria-label={t("AI capture task")} aria-busy={agentSubmitting}>
+        <label htmlFor="capture-agent-task">{t("What should AI do with this capture?")}</label>
+        <div>
+          <input id="capture-agent-task" ref={agentInput} value={agentPrompt} maxLength={8000} required disabled={agentSubmitting}
+            placeholder={t("Save this entire site…")} onChange={event => setAgentPrompt(event.target.value)}
+            onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setAgentOpen(false); } }} />
+          <button type="submit" disabled={agentSubmitting || !agentPrompt.trim() || !agentCopy?.snapshot_id}>
+            {agentSubmitting ? t("Sending…") : t("Send")}
+          </button>
+        </div>
+        {!agentCopy?.snapshot_id && <small>{t("Waiting for this capture to be submitted…")}</small>}
+        {agentError && <small role="alert" className="archivebox-overlay__persona-error">{agentError}</small>}
+      </form>}
 
           {personasError && <small className="archivebox-overlay__persona-error">{t("Unable to load personas: $1", personasError)}</small>}
       <div className="archivebox-overlay__states" aria-label={t("Archive status")}>
