@@ -11,6 +11,12 @@ importers:
       '@wxt-dev/i18n':
         specifier: ^0.2.8
         version: 0.2.8(wxt@0.21.4(esbuild@0.28.2)(rolldown@1.2.12)(typescript@5.9.3)(vite@8.3.3(@types/node@25.7.0)(esbuild@0.28.2)(jiti@2.7.0)))
+      dexie:
+        specifier: 4.4.6
+        version: 4.4.6
+      dexie-export-import:
+        specifier: 4.4.1
+        version: 4.4.1(dexie@4.4.6)
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -528,6 +534,14 @@ packages:
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
+
+  dexie-export-import@4.4.1:
+    resolution: {integrity: sha512-B84UhmfGaImK47OKRW+uw8EleHtlUk8WbaeqAvPX/bwv3pl2W+l3/v8jJNpPUjwS8Dn/U/5kHAyXda9T6NofOQ==}
+    peerDependencies:
+      dexie: ^4.4.5
+
+  dexie@4.4.6:
+    resolution: {integrity: sha512-hJP/BO6mjB+tX6hToIO1kmxYLNmun90wYbfcoAoLpKEyDYal/k33dg0TAfoUe2TDsbbLoVIzljJ3BN2UbR5EOg==}
 
   dom-serializer@2.0.0:
     resolution: {integrity: sha512-wIkAryiqt/nV5EQKqQpo3SToSOV9J0DnbJqwK7Wv/Trc92zIAYZ4FlMu+JPFW1DfGFt81ZTCGgDEabffXeLyJg==}
@@ -1394,6 +1408,12 @@ snapshots:
   destr@2.0.5: {}
 
   detect-libc@2.1.2: {}
+
+  dexie-export-import@4.4.1(dexie@4.4.6):
+    dependencies:
+      dexie: 4.4.6
+
+  dexie@4.4.6: {}
 
   dom-serializer@2.0.0:
     dependencies:

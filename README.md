@@ -142,7 +142,7 @@ pnpm dev:safari    # Safari WebExtension build
 
 For a production-style local build, load `.output/chrome-mv3` into Chrome / Chromium using the [Load Unpacked Extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) UI, load `.output/edge-mv3` into Edge using `edge://extensions`, load `.output/firefox-mv3` into Firefox using `about:debugging`, or load `.output/safari-mv3` in Safari with Settings → Developer → Add Temporary Extension.
 
-`pnpm test` builds the extension and runs the full browser suite, including the live automatic-archiving, delivery, and retention commands below. API tests start a disposable real ArchiveBox collection using `uv` and the pinned `archivebox==0.9.74rc34` package. Set `ARCHIVEBOX_TEST_PROJECT` to use a local ArchiveBox project instead. No API responses are mocked. Retention tests wait for actual minute-long TTLs and recurring alarms.
+`pnpm test` builds the extension and runs the full browser suite, including the live automatic-archiving, delivery, and retention commands below. API tests start a disposable real ArchiveBox collection using `uv` and the matching server/plugin source revisions pinned in `tests/archivebox-server/pyproject.toml`. These revisions include persona platform and browser-storage sync support that has not yet reached PyPI. Set `ARCHIVEBOX_TEST_PROJECT` to use a local ArchiveBox project instead. No API responses are mocked. Retention tests wait for actual minute-long TTLs and recurring alarms.
 
 To verify per-type retention with real server responses and the real one-minute clock, build the extension and run:
 
