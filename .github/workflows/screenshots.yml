@@ -1,6 +1,20 @@
 name: Capture extension screenshots
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'entrypoints/**'
+      - 'public/**'
+      - 'locales/**'
+      - 'wxt.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'scripts/capture-screenshots.mjs'
+      - 'tests/helpers/extension.ts'
+      - '.github/actions/setup-browser/**'
+      - '.github/workflows/screenshots.yml'
   schedule:
     - cron: '49 5,17 * * *'
   workflow_dispatch:

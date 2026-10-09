@@ -1,5 +1,6 @@
 /** Real-browser gallery. Run after pnpm build; never writes extension state fixtures. */
-import { chromium, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchExtension } from '../tests/helpers/extension.ts';
 import { execFileSync } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -21,7 +22,7 @@ const server = createServer((req, res) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
-let context;
+let harness;
 const screenshots = [];
 async function capture(page, id, title, source, url = page.url().replace(/^chrome-extension:\/\/[^/]+\//, '')) {
   const entry = { id, title, url, source, images: [] };
@@ -39,23 +40,8 @@ async function capture(page, id, title, source, url = page.url().replace(/^chrom
   console.log(`Captured ${id} (${sizes.length} viewports)`);
 }
 try {
-  const extensionPath = path.join(profile, 'extension');
-  await cp(path.join(root, '.output/chrome-mv3'), extensionPath, { recursive: true });
-  const manifestFile = path.join(extensionPath, 'manifest.json');
-  const manifest = JSON.parse(await readFile(manifestFile, 'utf8'));
-  // Pregrant optional permissions in the disposable installed copy. Native
-  // permission dialogs cannot be operated through Playwright's page API.
-  manifest.permissions = [...new Set([...manifest.permissions, ...manifest.optional_permissions])];
-  manifest.host_permissions = ['<all_urls>'];
-  await writeFile(manifestFile, JSON.stringify(manifest));
-  context = await chromium.launchPersistentContext(profile, {
-    executablePath: process.env.CHROME_BIN,
-    channel: 'chromium',
-    headless: true,
-    args: ['--enable-unsafe-extension-debugging'],
-  });
-  const cdp = await context.browser().newBrowserCDPSession();
-  const { id } = await cdp.send('Extensions.loadUnpacked', { path: extensionPath });
+  harness = await launchExtension(['cookies', 'tabs', 'scripting', 'history', 'bookmarks'], ['<all_urls>']);
+  const { context, id } = harness;
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   await page.setViewportSize(sizes[0]);
@@ -90,24 +76,19 @@ try {
   await nav('Configuration');
   await capture(page, 'configuration', 'Configuration', 'src/options/OptionsApp.tsx');
   await nav('Cookies');
-  while (await page.locator('.persona').count()) {
-    const count = await page.locator('.persona').count();
-    page.once('dialog', dialog => dialog.accept());
-    await page.locator('.persona').first().getByRole('button', { name: 'Delete', exact: true }).click();
-    await expect(page.locator('.persona')).toHaveCount(count - 1);
-  }
   await page.setViewportSize(sizes[0]);
-  page.once('dialog', dialog => dialog.accept('Research reading profile'));
+  page.once('dialog', dialog => dialog.accept('Research'));
   await page.getByRole('button', { name: 'New Profile', exact: true }).click();
-  const persona = page.locator('.persona').last();
-  await persona.getByRole('button', { name: 'Detect Settings', exact: true }).click();
-  await expect(persona.locator('.settings-grid input').first()).not.toHaveValue('');
-  await page.getByRole('button', { name: 'Load Browser Cookies', exact: true }).click();
-  await expect(page.locator('.data-table tbody tr')).toHaveCount(1);
+  await expect(page.getByRole('tab', { name: 'Research', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('button', { name: 'Refresh cookies', exact: true }).click();
+  await expect(page.locator('.cookie-site[data-site="127.0.0.1"]')).toBeVisible();
   await page.getByRole('checkbox', { name: 'Select all visible cookie domains' }).check();
-  await page.getByRole('button', { name: 'Copy Cookies to Profile ⌄', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Research reading profile', exact: true }).click();
-  await expect(persona.locator('.domain-chips')).toContainText('127.0.0.1');
+  await page.getByRole('button', { name: 'Add to Research', exact: true }).click();
+  await expect(page.locator('.cookie-site[data-site="127.0.0.1"] .cookie-saved')).toBeVisible();
+  await page.reload();
+  await nav('Cookies');
+  await expect(page.getByRole('tab', { name: 'Research', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.cookie-site[data-site="127.0.0.1"] .cookie-saved')).toBeVisible();
   await capture(page, 'cookies', 'Archiving profile and imported browser cookies', 'src/options/OptionsApp.tsx');
   await nav('Bulk Import URLs');
   await page.getByRole('checkbox', { name: 'Show new only', exact: true }).uncheck();
@@ -169,7 +150,7 @@ try {
   await cp(staging, path.join(root, 'tmp/screenshot-capture-failure'), { recursive: true });
   throw error;
 } finally {
-  await context?.close();
+  await harness?.close();
   await new Promise(resolve => server.close(resolve));
   await rm(profile, { recursive: true, force: true });
 }
