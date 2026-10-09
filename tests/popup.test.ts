@@ -1019,6 +1019,8 @@ test('ArchiveBox server URLs are ignored before archive requests', async () => {
 
 async function configureServer(harness: BrowserHarness, server: string, key: string): Promise<string> {
   const page = harness.storagePage;
+  await page.getByRole('button', { name: 'Cookies', exact: true }).click();
+  await expect(page.getByRole('tab').first()).toBeVisible();
   await page.getByRole('button', { name: 'Configuration', exact: true }).click();
   const address = page.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com');
   await address.fill(server); await address.blur();
@@ -1075,10 +1077,11 @@ test('persona sync updates the real remote persona while location permission is 
     page.once('dialog', dialog => dialog.accept(name));
     await page.getByRole('button', { name: 'New Profile', exact: true }).click();
     const profile = page.locator('.persona.active');
+    await profile.locator('.persona-settings summary').click();
     await profile.getByLabel('User Agent', { exact: true }).fill('stale-user-agent');
     await profile.getByLabel('Viewport Size', { exact: true }).fill('800x600');
     await profile.getByLabel('Language', { exact: true }).fill('zz-ZZ');
-    await profile.getByRole('button', { name: 'Sync to Server', exact: true }).click();
+    await profile.getByRole('button', { name: 'Sync now', exact: true }).click();
     await expect(profile.locator('.persona-sync-link--synced')).toBeVisible();
     const list = async () => (await archivebox.api('/api/v1/personas/personas')).items;
     let remote = (await list()).find((item: { name: string }) => item.name === name);
@@ -1090,7 +1093,7 @@ test('persona sync updates the real remote persona while location permission is 
     await expect(profile.getByLabel('Viewport Size', { exact: true })).toHaveValue(detected.viewport);
     await expect(profile.getByLabel('Language', { exact: true })).toHaveValue(detected.language);
     await expect(page.locator('.status').filter({ hasText: /[Bb]rowser settings updated|Updated browser settings/ })).toBeVisible();
-    await profile.getByRole('button', { name: 'Sync to Server', exact: true }).click();
+    await profile.getByRole('button', { name: 'Sync now', exact: true }).click();
     await expect.poll(async () => (await list()).find((item: { id: string }) => item.id === remoteId)?.config.USER_AGENT).toBe(detected.userAgent);
     remote = (await list()).find((item: { id: string }) => item.id === remoteId);
     expect(remote.config.CHROME_RESOLUTION).toBe(detected.viewport.replace('x', ','));

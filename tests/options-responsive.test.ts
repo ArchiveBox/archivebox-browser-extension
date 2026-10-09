@@ -17,12 +17,16 @@ async function expectPageFits(page: Page) {
 }
 
 test('options sections and saved URL actions fit mobile and desktop viewports', async ({}, testInfo) => {
-  const harness = await launchExtension(['cookies', 'bookmarks'], ['<all_urls>']);
+  const harness = await launchExtension(['cookies', 'bookmarks', 'tabs', 'scripting'], ['<all_urls>']);
   const { context, id } = harness;
   try {
     const page = await context.newPage();
     await context.addCookies([{ name: 'layout', value: 'cookie-table', domain: 'responsive-layout.example.com', path: '/' }]);
     await page.goto(`chrome-extension://${id}/options.html`);
+    // Wait for the real storage migration before adding layout records.
+    await page.getByRole('button', { name: 'Cookies', exact: true }).click();
+    await expect(page.getByRole('tab', { name: 'Private', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Saved URLs', exact: true }).click();
     // Real extension storage records exercise long URLs, titles, and tags.
     await page.evaluate(async () => {
       const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
@@ -93,14 +97,15 @@ test('options sections and saved URL actions fit mobile and desktop viewports', 
       for (const name of ['Configuration', 'Cookies', 'Bulk Import URLs']) {
         await page.getByRole('navigation').getByRole('button', { name, exact: true }).click();
         if (name === 'Cookies' && width === 320) {
-          const originalProfileCount = await page.locator('.persona').count();
+          const originalProfileCount = await page.getByRole('tab').count();
           page.once('dialog', (dialog) => dialog.accept('Mobile archiving profile'));
           await page.getByRole('button', { name: 'New Profile', exact: true }).click();
-          await expect(page.locator('.persona')).toHaveCount(originalProfileCount + 1);
+          await expect(page.getByRole('tab')).toHaveCount(originalProfileCount + 1);
+          await page.locator('.persona-settings summary').click();
           await page.locator('.persona').last().getByRole('button', { name: 'Detect Settings', exact: true }).click();
           await expect(page.locator('.persona').last().locator('.settings-grid input').first()).not.toHaveValue('');
-          await page.getByRole('button', { name: 'Load Browser Cookies', exact: true }).click();
-          await expect(page.locator('.data-table tbody tr')).toHaveCount(1);
+          await page.getByRole('button', { name: /^(Load Browser Cookies|Refresh cookies)$/ }).click();
+          await expect(page.locator('.cookie-site')).toHaveCount(1);
         }
         if (name === 'Bulk Import URLs' && width === 320) {
           await page.getByRole('button', { name: 'Import from Browser Bookmarks', exact: true }).click();

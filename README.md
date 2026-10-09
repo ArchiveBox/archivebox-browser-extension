@@ -63,6 +63,21 @@ The form waits until the capture has a server snapshot ID. Errors preserve the t
 text for retry. Each capture/server pair keeps its submitted session link; continue
 additional instructions in that session.
 
+## Cookies & profiles
+
+The Cookies tab shows one persona at a time, with a compact, searchable list of
+saved sites and available browser cookies. Existing cookie permissions load the
+list automatically. Related subdomains are grouped together; expand a site to
+select or remove individual domains. Favicons use saved/open-tab icons first,
+then Google's favicon service for public sites. Four familiar sites lead the
+list; all other sites are alphabetical, with friendly names for 100 common sites.
+
+Select sites and choose **Add to [profile]**. **Sync now** uploads immediately and
+enables **Auto-sync** for that persona and server. Adding sites then syncs them
+automatically; the last-synced time changes only after a successful upload.
+Uncheck Auto-sync to pause updates. Switching persona tabs only changes the
+editor; **Use for archiving** changes the profile used for captures.
+
 ## Local Captures
 
 Viewport screenshots and MHTML captures (Chrome/Edge/Brave) are enabled by default, along with uploading these artifacts to the selected server. Safari and Firefox do not capture MHTML. Full-page capture and upload are separate opt-in settings. Viewport and full-page images are stored independently when both are enabled. Existing explicit capture and upload choices are preserved.
