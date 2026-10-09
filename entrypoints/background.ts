@@ -1,7 +1,7 @@
 import { defaultServers, requireServer } from '@/src/lib/server_registry';
 import { configureLocalRetention, withSnapshotArtifacts } from '@/src/lib/retention';
 import { configureCookieSync } from '@/src/lib/cookieSync';
-import { findSubmittedSnapshot, removeFreshOwnedCapture, submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, supportsArchiveBoxApi, testApiKey, testServerUrl } from '@/src/lib/archivebox';
+import { submitAgentTask, findSubmittedSnapshot, removeFreshOwnedCapture, submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, supportsArchiveBoxApi, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { appendSnapshotScreenshotParts, writeSnapshotMhtmlBytes, writeSnapshotScreenshot, writeSnapshotScreenshotParts, writeSnapshotSingleFileHtml } from '@/src/lib/screenshotStorage';
@@ -1001,6 +1001,27 @@ export default defineBackground(() => {
         })
           .then((receipt) => ({ ok: true, receipt }))
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));
+
+      case 'submit_agent_task':
+        return (async (): Promise<RuntimeResponse> => await navigator.locks.request<Promise<RuntimeResponse>>(`archivebox-agent:${message.server_id}:${message.snapshot_id}`, async () => {
+          const server = requireServer(await getConfig(), message.server_id);
+          const snapshot = await getSnapshotById(message.snapshot_id);
+          if (!snapshot) throw new Error(t("Saved snapshot not found."));
+          const copy = snapshot.remote_copies?.[server.id];
+          const receipt = copy?.agent_task;
+          if (receipt && receipt.snapshot_id.replaceAll('-', '') === copy?.snapshot_id?.replaceAll('-', '')) {
+            return { ok: true, agentTask: receipt };
+          }
+          const agentTask = await submitAgentTask(server, snapshot, message.task);
+          await mutateSnapshots(items => items.map(item => {
+            const latest = item.remote_copies?.[server.id];
+            if (item.id !== snapshot.id || !latest || latest.snapshot_id !== copy?.snapshot_id) return item;
+            return { ...item, remote_copies: { ...item.remote_copies, [server.id]: { ...latest, agent_task: agentTask } } };
+          }));
+          // The worker finishes and saves the receipt even if the popup has closed.
+          await browser.tabs.create({ url: agentTask.session_url, active: false }).catch(() => undefined);
+          return { ok: true, agentTask };
+        }))().catch((error: Error) => ({ ok: false, errorMessage: error.message }));
 
       case 'archivebox_remove':
         return getConfig().then(async (config) => {

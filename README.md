@@ -35,6 +35,7 @@ This is a browser extension that lets you send individual browser tabs or all UR
 - 📄 Save local MHTML copies of pages. (Chrome and Edge.)
 - 📑 Save HTML copies with the optional SingleFile extension installed and connected.
 - 📤 Export saved URLs as CSV or JSON, screenshots as PNG, page captures as HTML or MHTML, or everything together in a ZIP.
+- ✨ Ask the AI agent to work on the current capture, then follow its OpenCode session.
 - 👤 Choose cookies and browser settings to sync to an ArchiveBox authentication profile for sites that require a login.
 - 🧹 Choose how long to keep local copies, including cleanup after successful submission to your server.
 - 🌐 Use the extension in English, Spanish, or Simplified Chinese.
@@ -45,6 +46,22 @@ Safari does not expose bulk bookmarks or history through its WebExtension APIs.
 Use Apple's [browsing data export](https://developer.apple.com/documentation/safariservices/importing-data-exported-from-safari): on Mac choose **File → Export Browsing Data to File**; on iPhone/iPad choose **Settings → Apps → Safari → Export**. Select bookmarks, Reading List, and history as available.
 
 In **Extension options → Bulk Import URLs**, choose which Safari data to import and the history date range, then select the exported ZIP (or extracted HTML/JSON files). Review the URLs, select the ones to keep, and click **Import Selected**. Existing saved URLs are marked as duplicates. History retains its original visit time. Files are parsed locally, passwords/payment cards are ignored, and imports enter the same saved URL list used by the other import sources. Use the existing Sync actions to submit them to your server.
+
+## AI capture tasks
+
+Click **✨** beside Crawl and Persona in the popup, describe a task (for example,
+“save this entire site” or “get the linked papers and their references one hop out”),
+and press Enter. The form submits independently of capture settings. Once the server
+accepts the task, it collapses to a checkmark and opens the agent session in a background
+tab. Click the checkmark to return to that session after reopening the popup. The check
+means **submitted**; progress and results appear in the agent session.
+
+This requires a server with the capture-task endpoint, an administrator API key, and
+the AI agent enabled and configured. Tasks use the server's existing OpenCode sessions,
+skills, and tools. The server supplies the snapshot UUID, URL, title, crawl, and tags.
+The form waits until the capture has a server snapshot ID. Errors preserve the task
+text for retry. Each capture/server pair keeps its submitted session link; continue
+additional instructions in that session.
 
 ## Local Captures
 
@@ -142,6 +159,20 @@ node scripts/test-popup-delivery-live.mjs
 ```
 
 This uses the options and native popup UI, verifies the live seconds counter, compares replayed captures with local bytes, and waits two real minutes before checking the submission age and fresh server lookup. `RESUBMIT=1` verifies that Re-submit creates a new crawl and snapshot with `ONLY_NEW=False`, and checks the crawl depth wording. `DELETE_AFTER_AGE=1` deletes its own server snapshot through the public API, then verifies that reopening the popup detects the missing capture and submits it again. Omit `FULLPAGE_UPLOAD` to verify that full-page capture stays local while viewport and MHTML upload. The test creates real example.com submissions and verifies their crawls seal. `PERSONA_TEST=1` creates a test persona through the public API and selects it in the popup; combine with `AGE_CHECK=1` to verify an older capture is preserved, or `REUSE_LOCAL=1` to verify a reused capture is preserved while new local captures still run. Run persona and Re-submit scenarios separately. `ARCHIVEBOX_TEST_COLLECTION=/path/to/collection` additionally checks the real crawl persona foreign key read-only. `OLD_SERVER=1` tests a real older server whose schema lacks snapshot ownership/persona fields; this compatibility fixture can run without workers.
+
+To test AI tasks against a disposable server with OpenCode enabled and the capture-task
+endpoint installed, build the extension and run:
+
+```bash
+ARCHIVEBOX_TEST_SERVER=http://localhost:5797 \
+ARCHIVEBOX_TEST_KEY_FILE=/path/to/disposable-server-api-key \
+node scripts/test-agent-task-live.mjs
+```
+
+This verifies the real form, offline failure/retry, unchanged capture receipt, saved
+OpenCode prompt/context, background tab, persistent session link, and mobile layout.
+Set `ARCHIVEBOX_TEST_EVIDENCE` to save screenshots. The task asks for a harmless reply;
+acceptance and persistence do not require a model provider to complete it.
 
 ## Changelog
 

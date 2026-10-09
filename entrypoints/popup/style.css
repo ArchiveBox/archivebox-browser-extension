@@ -286,7 +286,7 @@ button.archivebox-overlay__tag-chip {
   display: grid;
   /* Depth labels keep their intrinsic width; only the persona name truncates.
      Fixed columns caused nonzero crawl depths to escape their button. */
-  grid-template-columns: minmax(0, 1fr) max-content minmax(100px, 150px);
+  grid-template-columns: minmax(0, 1fr) max-content minmax(70px, 130px) 30px;
   gap: 6px;
   align-items: center;
 }
@@ -355,7 +355,8 @@ button.archivebox-overlay__tag-chip {
 .archivebox-overlay input,
 .archivebox-overlay__crawl-button,
 .archivebox-overlay__capture-button,
-.archivebox-overlay__persona > button {
+.archivebox-overlay__persona > button,
+.archivebox-overlay__agent-button {
   min-width: 0;
   height: 30px;
   border: 1px solid var(--popup-border);
@@ -721,7 +722,7 @@ button.archivebox-overlay__tag-chip {
   .archivebox-overlay__header {
     /* On narrow sheets reserve the capture/depth labels first, then give the
        persona the remaining space; squeezing capture buttons hid their text. */
-    grid-template-columns: max-content max-content minmax(0, 1fr);
+    grid-template-columns: max-content max-content minmax(0, 1fr) 28px;
     gap: 4px;
     position: relative;
   }
@@ -835,4 +836,38 @@ button.archivebox-overlay__tag-chip {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.archivebox-overlay__agent-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  color: var(--popup-accent);
+}
+.archivebox-overlay__agent-button--submitted { color: #17683a; }
+.archivebox-overlay__agent-spinner { animation: agent-spin 1s linear infinite; }
+@keyframes agent-spin { to { transform: rotate(360deg); } }
+.archivebox-overlay__agent-form {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--popup-border);
+  border-radius: 6px;
+  background: var(--popup-surface);
+}
+.archivebox-overlay__agent-form label { display: block; margin-bottom: 5px; }
+.archivebox-overlay__agent-form > div { display: flex; gap: 6px; }
+.archivebox-overlay__agent-form input { flex: 1; width: 0; }
+.archivebox-overlay__agent-form button {
+  border: 1px solid var(--popup-border);
+  border-radius: 6px;
+  background: var(--popup-accent);
+  color: white;
+  padding: 0 10px;
+  cursor: pointer;
+}
+.archivebox-overlay__agent-form button:disabled { opacity: 0.6; cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+  .archivebox-overlay__agent-spinner { animation: none; }
 }
