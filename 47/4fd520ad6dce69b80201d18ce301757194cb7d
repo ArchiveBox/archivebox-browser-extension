@@ -1,0 +1,16 @@
+src/options/OptionsApp.tsx
+  h_923c208e183a7b 5-12,32,72,2110-2116,2121,2131,2151-2192,2194,2198,2203,2217-2231
+src/options/options.css
+  h_923c208e183a7b 2003-2101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "474fd520ad6dce69b80201d18ce301757194cb7d",
+  "prompts": {},
+  "humans": {
+    "h_923c208e183a7b": {
+      "author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
