@@ -3,7 +3,7 @@
 import { expect } from '@playwright/test';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { launchExtension } from '../tests/helpers/extension.ts';
+import { launchExtension, waitForSavedSettings } from '../tests/helpers/extension.ts';
 
 const server = process.env.ARCHIVEBOX_TEST_SERVER;
 const keyFile = process.env.ARCHIVEBOX_TEST_KEY_FILE;
@@ -53,6 +53,7 @@ try {
     for (const label of ['Upload viewport screenshots to server', 'Upload full-page screenshots to server', 'Upload MHTML snapshots to server']) {
       await options.getByLabel(label, { exact: true }).setChecked(name === 'uploaded');
     }
+    await waitForSavedSettings(options);
     const target = await context.newPage(); await target.setViewportSize({ width: 900, height: 120 });
     const url = `https://example.com/?archivebox-extension-ttl=${name}-${Date.now()}`;
     await target.goto(url);
@@ -102,6 +103,7 @@ try {
   await offlineAttempt;
   for (const kind of captures) expect((await entries()).find(item => item.id === uploaded.id)[kind]).toBeTruthy();
   await token.fill('invalid-retention-e2e-token'); await token.blur();
+  await waitForSavedSettings(options);
   const denied = context.waitForEvent('response', response => response.url().includes('/api/v1/core/snapshot/') && response.status() === 401);
   await context.setOffline(false);
   await options.getByLabel('MHTML retention', { exact: true }).selectOption('snapshot');
@@ -158,6 +160,7 @@ try {
   await options.getByLabel('Viewport screenshot retention', { exact: true }).selectOption('snapshot');
   await options.getByLabel('Full-page screenshot retention', { exact: true }).selectOption('snapshot');
   await options.getByLabel('Upload MHTML snapshots to server', { exact: true }).check();
+  await waitForSavedSettings(options);
   const target = await context.newPage();
   const periodicUrl = `https://example.com/?archivebox-extension-ttl=periodic-${Date.now()}`;
   await target.goto(periodicUrl);
@@ -188,6 +191,7 @@ try {
   for (const label of ['Save viewport screenshots locally', 'Save full-page screenshots locally', 'Save MHTML snapshots locally']) {
     await options.getByLabel(label, { exact: true }).uncheck();
   }
+  await waitForSavedSettings(options);
   const metadata = options.getByLabel('Save snapshot metadata locally', { exact: true });
   await expect(metadata).toBeChecked();
   const metadataUrl = `https://example.com/?archivebox-extension-metadata=${Date.now()}`;

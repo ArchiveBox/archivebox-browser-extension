@@ -2,7 +2,7 @@
 import { expect } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
-import { launchExtension } from '../tests/helpers/extension.ts';
+import { launchExtension, waitForSavedSettings } from '../tests/helpers/extension.ts';
 
 const server = process.env.ARCHIVEBOX_TEST_SERVER;
 const keyFile = process.env.ARCHIVEBOX_TEST_KEY_FILE;
@@ -39,6 +39,7 @@ try {
     await options.getByLabel('Save MHTML snapshots locally', { exact: true }).setChecked(name !== 'partial');
     await options.getByLabel('Upload viewport screenshots to server', { exact: true }).setChecked(viewport);
     await options.getByLabel('Upload MHTML snapshots to server', { exact: true }).setChecked(mhtml);
+    await waitForSavedSettings(options);
     await saved();
     const target = await context.newPage();
     const url = `${origin}/?archivebox-extension-delivery=${name}-${Date.now()}`;
@@ -87,6 +88,7 @@ try {
   await options.getByLabel('Upload MHTML snapshots to server', { exact: true }).check();
   await token.fill('invalid-upload-test-token'); await token.blur();
   await expect.poll(async () => (await registry()).servers[0].token).toBe('invalid-upload-test-token');
+  await waitForSavedSettings(options);
   const target = await context.newPage(); await target.goto(urls.partial);
   const popup = await context.newPage(); await target.bringToFront();
   await popup.goto(`chrome-extension://${id}/popup.html`);
@@ -163,6 +165,7 @@ try {
     await otherAddress.fill(server); await otherAddress.blur();
     const otherToken = settings.getByPlaceholder('... abcexamplekey1234 ...');
     await otherToken.fill(key); await otherToken.blur();
+    await waitForSavedSettings(settings);
     const otherId = await settings.evaluate(async () => (await chrome.storage.local.get('server_registry')).server_registry.active_server_id);
     const uploads = [];
     other.context.on('request', request => { if (request.url().includes('/api/v1/core/archiveresult') && ['POST', 'PATCH'].includes(request.method())) uploads.push(request.url()); });

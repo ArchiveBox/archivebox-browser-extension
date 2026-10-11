@@ -1,4 +1,5 @@
 import { test } from './helpers/archivebox';
+import { seedExtensionStorage, waitForSavedSettings } from './helpers/extension';
 import type { Snapshot } from '../src/lib/types';
 import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { chromium } from '@playwright/test';
@@ -359,7 +360,6 @@ function spawnBrowser(
   remoteDebuggingPort: number,
   extraArgs: string[],
 ): ChildProcess {
-  const headlessLinux = process.platform === 'linux' && !process.env.DISPLAY;
   const args = [
     `--user-data-dir=${userDataDir}`,
     `--remote-debugging-port=${remoteDebuggingPort}`,
@@ -369,12 +369,12 @@ function spawnBrowser(
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-background-networking',
+    // Same as tests/helpers/extension.ts: never open visible windows locally.
+    '--headless=new',
+    ...(process.platform === 'linux' ? ['--no-sandbox'] : []),
     ...extraArgs,
     'about:blank',
   ];
-  if (headlessLinux) {
-    args.splice(args.length - 1, 0, '--headless=new', '--no-sandbox');
-  }
   return spawn(executablePath, args, { stdio: 'ignore' });
 }
 
@@ -435,16 +435,7 @@ async function closeHarness(harness: BrowserHarness): Promise<void> {
 }
 
 async function setExtensionStorage(harness: BrowserHarness, values: Record<string, unknown>): Promise<void> {
-  await harness.storagePage.evaluate(async (storageValues) => {
-    const extensionApi = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
-    await new Promise<void>((resolve, reject) => {
-      extensionApi.storage.local.set(storageValues, () => {
-        const error = extensionApi.runtime.lastError;
-        if (error) reject(new Error(error.message));
-        else resolve();
-      });
-    });
-  }, values);
+  await seedExtensionStorage(harness.storagePage, values);
 }
 
 async function getExtensionStorage<T>(harness: BrowserHarness, key: string): Promise<T | undefined> {
@@ -1166,6 +1157,7 @@ test('saved URL sync uploads real local OPFS artifacts', async ({ archivebox }) 
     const fullPage = page.getByLabel('Save full-page screenshots locally', { exact: true });
     await fullPage.click(); await expect(fullPage).toBeChecked();
     await page.getByLabel('Upload full-page screenshots to server', { exact: true }).check();
+    await waitForSavedSettings(page);
     const target = await harness.context.newPage(); await target.setViewportSize({ width: 1100, height: 360 });
     const url = `${source.url}?upload-artifacts=${Date.now()}`; await target.goto(url);
     const popup = await openNativePopup(harness, target);
@@ -1212,6 +1204,7 @@ test('a real submitted URL survives removing and restoring its server configurat
     const address = page.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com');
     await address.fill(''); await address.blur();
     await expect(address).toHaveValue('');
+    await waitForSavedSettings(page);
     popup = await openNativePopup(harness, target);
     await waitForPopupText(harness, popup, 'Connection unavailable');
     expect(await popupElementsHtml(popup, '[title="View archived copy on server"]')).toHaveLength(0);
@@ -1547,6 +1540,21 @@ test('popup fits mobile viewports without horizontal overflow', async () => {
         if (menuOpen) await popupPage.locator('.archivebox-overlay__crawl-button').click();
       }
     }
+    // iPad Safari sizes its popover from the document width while the popup's
+    // own viewport is still tiny; the popup must keep its desktop width there.
+    await touch.send('Emulation.setDeviceMetricsOverride', {
+      width: 200, height: 900, deviceScaleFactor: 2, mobile: true, screenWidth: 1024, screenHeight: 1366,
+    });
+    expect(await popupPage.evaluate(() => ({
+      body: document.body.getBoundingClientRect().width,
+      overlay: document.querySelector('.archivebox-overlay')!.getBoundingClientRect().width,
+    }))).toEqual({ body: 560, overlay: 560 });
+    await touch.send('Emulation.setDeviceMetricsOverride', {
+      width: 560, height: 900, deviceScaleFactor: 2, mobile: true, screenWidth: 1024, screenHeight: 1366,
+    });
+    const tabletScreenshotPath = test.info().outputPath('popup-tablet.png');
+    await popupPage.screenshot({ path: tabletScreenshotPath });
+    await test.info().attach('popup-tablet', { path: tabletScreenshotPath, contentType: 'image/png' });
     await popupPage.close();
   } finally {
     await closeHarness(harness);

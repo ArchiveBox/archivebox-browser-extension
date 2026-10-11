@@ -25,6 +25,9 @@ const defaultConfig: ConfigState = {
   tab_manager_plus_extension_id: '',
 };
 
+// Every storage key getConfig() reads, so UIs can tell which changes affect it.
+export const configStorageKeys: ReadonlySet<string> = new Set([...Object.keys(defaultConfig), 'server_registry', 'server_policies']);
+
 const localOutputSettings = ['save_viewport_screenshots_locally', 'save_screenshots_locally', 'save_mhtml_locally', 'save_singlefile_locally'] as const;
 
 async function getServerRegistry(): Promise<ServerRegistry> {

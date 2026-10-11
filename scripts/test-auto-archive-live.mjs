@@ -3,7 +3,7 @@
 import { expect } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { launchExtension } from '../tests/helpers/extension.ts';
+import { launchExtension, waitForSavedSettings } from '../tests/helpers/extension.ts';
 
 const serverUrl = process.env.ARCHIVEBOX_TEST_SERVER;
 const keyFile = process.env.ARCHIVEBOX_TEST_KEY_FILE;
@@ -48,6 +48,7 @@ try {
   await field('Match URL regex').fill('.*');
   await enabled.click();
   await expect(enabled).toBeChecked();
+  await waitForSavedSettings(options);
   const entries = () => options.evaluate(async () => (await chrome.storage.local.get('entries')).entries || []);
   const submitted = [];
   context.on('request', request => {
@@ -67,6 +68,7 @@ try {
   for (const pattern of ['.*', '(.*)', '127\\.0\\.0\\.1', '(private|excluded)', '[']) {
     await field('Exclude URL regex').fill('');
     await field('Exclude URL regex').pressSequentially(pattern);
+    await waitForSavedSettings(options);
     await options.reload();
     await options.getByRole('button', { name: 'Configuration', exact: true }).click();
     await expect(field('Exclude URL regex')).toHaveValue(pattern);
@@ -81,6 +83,7 @@ try {
     console.log(`PASS: saved exclusion ${JSON.stringify(pattern)} blocks subsequent navigation.`);
   }
   await field('Exclude URL regex').fill('(.*)');
+  await waitForSavedSettings(options);
   const workerCdp = await context.newCDPSession(options);
   await workerCdp.send('ServiceWorker.enable');
   await workerCdp.send('ServiceWorker.stopAllWorkers');
@@ -91,6 +94,7 @@ try {
   expect((await entries()).some(entry => entry.url === afterRestart)).toBe(false);
   expect(await serverSnapshots(afterRestart)).toEqual([]);
   await field('Exclude URL regex').fill('');
+  await waitForSavedSettings(options);
   const resumed = `${origin}/allowed-after-restart-${Date.now()}`;
   await target.goto(resumed);
   await expect.poll(async () => (await serverSnapshots(resumed)).length).toBe(1);
@@ -108,6 +112,7 @@ try {
     await field('Exclude URL regex').fill('');
     await field('Match URL regex').fill('.*');
     if (!(await enabled.isChecked())) { await enabled.click(); await expect(enabled).toBeChecked(); }
+    await waitForSavedSettings(options);
     const url = `${origin}/${setting}-${Date.now()}`;
     await target.goto(url);
     await expect.poll(async () => (await entries()).find(entry => entry.url === url)?.id).toBeTruthy();
@@ -118,6 +123,8 @@ try {
     else if (setting === 'match') await field('Match URL regex').fill('never-match-this-page');
     else if (setting === 'invalid-exclude') await field('Exclude URL regex').fill('[');
     else { await enabled.click(); await expect(enabled).not.toBeChecked(); }
+    // The capture is still scrolling; the change must be stored before it ends.
+    await waitForSavedSettings(options);
     await expect.poll(async () => (await progress()).some(message => ['done', 'canceled'].includes(message.phase)), { timeout: 30000 }).toBe(true);
     await options.waitForTimeout(1500);
     expect(submitted, `No automatic submission may start after ${setting}`).not.toContain(url);

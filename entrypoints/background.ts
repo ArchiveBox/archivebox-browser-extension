@@ -858,8 +858,10 @@ async function autoArchive(
   if (changeInfo.status !== 'complete' || !tab.url) return;
   if (!isArchiveablePageUrl(tab.url)) return;
 
-  const snapshots = await getSnapshots();
-  if (snapshots.some((snapshot) => snapshot.url === tab.url)) return;
+  // Runs for every page load, enabled or not, so it only reads the config here.
+  // Already-saved URLs are skipped by the locked mutateSnapshots() below; a
+  // separate getSnapshots() pre-check would read every saved entry (100k+)
+  // on each page load for nothing.
   if (!(await shouldAutoArchive(tab.url))) return;
 
   const snapshot = createSnapshot(
@@ -886,20 +888,6 @@ async function autoArchive(
   await syncSnapshotToServer(snapshot);
 }
 
-async function configureAutoArchiving(): Promise<void> {
-  const hasPermission = await browser.permissions.contains({ permissions: ['tabs'] });
-  if (!hasPermission) return;
-
-  const { enable_auto_archive } = await getConfig();
-  const hasListener = browser.tabs.onUpdated.hasListener(autoArchive);
-
-  if (enable_auto_archive && !hasListener) {
-    browser.tabs.onUpdated.addListener(autoArchive);
-  } else if (!enable_auto_archive && hasListener) {
-    browser.tabs.onUpdated.removeListener(autoArchive);
-  }
-}
-
 async function saveTab(tab?: Browser.tabs.Tab): Promise<void> {
   if (!tab?.id || !tab.url) return;
   if (!isArchiveablePageUrl(tab.url)) return;
@@ -921,10 +909,15 @@ async function getMessageTab(tabId: number): Promise<Browser.tabs.Tab> {
 }
 
 export default defineBackground(() => {
+  // MV3 only delivers the event that wakes a stopped service worker to listeners
+  // registered synchronously here. Adding this listener later (after reading the
+  // config, or only on onStartup/settings changes) silently dropped page loads
+  // after every idle restart, so it is always registered and autoArchive reads
+  // enable_auto_archive from storage on each event instead.
+  browser.tabs.onUpdated.addListener(autoArchive);
   configureCookieSync();
   configureLocalRetention();
   refreshUiLanguage().catch(() => undefined);
-  browser.runtime.onStartup.addListener(configureAutoArchiving);
   browser.runtime.onInstalled.addListener(() => {
     refreshUiLanguage()
       .catch(() => undefined)
@@ -935,14 +928,10 @@ export default defineBackground(() => {
           title: t("Save to ArchiveBox"),
           contexts: ['page'],
         });
-        configureAutoArchiving();
       });
   });
 
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.enable_auto_archive) {
-      configureAutoArchiving();
-    }
     if (area === 'local' && changes.ui_language) {
       refreshUiLanguage()
         .then(() => browser.contextMenus.update('save_to_archivebox_ctxmenu', { title: t("Save to ArchiveBox") }))
@@ -1133,5 +1122,4 @@ export default defineBackground(() => {
     }
   });
 
-  configureAutoArchiving();
 });

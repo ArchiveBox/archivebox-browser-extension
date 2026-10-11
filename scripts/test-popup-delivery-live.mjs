@@ -33,7 +33,7 @@ const executable = process.env.CHROME_FOR_TESTING_BIN || process.env.CHROME_BIN 
 const extensionPath = path.join(profile, 'extension');
 await cp(path.resolve('.output/chrome-mv3'), extensionPath, { recursive: true });
 await rm(path.join(profile, 'DevToolsActivePort'), { force: true });
-const chrome = spawn(executable, [`--user-data-dir=${profile}`, '--remote-debugging-port=0', '--enable-unsafe-extension-debugging', ...(process.env.HEADLESS ? ['--headless=new'] : []), '--no-first-run', '--no-default-browser-check', ...(process.platform === 'linux' ? ['--no-sandbox'] : [])], { stdio: 'ignore' });
+const chrome = spawn(executable, [`--user-data-dir=${profile}`, '--remote-debugging-port=0', '--enable-unsafe-extension-debugging', ...(process.env.HEADED ? [] : ['--headless=new']), '--no-first-run', '--no-default-browser-check', ...(process.platform === 'linux' ? ['--no-sandbox'] : [])], { stdio: 'ignore' });
 let browser;
 let verified = false;
 const evidence = await mkdtemp(path.join(tmpdir(), 'archivebox-popup-evidence-'));

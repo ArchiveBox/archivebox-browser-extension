@@ -1,4 +1,4 @@
-import { launchExtension } from './helpers/extension';
+import { launchExtension, seedExtensionStorage, waitForSavedSettings } from './helpers/extension';
 import { expect, test, type Page } from '@playwright/test';
 import type { Snapshot } from '../src/lib/types';
 
@@ -31,31 +31,27 @@ test('options sections and saved URL actions fit mobile and desktop viewports', 
     await page.evaluate(async () => {
       const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
       await api.bookmarks.create({ title: 'A long bookmark title for testing mobile import rows', url: 'https://example.com/' + 'long-path-segment/'.repeat(12) });
-      await api.storage.local.set({ entries: [{
-        id: 'responsive-layout-entry',
-        url: `https://example.com/${'long-url-segment/'.repeat(12)}`,
-        title: 'A long saved page title that should remain readable on a small phone screen',
-        timestamp: new Date().toISOString(), tags: ['mobile', 'a-long-tag-name-with-no-spaces-to-test-wrapping'],
-        favIconUrl: null, depth: 0,
-      }] });
     });
+    const entry: Snapshot = {
+      id: 'responsive-layout-entry',
+      url: `https://example.com/${'long-url-segment/'.repeat(12)}`,
+      title: 'A long saved page title that should remain readable on a small phone screen',
+      timestamp: new Date().toISOString(), tags: ['mobile', 'a-long-tag-name-with-no-spaces-to-test-wrapping'],
+      favIconUrl: null, depth: 0,
+    };
+    await seedExtensionStorage(page, { entries: [entry] });
     const screenshot = await page.screenshot();
-    await page.evaluate(async (bytes) => {
+    const viewport = await page.evaluate(async (bytes) => {
       const root = await navigator.storage.getDirectory();
       const file = await root.getFileHandle('responsive-layout.png', { create: true });
       const writer = await file.createWritable();
       await writer.write(new Uint8Array(bytes));
       await writer.close();
-      const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
-      const { entries } = await api.storage.local.get('entries') as { entries: Snapshot[] };
-      const snapshot = entries[0];
-      if (!snapshot) throw new Error('Missing saved URL fixture');
-      snapshot.screenshot = {
-        storage: 'opfs', path: 'responsive-layout.png', mimeType: 'image/png',
-        capturedAt: new Date().toISOString(), width: window.innerWidth, height: window.innerHeight,
-      };
-      await api.storage.local.set({ entries });
+      return { width: window.innerWidth, height: window.innerHeight };
     }, [...screenshot]);
+    await seedExtensionStorage(page, { entries: [{ ...entry, screenshot: {
+      storage: 'opfs', path: 'responsive-layout.png', mimeType: 'image/png', capturedAt: new Date().toISOString(), ...viewport,
+    } }] });
     await page.reload();
     await expect(page.locator('.snapshot-screenshot-thumb')).toBeVisible();
     await expect(page.locator('.saved-url-table tbody tr')).toHaveCount(1);

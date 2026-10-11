@@ -21,8 +21,10 @@ body {
   width: 100%;
 }
 
-/* Touch browsers present the popup in an already-sized sheet (iPhone/iPad). */
-@media (pointer: coarse) {
+/* iPhone presents the popup in an already-sized full-width sheet. iPad uses a
+   desktop-style popover sized from this width, so vw would collapse it to the
+   tiny initial viewport; device-width (the screen) tells the two apart. */
+@media (pointer: coarse) and (max-device-width: 559px) {
   html,
   body {
     width: min(560px, 100vw);
@@ -34,12 +36,14 @@ body {
   --popup-border: #e0d7d4;
   --popup-muted: #746663;
   --popup-accent: #8b4242;
+  /* Surfaces (cards, rows, menus) and the controls inside them share two radii;
+     the browser draws the popup frame itself, so the overlay has no border. */
+  --popup-radius: 8px;
+  --popup-radius-sm: 6px;
   position: relative;
   width: 100%;
   overflow: visible;
-  border: 1px solid var(--popup-border);
-  border-top: 3px solid var(--popup-accent);
-  border-radius: 0;
+  border: 0;
   background: #f5f1ef;
   color: #302826;
   font-size: 12px;
@@ -61,7 +65,7 @@ body {
   align-items: start;
   margin-bottom: 8px;
   border: 1px solid var(--popup-border);
-  border-radius: 8px;
+  border-radius: var(--popup-radius);
   background: var(--popup-surface);
   color: #241b1b;
   padding: 8px 68px 8px 8px;
@@ -313,7 +317,7 @@ button.archivebox-overlay__tag-chip {
   border: 0;
   background: transparent;
   color: var(--popup-muted);
-  border-radius: 6px;
+  border-radius: var(--popup-radius-sm);
   height: 32px;
   cursor: pointer;
 }
@@ -360,7 +364,7 @@ button.archivebox-overlay__tag-chip {
   min-width: 0;
   height: 30px;
   border: 1px solid var(--popup-border);
-  border-radius: 6px;
+  border-radius: var(--popup-radius-sm);
   padding: 0 10px;
   color: #1d1d1d;
   background: var(--popup-surface);
@@ -498,7 +502,7 @@ button.archivebox-overlay__tag-chip {
   width: 250px;
   max-width: calc(100vw - 22px);
   border: 1px solid var(--popup-border);
-  border-radius: 7px;
+  border-radius: var(--popup-radius);
   background: var(--popup-surface);
   box-shadow: 0 6px 18px #30282620;
   padding: 4px;
@@ -562,7 +566,7 @@ button.archivebox-overlay__tag-chip {
   gap: 4px;
   align-items: center;
   border: 1px solid var(--popup-border);
-  border-radius: 7px;
+  border-radius: var(--popup-radius);
   background: var(--popup-surface);
   color: #2b1c1c;
   padding: 4px 6px;
@@ -812,7 +816,7 @@ button.archivebox-overlay__tag-chip {
   overflow: auto;
   background: var(--popup-surface);
   border: 1px solid var(--popup-border);
-  border-radius: 7px;
+  border-radius: var(--popup-radius);
   box-shadow: 0 6px 18px #30282620;
   padding: 4px;
 }
@@ -853,7 +857,7 @@ button.archivebox-overlay__tag-chip {
   margin-top: 8px;
   padding: 8px;
   border: 1px solid var(--popup-border);
-  border-radius: 6px;
+  border-radius: var(--popup-radius);
   background: var(--popup-surface);
 }
 .archivebox-overlay__agent-form label { display: block; margin-bottom: 5px; }
@@ -861,7 +865,7 @@ button.archivebox-overlay__tag-chip {
 .archivebox-overlay__agent-form input { flex: 1; width: 0; }
 .archivebox-overlay__agent-form button {
   border: 1px solid var(--popup-border);
-  border-radius: 6px;
+  border-radius: var(--popup-radius-sm);
   background: var(--popup-accent);
   color: white;
   padding: 0 10px;

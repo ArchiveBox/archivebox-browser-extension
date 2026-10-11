@@ -60,6 +60,7 @@ import { getCookieSyncStates, disablePersonaCookieSync, syncPersonaManually, typ
 import { currentPersonaSettings, detectPersonaLocation } from '@/src/lib/personaSettings';
 import { compactUuid, uuidv7 } from '@/src/lib/uuid';
 import {
+  configStorageKeys,
   defaultConfig,
   defaultPersona,
   ensurePersonas,
@@ -1006,6 +1007,40 @@ function OptionsMain() {
   const [serverDraft, setServerDraft] = useState<string | null>(null);
   const [tokenDraft, setTokenDraft] = useState<string | null>(null);
   const [savingServer, setSavingServer] = useState(false);
+  // Controls below update optimistically, before the background has persisted the
+  // change, so what the page shows can briefly differ from what a capture would
+  // read from storage. Every settings write runs through trackSave(), and the
+  // page exposes aria-busy until all of them settle: assistive tech hears that a
+  // save is in progress, and tests have one reliable "persisted" signal instead
+  // of racing the write. A counter (not a boolean) keeps nested and overlapping
+  // saves from clearing the flag while another write is still in flight.
+  const [pendingSaves, setPendingSaves] = useState(0);
+  function trackSave<T>(work: () => Promise<T>): Promise<T> {
+    setPendingSaves(count => count + 1);
+    return work().finally(() => setPendingSaves(count => count - 1));
+  }
+  // Follow settings written elsewhere: another options tab, the popup, or a
+  // background write that finished after this page loaded. Without this a tab
+  // kept showing (and re-saving) values that storage no longer holds. While
+  // this tab's own saves are in flight their optimistic values are newer than
+  // storage, so the effect only runs once they have all settled, and leaving
+  // that state (cleanup) drops any read still in flight. `latest` makes sure an
+  // older read that resolves late cannot overwrite a newer one.
+  useEffect(() => {
+    if (pendingSaves > 0) return;
+    let active = true;
+    let latest = 0;
+    const refresh = () => {
+      const request = ++latest;
+      void getConfig().then(next => { if (active && request === latest) setConfigState(next); }).catch(() => undefined);
+    };
+    const onChanged = (changes: Record<string, unknown>, area: string) => {
+      if (area === 'local' && Object.keys(changes).some(key => configStorageKeys.has(key))) refresh();
+    };
+    browser.storage.onChanged.addListener(onChanged);
+    refresh();
+    return () => { active = false; browser.storage.onChanged.removeListener(onChanged); };
+  }, [pendingSaves]);
   const server_id = server?.id || '';
   useEffect(() => {
     if (!server) return;
@@ -1034,7 +1069,10 @@ function OptionsMain() {
     return () => { current = false; };
   }, [server?.id, server?.server, server?.token]);
   function destination() { return requireServer(config, server_id); }
-  async function saveServer(patch: Parameters<typeof updateServer>[1]) {
+  function saveServer(patch: Parameters<typeof updateServer>[1]) {
+    return trackSave(() => saveServerNow(patch));
+  }
+  async function saveServerNow(patch: Parameters<typeof updateServer>[1]) {
     const id = server?.id ?? null;
     setSavingServer(true);
     if (id && patch.policy) setConfigState((current) => ({
@@ -1251,7 +1289,10 @@ function OptionsMain() {
     );
   }
 
-  async function saveConfig(patch: ConfigPatch) {
+  function saveConfig(patch: ConfigPatch) {
+    return trackSave(() => saveConfigNow(patch));
+  }
+  async function saveConfigNow(patch: ConfigPatch) {
     if (patch.ui_language) setUiLanguage(patch.ui_language);
     setConfigState(current => ({ ...current, ...patch, capture_retention_ms: Object.fromEntries(
       Object.entries({ ...current.capture_retention_ms, ...patch.capture_retention_ms }).filter(([, value]) => value !== null),
@@ -1396,7 +1437,10 @@ function OptionsMain() {
     }
   }
 
-  async function updateAutoArchive(enabled: boolean) {
+  function updateAutoArchive(enabled: boolean) {
+    return trackSave(() => updateAutoArchiveNow(enabled));
+  }
+  async function updateAutoArchiveNow(enabled: boolean) {
     if (enabled) {
       setTestStatus({ kind: 'idle', text: t("Automatic archiving needs tabs and site access so it can detect matching pages as you browse.") });
       const granted = await browser.permissions.request({
@@ -1454,7 +1498,12 @@ function OptionsMain() {
     return true;
   }
 
-  async function updateLocalCaptureSetting(key: LocalCaptureConfigKey, enabled: boolean) {
+  // Tracked from the click: the permission prompt and the possible revert below
+  // must not leave a gap where the page reports every save as settled.
+  function updateLocalCaptureSetting(key: LocalCaptureConfigKey, enabled: boolean) {
+    return trackSave(() => updateLocalCaptureSettingNow(key, enabled));
+  }
+  async function updateLocalCaptureSettingNow(key: LocalCaptureConfigKey, enabled: boolean) {
     if (enabled && key === 'save_screenshots_locally' && !(await requestScreenshotCapturePermission())) return;
     if (enabled && key === 'save_mhtml_locally' && !(await requestMhtmlCapturePermission())) return;
 
@@ -1941,7 +1990,7 @@ function OptionsMain() {
   }
 
   return (
-    <main className="app">
+    <main className="app" aria-busy={pendingSaves > 0}>
       <header className="topbar">
         <div className="topbar__brand">
           <img src={extensionUrl('icon/48.png')} alt="" />

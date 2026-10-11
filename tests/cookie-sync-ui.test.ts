@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { test } from './helpers/archivebox';
-import { launchExtension } from './helpers/extension';
+import { launchExtension, waitForSavedSettings } from './helpers/extension';
 import type { CookieSyncState } from '../src/lib/cookieSync';
 
 test('sync controls report real uploads, sync added sites immediately, and persist disabling', async ({ archivebox }, testInfo) => {
@@ -13,6 +13,7 @@ test('sync controls report real uploads, sync added sites immediately, and persi
     await address.fill(archivebox.server); await address.blur();
     const token = page.getByPlaceholder('... abcexamplekey1234 ...');
     await token.fill(archivebox.key); await token.blur();
+    await waitForSavedSettings(page);
     await page.getByRole('button', { name: 'Cookies', exact: true }).click();
     const name = `Cookie sync ${Date.now()}`;
     page.once('dialog', dialog => dialog.accept(name));

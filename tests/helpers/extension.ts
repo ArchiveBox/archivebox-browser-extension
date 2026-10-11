@@ -1,4 +1,4 @@
-import { chromium, expect, type Browser } from '@playwright/test';
+import { chromium, expect, type Browser, type Page } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -66,4 +66,24 @@ export async function launchExtension(permissions: string[] = [], hostPermission
     await close();
     throw error;
   }
+}
+
+// Options-page controls show a change before the background has persisted it,
+// and the page marks <main> aria-busy until every write settles (trackSave in
+// OptionsApp.tsx). Await this before any step that depends on the stored value
+// (a capture, opening the popup, reading storage, a reload); otherwise that
+// step races the write and sees the old setting. React flushes click/input/
+// change/blur handlers synchronously, so aria-busy is already set by the time
+// the Playwright action that started the save resolves.
+export async function waitForSavedSettings(page: Page): Promise<void> {
+  await expect(page.locator('main.app[aria-busy="true"]')).toHaveCount(0);
+}
+
+// The extension's first-run migration (src/lib/storage_migration.ts) reads all
+// of storage and writes it back under this Web Lock. A fixture written outside
+// the lock can land between that read and write and be silently erased, so
+// tests must seed storage through here. `page` is any extension page.
+export async function seedExtensionStorage(page: Page, values: Record<string, unknown>): Promise<void> {
+  await page.evaluate(values => navigator.locks.request('archivebox-storage-migration', () =>
+    (globalThis as typeof globalThis & { chrome: typeof browser }).chrome.storage.local.set(values)), values);
 }

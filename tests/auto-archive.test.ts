@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { launchExtension } from './helpers/extension';
+import { launchExtension, waitForSavedSettings } from './helpers/extension';
 
 test('automatic archiving obeys changed URL patterns and the off switch', async () => {
   const document = await readFile(new URL('./fixtures/auto-archive.html', import.meta.url));
@@ -28,6 +28,8 @@ test('automatic archiving obeys changed URL patterns and the off switch', async 
       return (await api.storage.local.get('entries')).entries || [];
     });
     const visit = async (name: string) => {
+      // Every visit checks the settings changed just before it.
+      await waitForSavedSettings(options);
       const page = await harness.context.newPage();
       await page.goto(`${origin}/${name}`);
       await page.waitForTimeout(1000);

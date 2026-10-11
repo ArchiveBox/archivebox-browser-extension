@@ -1,4 +1,4 @@
-import { launchExtension } from './helpers/extension';
+import { launchExtension, seedExtensionStorage, waitForSavedSettings } from './helpers/extension';
 import type { ServerRegistry } from '../src/lib/types';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -33,6 +33,7 @@ test('snapshot metadata is the parent of local outputs and keeps their retention
     await metadata.uncheck();
     for (const label of outputLabels) await expect(page.getByLabel(label, { exact: true })).not.toBeChecked();
     await expect(ttl).toBeDisabled();
+    await waitForSavedSettings(page);
     await page.reload(); await configure();
     await expect(metadata).not.toBeChecked();
     await page.getByLabel(outputLabels[0]!, { exact: true }).check();
@@ -44,6 +45,7 @@ test('snapshot metadata is the parent of local outputs and keeps their retention
       await expect(select).toHaveValue('snapshot');
       await expect(select.locator('option')).toHaveText(['Same as metadata', '1 minute', '1 day']);
     }
+    await waitForSavedSettings(page);
     await page.reload(); await configure();
     await expect(metadata).toBeChecked();
     await expect(ttl).toHaveValue('86400000');
@@ -77,6 +79,7 @@ test('capture retention inherits the snapshot limit and persists shorter per-typ
     await mhtml.selectOption('60000');
     await viewport.selectOption('86400000');
     await fullPage.selectOption('7776000000');
+    await waitForSavedSettings(page);
     await page.reload(); await configure();
     await expect(snapshot).toHaveValue('never');
     await expect(mhtml).toHaveValue('60000');
@@ -88,6 +91,7 @@ test('capture retention inherits the snapshot limit and persists shorter per-typ
       await expect(select.locator('option')).toHaveText(['Same as metadata', '1 minute', '1 day']);
     }
     await fullPage.selectOption('snapshot');
+    await waitForSavedSettings(page);
     await page.reload(); await configure();
     await expect(fullPage).toHaveValue('snapshot');
     await expect(mhtml).toHaveValue('60000');
@@ -111,6 +115,7 @@ test('concurrent retention edits survive closing their options tabs immediately'
     };
     const first = await openSettings();
     await first.getByLabel('Snapshot metadata retention').selectOption('never');
+    await waitForSavedSettings(first);
     const pages = [first, await openSettings(), await openSettings()];
     const choices = [
       ['MHTML retention', '60000'],
@@ -161,13 +166,10 @@ test('local retention defaults to 30 days and persists every choice', async ({},
     }
     // Existing records hidden by a newly configured server must survive unrelated
     // snapshot transactions (the same storage path used by TTL cleanup).
-    await page.evaluate(async () => {
-      const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
-      await api.storage.local.set({ entries: [
-        { id: 'unsent-hidden', url: 'http://127.0.0.1:18764/page', title: 'Unsent hidden', timestamp: new Date().toISOString(), tags: [] },
-        { id: 'unsent-visible', url: 'https://example.com/visible', title: 'Unsent visible', timestamp: new Date().toISOString(), tags: [] },
-      ] });
-    });
+    await seedExtensionStorage(page, { entries: [
+      { id: 'unsent-hidden', url: 'http://127.0.0.1:18764/page', title: 'Unsent hidden', timestamp: new Date().toISOString(), tags: [] },
+      { id: 'unsent-visible', url: 'https://example.com/visible', title: 'Unsent visible', timestamp: new Date().toISOString(), tags: [] },
+    ] });
     await page.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com').fill('http://127.0.0.1:18764');
     await page.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com').blur();
     await expect.poll(() => page.evaluate(async () => {
@@ -179,6 +181,7 @@ test('local retention defaults to 30 days and persists every choice', async ({},
     await expect(page.getByLabel('Upload full-page screenshots to server', { exact: true })).not.toBeChecked();
     await expect(page.getByLabel('Upload MHTML snapshots to server', { exact: true })).toBeChecked();
     await page.getByLabel('Save viewport screenshots locally', { exact: true }).uncheck();
+    await waitForSavedSettings(page);
     await page.reload();
     await page.getByRole('button', { name: 'Configuration', exact: true }).click();
     await expect(page.getByLabel('Save viewport screenshots locally', { exact: true })).not.toBeChecked();
