@@ -1,0 +1,40 @@
+README.md
+  h_923c208e183a7b 145
+entrypoints/persona-storage.content.ts
+  h_923c208e183a7b 1-13
+package.json
+  h_923c208e183a7b 36-37
+pnpm-lock.yaml
+  h_923c208e183a7b 14-19,538-545,1412-1417
+src/lib/personaSettings.ts
+  h_923c208e183a7b 13
+src/lib/personaStorage.ts
+  h_923c208e183a7b 1-62
+src/lib/personaSync.ts
+  h_923c208e183a7b 4-5,54-55,64,80
+src/lib/types.ts
+  h_923c208e183a7b 117,147-163,172
+src/options/OptionsApp.tsx
+  h_923c208e183a7b 999,1484,1486,1636-1645,2336
+tests/archivebox-server/pyproject.toml
+  h_923c208e183a7b 1-14
+tests/archivebox-server/uv.lock
+  h_923c208e183a7b 1-1526
+tests/helpers/archivebox.ts
+  h_923c208e183a7b 7,19-20
+tests/popup.test.ts
+  h_923c208e183a7b 1091,1103,1109-1159
+wxt.config.ts
+  h_923c208e183a7b 9-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3508a6109dc253e8a9c245e59e646be9280b0c10",
+  "prompts": {},
+  "humans": {
+    "h_923c208e183a7b": {
+      "author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
