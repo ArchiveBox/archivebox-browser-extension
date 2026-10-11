@@ -1,0 +1,19 @@
+entrypoints/popup/style.css
+  s_c90cd928eccc79::t_68a9668e29c9c7 726,729-731
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "58178feff3b689b294b0eaaa43648fa02bc7b19d",
+  "prompts": {},
+  "sessions": {
+    "s_c90cd928eccc79": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4c831b27-1b5e-47f6-8b86-c79bfc722025",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
