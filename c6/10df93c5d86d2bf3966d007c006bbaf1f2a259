@@ -1,0 +1,53 @@
+entrypoints/popup/style.css
+  s_c90cd928eccc79::t_e1eed79220cffb 24-27
+  s_c90cd928eccc79::t_09d79c1eeb2166 39-42,46,68,320,367,505,569,819,860,868
+tests/options-responsive.test.ts
+  s_c90cd928eccc79::t_7d4872e6aa1865 35-42,44,50,52-54
+  s_c90cd928eccc79::t_4d9cc47d014269 1
+src/options/OptionsApp.tsx
+  s_c90cd928eccc79::t_45c2d17312f645 1022-1043
+  s_c90cd928eccc79::t_398c2988c0729a 1019-1021
+  s_c90cd928eccc79::t_0ee5df94f0e00b 63,1010-1018,1072-1075,1292-1295,1440-1443,1501-1506,1993
+tests/popup.test.ts
+  s_c90cd928eccc79::t_b782b30f813670 1543-1551
+  s_c90cd928eccc79::t_6c7a7e56bce3ae 1552-1557
+  s_c90cd928eccc79::t_9e4e29f5dfbfe4 2,372-374,438,1160,1207
+entrypoints/background.ts
+  s_c90cd928eccc79::t_92f59b19f015e5 861-864,912-917
+scripts/test-agent-task-live.mjs
+  s_c90cd928eccc79::t_8c4a42a6e4383c 4,26
+scripts/test-auto-archive-live.mjs
+  s_c90cd928eccc79::t_321a0dd4b59f13 6,51,71,86,97,115,126-127
+scripts/test-popup-delivery-live.mjs
+  s_c90cd928eccc79::t_37c4e74a02b8d5 36
+scripts/test-retention-live.mjs
+  s_c90cd928eccc79::t_93be0ea0613cbe 6,56,106,163,194
+scripts/test-sync-status-live.mjs
+  s_c90cd928eccc79::t_8e7dce14c2cb6e 5,42,91,168
+src/lib/storage.ts
+  s_c90cd928eccc79::t_ade9f6562a445e 28-30
+tests/auto-archive.test.ts
+  s_c90cd928eccc79::t_562af92ad14f9b 4,31-32
+tests/cookie-sync-ui.test.ts
+  s_c90cd928eccc79::t_8848b63ffb3855 3,16
+tests/helpers/extension.ts
+  s_c90cd928eccc79::t_702475cb29131f 1,70-89
+tests/retention.test.ts
+  s_c90cd928eccc79::t_4a3fd599c9f00d 1,36,48,82,94,118,169-172,184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c610df93c5d86d2bf3966d007c006bbaf1f2a259",
+  "prompts": {},
+  "sessions": {
+    "s_c90cd928eccc79": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4c831b27-1b5e-47f6-8b86-c79bfc722025",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
