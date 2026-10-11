@@ -1,0 +1,16 @@
+.github/workflows/screenshots.yml
+  h_923c208e183a7b 4-17
+scripts/capture-screenshots.mjs
+  h_923c208e183a7b 2-3,25,43-44,80,82-84,86-91,153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3f6a99f88bc67aaa48ddbd502d0ef6b83f6fde70",
+  "prompts": {},
+  "humans": {
+    "h_923c208e183a7b": {
+      "author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
