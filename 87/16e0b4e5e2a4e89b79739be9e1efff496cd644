@@ -1,0 +1,34 @@
+README.md
+  h_923c208e183a7b 95-96
+scripts/test-multiserver-live.mjs
+  h_923c208e183a7b 51
+scripts/test-retention-live.mjs
+  h_923c208e183a7b 26,185-212
+scripts/test-sync-status-live.mjs
+  h_923c208e183a7b 27
+src/lib/i18nMessages.ts
+  h_923c208e183a7b 3-10,418-425
+src/lib/retention.ts
+  h_923c208e183a7b 11-12,17,22,24,45,74,118
+src/lib/storage.ts
+  h_923c208e183a7b 19,28-29,60,63,76-80
+src/lib/types.ts
+  h_923c208e183a7b 165
+src/options/OptionsApp.tsx
+  h_923c208e183a7b 897,2186-2194,2209,2220
+src/options/options.css
+  h_923c208e183a7b 2083-2086,2088,2092-2093
+tests/retention.test.ts
+  h_923c208e183a7b 19-60,68,74,88,113,126,141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8716e0b4e5e2a4e89b79739be9e1efff496cd644",
+  "prompts": {},
+  "humans": {
+    "h_923c208e183a7b": {
+      "author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
