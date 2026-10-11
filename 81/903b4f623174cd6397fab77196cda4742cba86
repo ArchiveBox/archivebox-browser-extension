@@ -1,0 +1,36 @@
+README.md
+  h_923c208e183a7b 49-63
+package.json
+  h_923c208e183a7b 39-40
+pnpm-lock.yaml
+  h_923c208e183a7b 26-28,920-926,1755-1760
+src/lib/cookieSites.ts
+  h_923c208e183a7b 1-79
+src/lib/cookieSync.ts
+  h_923c208e183a7b 20,112,156-167,176-192,198,217,250,260
+src/options/CookieSitePicker.tsx
+  h_923c208e183a7b 1-99
+src/options/OptionsApp.tsx
+  h_923c208e183a7b 12-16,38-39,59,814-818,985-1003,1479-1503,1522-1523,1534-1537,1549-1550,1571-1574,1598,1600-1602,1613,1616-1631,1646,2266-2269,2271-2288,2290-2305,2307-2331,2333-2334,2336-2340,2342-2350
+src/options/options.css
+  h_923c208e183a7b 1930-2047
+tests/cookie-sync-ui.test.ts
+  h_923c208e183a7b 1-92
+tests/cookies-ui.test.ts
+  h_923c208e183a7b 1-128
+tests/options-responsive.test.ts
+  h_923c208e183a7b 20,26-29,100,103-104,107-108
+tests/popup.test.ts
+  h_923c208e183a7b 1022-1023,1080,1084,1096
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "81903b4f623174cd6397fab77196cda4742cba86",
+  "prompts": {},
+  "humans": {
+    "h_923c208e183a7b": {
+      "author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
