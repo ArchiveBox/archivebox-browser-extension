@@ -1,7 +1,7 @@
 import type { PersonaSettings } from './types';
 
-// Permission-free values are collected in an extension page, never during a sync.
-export async function currentPersonaSettings(): Promise<PersonaSettings> {
+// This browser's identity, readable from extension pages and the background worker.
+export async function currentBrowserIdentity(): Promise<Pick<PersonaSettings, 'userAgent' | 'userAgentMetadata' | 'platform'>> {
   // A UA string alone makes CDP erase client hints. Export the browser's real
   // metadata alongside it, including OS/CPU values absent from the reduced UA.
   const { userAgentData } = navigator as Navigator & { userAgentData?: {
@@ -10,7 +10,12 @@ export async function currentPersonaSettings(): Promise<PersonaSettings> {
   const userAgentMetadata = await userAgentData?.getHighEntropyValues([
     'architecture', 'bitness', 'fullVersionList', 'model', 'platformVersion', 'wow64', 'formFactors',
   ]) ?? null;
-  const ua = navigator.userAgent;
+  return { userAgent: navigator.userAgent, userAgentMetadata, platform: navigator.platform };
+}
+
+// Permission-free values are collected in an extension page, never during a sync.
+export async function currentPersonaSettings(): Promise<PersonaSettings> {
+  const { userAgent: ua = '', userAgentMetadata, platform } = await currentBrowserIdentity();
   const operatingSystem = ua.includes('Android') ? 'Android'
     : /iPhone|iPad|iPod/.test(ua) ? 'iOS'
       : ua.includes('Windows') ? 'Windows'
@@ -19,7 +24,7 @@ export async function currentPersonaSettings(): Promise<PersonaSettings> {
   return {
     userAgent: ua,
     userAgentMetadata,
-    platform: navigator.platform,
+    platform,
     language: navigator.language,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     viewport: `${window.innerWidth}x${window.innerHeight}`,

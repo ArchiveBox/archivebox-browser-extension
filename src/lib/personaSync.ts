@@ -2,6 +2,7 @@ import { formatCookiesAsNetscape } from './cookies';
 import { t } from './i18n';
 import { hasServerHostPermission } from './archivebox';
 import { capturePersonaStorage } from './personaStorage';
+import { currentBrowserIdentity } from './personaSettings';
 import { updatePersona } from './storage';
 import type { Persona, StoredCookie, ServerConfiguration } from './types';
 
@@ -50,9 +51,23 @@ function cookieForAuthJson(cookie: StoredCookie): Record<string, Serializable> {
   };
 }
 
+const withoutVersions = (userAgent = '') => userAgent.replace(/(\/|rv:)[\d.]+/g, '$1');
+
+// A profile recorded from this browser exports its live identity on every sync,
+// so browser updates and client hints always reach ArchiveBox together with
+// the UA. A profile given another UA keeps that identity as configured.
+async function syncedIdentity(persona: Persona): Promise<Persona['settings']> {
+  const live = await currentBrowserIdentity();
+  const { userAgent } = persona.settings;
+  if (!userAgent || withoutVersions(userAgent) !== withoutVersions(live.userAgent)) return persona.settings;
+  await updatePersona(persona.id, item => ({ ...item, settings: { ...item.settings, ...live } }));
+  return { ...persona.settings, ...live };
+}
+
 async function buildPersonaSyncPayload(persona: Persona) {
   const storage = await capturePersonaStorage(persona);
   if (storage) await updatePersona(persona.id, item => ({ ...item, storage }));
+  persona = { ...persona, settings: await syncedIdentity(persona) };
   const cookies = Object.values(persona.cookies || {}).flat().map(cookieForAuthJson);
   const viewportScale = Number(persona.settings.viewportScale || 1);
 
