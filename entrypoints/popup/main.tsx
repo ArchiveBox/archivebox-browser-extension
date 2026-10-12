@@ -1010,26 +1010,19 @@ function ArchiveBoxOverlay() {
 
   return (
     <section className="archivebox-overlay" aria-label={t("ArchiveBox save panel")} aria-busy={deleteBusy}>
-      {!deleted && <button className="archivebox-overlay__settings" onClick={() => openOptions()} title={t("Options")} aria-label={t("Options")}>
-        <Settings size={24} strokeWidth={2} aria-hidden="true" />
-      </button>}
-      {!deleted && <button className="archivebox-overlay__delete" onClick={() => removeSnapshot(true)} disabled={!snapshot || deleteBusy} title={t('Delete everywhere')} aria-label={t('Delete everywhere')}>
-        <X size={24} strokeWidth={2} aria-hidden="true" />
-      </button>}
       <div className="archivebox-overlay__page">
-        <button className="archivebox-overlay__page-link archivebox-overlay__page-link--favicon" onClick={openCurrentSnapshotInOptions} title={t("Show this URL in Saved URLs")}>
-          {showPageFavicon ? (
-            <img src={pageFavicon || ''} alt="" onError={() => setFaviconFailed(true)} />
-          ) : (
-            <span className="archivebox-overlay__favicon-placeholder" aria-hidden="true" />
-          )}
+        <button className="archivebox-overlay__page-link archivebox-overlay__page-title" onClick={openCurrentSnapshotInOptions} title={t("Show this URL in Saved URLs")}>
+          <strong title={pageTitle}>{pageTitle}</strong>
+          <code>{pageUrl}</code>
         </button>
-        <div>
-          <button className="archivebox-overlay__page-link archivebox-overlay__page-title" onClick={openCurrentSnapshotInOptions} title={t("Show this URL in Saved URLs")}>
-            <strong title={pageTitle}>{pageTitle}</strong>
-            <code>{pageUrl}</code>
+        <div className="archivebox-overlay__page-meta">
+          <button className="archivebox-overlay__page-link archivebox-overlay__page-link--favicon" onClick={openCurrentSnapshotInOptions} title={t("Show this URL in Saved URLs")}>
+            {showPageFavicon ? (
+              <img src={pageFavicon || ''} alt="" onError={() => setFaviconFailed(true)} />
+            ) : (
+              <span className="archivebox-overlay__favicon-placeholder" aria-hidden="true" />
+            )}
           </button>
-        </div>
           {!deleted && !deleteBusy && <TagList className="archivebox-overlay__page-tags">
             {snapshot?.tags.map((tag) => (
               <TagChip key={tag} label={tag} onRemove={() => removeTag(tag)} removeTitle={t("Remove tag $1", tag)} />
@@ -1053,6 +1046,15 @@ function ArchiveBoxOverlay() {
               />
             )}
           </TagList>}
+          <div className="archivebox-overlay__page-actions">
+            {!deleted && <button className="archivebox-overlay__delete" onClick={() => removeSnapshot(true)} disabled={!snapshot || deleteBusy} title={t('Delete everywhere')} aria-label={t('Delete everywhere')}>
+              <X size={24} strokeWidth={2} aria-hidden="true" />
+            </button>}
+            {!deleted && <button className="archivebox-overlay__settings" onClick={() => openOptions()} title={t("Options")} aria-label={t("Options")}>
+              <Settings size={24} strokeWidth={2} aria-hidden="true" />
+            </button>}
+          </div>
+        </div>
 
       </div>
 

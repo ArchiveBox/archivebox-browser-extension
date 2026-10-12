@@ -54,16 +54,13 @@ body {
 }
 
 .archivebox-overlay__page {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
-  gap: 6px;
-  align-items: start;
+  display: flow-root;
   margin-bottom: 8px;
   border: 1px solid var(--popup-border);
   border-radius: var(--popup-radius);
   background: var(--popup-surface);
   color: #241b1b;
-  padding: 6px 40px 6px 6px;
+  padding: 6px;
   min-height: 76px;
 }
 
@@ -90,14 +87,14 @@ body {
 }
 
 .archivebox-overlay__page-link--favicon {
-  display: inline-grid;
-  place-items: start;
+  display: block;
   width: 24px;
   height: 24px;
 }
 
 .archivebox-overlay__page-title {
   display: block;
+  width: 100%;
   max-width: 100%;
 }
 
@@ -158,8 +155,20 @@ body {
   word-break: break-word;
 }
 
+.archivebox-overlay__page-meta {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 36px;
+  gap: 6px;
+  align-items: start;
+  margin-top: 6px;
+}
+
+.archivebox-overlay__page-actions {
+  display: flex;
+  flex-direction: column;
+}
+
 .archivebox-overlay__page-tags {
-  grid-column: 1 / -1;
   margin-top: 0;
   display: flex;
   flex-wrap: wrap;
@@ -319,8 +328,7 @@ button.archivebox-overlay__tag-chip {
   background: transparent;
   color: var(--popup-muted);
   border-radius: var(--popup-radius-sm);
-  position: absolute;
-  top: 10px;
+  position: static;
   width: 36px;
   height: 36px;
   padding: 0;
@@ -337,13 +345,7 @@ button.archivebox-overlay__tag-chip {
   color: var(--popup-accent);
 }
 
-.archivebox-overlay__settings {
-  top: 46px;
-  right: 12px;
-}
-
 .archivebox-overlay__delete {
-  right: 12px;
   color: #b4232c;
 }
 
