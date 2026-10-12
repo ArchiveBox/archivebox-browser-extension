@@ -196,9 +196,9 @@ export async function addToArchiveBox(
 
     await ensureServerHostPermission(archiveboxServerUrl);
 
-    // A token submission can discover an old server from the POST's 404/405.
-    // Avoid fetching the API docs (and their redirect) before every queued URL.
-    const supportsApi = token && !persona ? true : await supportsArchiveBoxApi(archiveboxServerUrl);
+    // The authenticated sync/add endpoints already validate API support.
+    // Do not fetch API documentation and its redirect before submitting a URL.
+    const supportsApi = token ? true : await supportsArchiveBoxApi(archiveboxServerUrl);
 
     if (!supportsApi && persona && Object.keys(persona.cookies).length) {
       throw new Error(t("This ArchiveBox server does not support persona cookie sync. Select a profile without cookies to submit URLs using the server's own settings, or upgrade the server to use this persona."));

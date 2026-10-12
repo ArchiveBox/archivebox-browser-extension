@@ -1031,6 +1031,53 @@ async function configureServer(harness: BrowserHarness, server: string, key: str
   });
 }
 
+test('persona URL submission uses real API acceptance without fetching API documentation', async ({ archivebox }) => {
+  const harness = await launchHarness();
+  const source = await startFixtureServer();
+  try {
+    const serverId = await configureServer(harness, archivebox.server, archivebox.key);
+    const page = harness.storagePage;
+    await page.getByRole('button', { name: 'Cookies', exact: true }).click();
+    const name = `submission-${Date.now()}`;
+    page.once('dialog', dialog => dialog.accept(name));
+    await page.getByRole('button', { name: 'New Profile', exact: true }).click();
+    await page.getByRole('button', { name: 'Sync now', exact: true }).click();
+    await expect(page.locator('.persona-sync-time time')).toBeVisible();
+    await expect(page.locator('.persona-current')).toHaveText('Used for archiving');
+    await waitForSavedSettings(page);
+
+    const requests: string[] = [];
+    const acceptanceMs: number[] = [];
+    harness.context.on('request', request => {
+      if (request.url().startsWith(archivebox.server + '/api/')) requests.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    });
+    harness.context.on('response', response => {
+      if (response.url() === archivebox.server + '/api/v1/cli/add') {
+        const timing = response.request().timing();
+        acceptanceMs.push(timing.responseStart - timing.requestStart);
+      }
+    });
+    const target = await harness.context.newPage();
+    const url = `${source.url}?persona-submission=${Date.now()}`;
+    await target.goto(url);
+    const popup = await openNativePopup(harness, target);
+    const saved = await waitForSavedEntry(harness, url,
+      entry => Boolean((entry as Snapshot).remote_copies?.[serverId]?.crawl_id), 'API acceptance');
+    const receipt = (saved as Snapshot).remote_copies![serverId]!;
+    expect(receipt.persona).toBe(name);
+    const crawl = await archivebox.api('/api/v1/crawls/crawl/' + receipt.crawl_id);
+    expect(crawl.urls).toContain(url);
+    expect(requests).toContain('POST /api/v1/cli/add');
+    expect(requests.filter(request => request === 'GET /api/' || request === 'GET /api/v1/docs')).toEqual([]);
+    expect(acceptanceMs).toHaveLength(1);
+    console.info('Real persona submission API acknowledgement (ms):', acceptanceMs[0]);
+    await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId }); popup.cdp.close();
+  } finally {
+    await closeHarness(harness);
+    await new Promise<void>(resolve => source.server.close(() => resolve()));
+  }
+});
+
 test('saved URL bulk delete is local-first when server remove fails', async ({ archivebox }) => {
   const harness = await launchHarness();
   const source = await startFixtureServer();
