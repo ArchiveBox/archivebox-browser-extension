@@ -64,10 +64,9 @@ body {
 }
 
 .archivebox-overlay__page img {
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  margin-top: 1px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
 }
 
 .archivebox-overlay__page > div {
@@ -87,8 +86,11 @@ body {
 
 .archivebox-overlay__page-link--favicon {
   display: block;
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  overflow: hidden;
+  opacity: .9;
 }
 
 .archivebox-overlay__page-title {
@@ -106,9 +108,8 @@ body {
 .archivebox-overlay__favicon-placeholder {
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
-  margin-top: 1px;
+  width: 14px;
+  height: 14px;
   border: 1px solid #d9bebe;
   border-radius: 4px;
   background: #f0dfdf;
@@ -116,8 +117,8 @@ body {
 
 .archivebox-overlay__favicon-placeholder::before {
   content: "";
-  width: 9px;
-  height: 12px;
+  width: 7px;
+  height: 9px;
   border: 2px solid #8b4f4f;
   border-top-width: 4px;
   border-radius: 2px;
@@ -144,8 +145,16 @@ body {
   overflow-wrap: anywhere;
 }
 
+.archivebox-overlay__page-url {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 5px;
+  align-items: start;
+  margin-top: 4px;
+}
+
 .archivebox-overlay__page code {
-  margin-top: 3px;
+  margin-top: 0;
   color: var(--popup-muted);
   background: transparent;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -157,7 +166,7 @@ body {
 
 .archivebox-overlay__page-meta {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) 24px;
+  grid-template-columns: minmax(0, 1fr) 24px;
   gap: 6px;
   align-items: start;
   margin-top: 8px;

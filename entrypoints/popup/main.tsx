@@ -1013,16 +1013,18 @@ function ArchiveBoxOverlay() {
       <div className="archivebox-overlay__page">
         <button className="archivebox-overlay__page-link archivebox-overlay__page-title" onClick={openCurrentSnapshotInOptions} title={t("Show this URL in Saved URLs")}>
           <strong title={pageTitle}>{pageTitle}</strong>
-          <code>{pageUrl}</code>
+          <span className="archivebox-overlay__page-url">
+            <span className="archivebox-overlay__page-link--favicon" aria-hidden="true">
+              {showPageFavicon ? (
+                <img src={pageFavicon || ''} alt="" onError={() => setFaviconFailed(true)} />
+              ) : (
+                <span className="archivebox-overlay__favicon-placeholder" aria-hidden="true" />
+              )}
+            </span>
+            <code>{pageUrl}</code>
+          </span>
         </button>
         <div className="archivebox-overlay__page-meta">
-          <button className="archivebox-overlay__page-link archivebox-overlay__page-link--favicon" onClick={openCurrentSnapshotInOptions} title={t("Show this URL in Saved URLs")}>
-            {showPageFavicon ? (
-              <img src={pageFavicon || ''} alt="" onError={() => setFaviconFailed(true)} />
-            ) : (
-              <span className="archivebox-overlay__favicon-placeholder" aria-hidden="true" />
-            )}
-          </button>
           {!deleted && !deleteBusy && <TagList className="archivebox-overlay__page-tags">
             {snapshot?.tags.map((tag) => (
               <TagChip key={tag} label={tag} onRemove={() => removeTag(tag)} removeTitle={t("Remove tag $1", tag)} />
