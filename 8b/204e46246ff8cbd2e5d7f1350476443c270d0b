@@ -1,0 +1,27 @@
+entrypoints/popup/main.tsx
+  s_7b6896aa6827c3::t_97a50a13b6bcd4 535,1013,1062
+tests/popup.test.ts
+  s_7b6896aa6827c3::t_b56980bf0a9855 1387-1391,1393
+tests/popup-delete.test.ts
+  s_7b6896aa6827c3::t_b56980bf0a9855 58-64
+entrypoints/popup/style.css
+  s_7b6896aa6827c3::t_9c417ccbda1cc8 318
+  s_7b6896aa6827c3::t_c22d4a8a501d32 357
+  s_7b6896aa6827c3::t_97a50a13b6bcd4 66-67,336-337
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8b204e46246ff8cbd2e5d7f1350476443c270d0b",
+  "prompts": {},
+  "sessions": {
+    "s_7b6896aa6827c3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12ef2-0863-7230-8409-df4b9254935c",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
