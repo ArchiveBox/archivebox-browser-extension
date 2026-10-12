@@ -2,7 +2,7 @@
 import { expect } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
-import { launchExtension, waitForSavedSettings } from '../tests/helpers/extension.ts';
+import { launchExtension, readSnapshots, waitForSavedSettings } from '../tests/helpers/extension.ts';
 
 const server = process.env.ARCHIVEBOX_TEST_SERVER;
 const keyFile = process.env.ARCHIVEBOX_TEST_KEY_FILE;
@@ -32,7 +32,7 @@ try {
   const registry = () => options.evaluate(async () => (await chrome.storage.local.get('server_registry')).server_registry);
   await expect.poll(async () => Boolean((await registry())?.servers[0]?.token)).toBe(true);
   const serverId = (await registry()).active_server_id;
-  const entries = () => options.evaluate(async () => (await chrome.storage.local.get('entries')).entries || []);
+  const entries = () => readSnapshots(options);
   const urls = {};
   for (const [name, viewport, mhtml] of [['url-only', false, false], ['screenshot-only', true, false], ['mhtml-only', false, true], ['both', true, true], ['partial', true, false]]) {
     await configure();
@@ -171,7 +171,7 @@ try {
     other.context.on('request', request => { if (request.url().includes('/api/v1/core/archiveresult') && ['POST', 'PATCH'].includes(request.method())) uploads.push(request.url()); });
     const website = await other.context.newPage(); await website.goto(urls.both);
     const panel = await other.context.newPage(); await website.bringToFront(); await panel.goto(`chrome-extension://${other.id}/popup.html`);
-    await expect.poll(() => settings.evaluate(async serverId => (await chrome.storage.local.get('entries')).entries?.[0]?.remote_copies?.[serverId]?.status, otherId), { timeout: 30000 }).toBe('complete');
+    await expect.poll(async () => (await readSnapshots(settings))[0]?.remote_copies?.[otherId]?.status, { timeout: 30000 }).toBe('complete');
     await settings.reload();
     const row = settings.locator('.saved-url-table tbody tr').filter({ hasText: urls.both });
     await expect(row.locator('[data-sync-kind="url"]')).toHaveAttribute('data-state', 'uploaded');

@@ -1000,7 +1000,12 @@ test('ArchiveBox server URLs are ignored before archive requests', async () => {
       });
     }
 
-    expect(await savedEntries(harness)).toHaveLength(1);
+    // listSnapshots applies the UI's server-domain filter. The underlying row
+    // must survive that filter without either blocked request creating a row.
+    expect(await savedEntries(harness)).toEqual([]);
+    expect(await harness.storagePage.evaluate(() => (
+      globalThis as typeof globalThis & { archiveboxModels: { countSnapshots(): Promise<number> } }
+    ).archiveboxModels.countSnapshots())).toBe(1);
   } finally {
     await closeHarness(harness);
   }

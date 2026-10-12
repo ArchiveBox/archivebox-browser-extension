@@ -3,7 +3,7 @@
 import { expect } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { launchExtension, waitForSavedSettings } from '../tests/helpers/extension.ts';
+import { launchExtension, readSnapshots, waitForSavedSettings } from '../tests/helpers/extension.ts';
 
 const serverUrl = process.env.ARCHIVEBOX_TEST_SERVER;
 const keyFile = process.env.ARCHIVEBOX_TEST_KEY_FILE;
@@ -49,7 +49,7 @@ try {
   await enabled.click();
   await expect(enabled).toBeChecked();
   await waitForSavedSettings(options);
-  const entries = () => options.evaluate(async () => (await chrome.storage.local.get('entries')).entries || []);
+  const entries = () => readSnapshots(options);
   const submitted = [];
   context.on('request', request => {
     if (request.url() === serverUrl + '/api/v1/cli/add' && request.method() === 'POST') submitted.push(...request.postDataJSON().urls);

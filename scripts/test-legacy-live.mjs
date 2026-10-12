@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { readSnapshots } from '../tests/helpers/extension.ts';
 
 const server = process.env.ARCHIVEBOX_TEST_LEGACY_SERVER || 'http://127.0.0.1:18773';
 const container = process.env.ARCHIVEBOX_TEST_LEGACY_CONTAINER || 'archivebox-multiserver-legacy';
@@ -63,7 +64,7 @@ try {
   await popup.goto(`chrome-extension://${id}/popup.html`);
   await expect(popup.locator('.archivebox-overlay__status').filter({ hasText: /^Submitted$/ })).toBeVisible({ timeout: 30000 });
   await expect.poll(legacyCount, { timeout: 30000 }).toBe(before + 1);
-  const entry = await popup.evaluate(async () => (await chrome.storage.local.get('entries')).entries.at(-1));
+  const entry = (await readSnapshots(popup)).at(-1);
   expect(entry.url).toBe(url);
   expect(entry.remote_copies[server_id].status).toBe('accepted');
   expect(entry.remote_copies[server_id].crawl_id).toBeUndefined();

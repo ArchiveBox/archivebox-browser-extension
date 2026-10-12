@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { readSnapshots } from '../tests/helpers/extension.ts';
 
 const server = process.env.ARCHIVEBOX_TEST_SERVER;
 const second_server = process.env.ARCHIVEBOX_TEST_SECOND_SERVER;
@@ -46,7 +47,7 @@ try {
   const context = browser.contexts()[0];
   const page = await context.newPage();
   await page.goto(`chrome-extension://${id}/options.html`);
-  const readEntries = () => page.evaluate(async () => (await chrome.storage.local.get('entries')).entries || []);
+  const readEntries = () => readSnapshots(page);
   const config = async () => page.getByRole('navigation').getByRole('button', { name: 'Configuration', exact: true }).click();
   const retention = page.getByLabel('Snapshot metadata retention');
   const serverInput = page.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com');

@@ -7,6 +7,7 @@ import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { readSnapshots } from '../tests/helpers/extension.ts';
 
 const server = process.env.ARCHIVEBOX_TEST_SERVER;
 const keyFile = process.env.ARCHIVEBOX_TEST_KEY_FILE;
@@ -206,9 +207,11 @@ try {
   await reloadExtension();
   expect(page.url()).toBe(optionsURL);
   const afterID = id;
-  await expect.poll(async () => (await storage()).storage_schema_version).toBe(1);
+  await expect.poll(async () => (await storage()).storage_schema_version).toBe(2);
   const afterStorage = await storage();
-  const afterEntries = afterStorage.entries || [];
+  // Only the published build uses entries in browser storage; the upgraded
+  // build must preserve those same snapshots in the current SQLite store.
+  const afterEntries = await readSnapshots(page);
   const afterRegistry = afterStorage.server_registry;
   expect(afterRegistry.servers).toHaveLength(1);
   expect(afterRegistry.servers[0].server).toBe(new URL(server).origin);
@@ -216,7 +219,7 @@ try {
   const serverID = afterRegistry.servers[0].id;
   if (persona) expect(afterRegistry.servers[0].persona).toBe(persona);
   expect(afterStorage.server_policies[serverID]?.upload_screenshots_to_server).toBe(true);
-  expect(afterStorage.entries.map((item) => item.id)).toEqual(oldLocalIDs);
+  expect(afterEntries.map((item) => item.id)).toEqual(oldLocalIDs);
   const migratedRemote = afterEntries.find((item) => item.url === url)?.remote_copies?.[serverID]
     || afterEntries.find((item) => item.url === url)?.unassigned_remote_copy;
   for (const remoteID of oldRemoteIDs) expect([migratedRemote?.crawl_id, migratedRemote?.snapshot_id]).toContain(remoteID);
@@ -241,7 +244,7 @@ try {
   await reloadExtension();
   expect(page.url()).toBe(optionsURL);
   expect((await storage()).server_registry.servers[0].id).toBe(serverID);
-  expect((await storage()).entries[0].id).toBe(oldLocalIDs[0]);
+  expect((await readSnapshots(page))[0].id).toBe(oldLocalIDs[0]);
   console.log(`PASS: published package upgraded in place with stable extension ID ${afterID}, server profile, policy/global preferences, persona data, local IDs, remote copy IDs, and OPFS screenshot bytes across two runtime reloads.`);
 } finally {
   await browser?.close();

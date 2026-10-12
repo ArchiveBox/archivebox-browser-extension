@@ -1,7 +1,7 @@
 // Exercise the task form against real ArchiveBox and OpenCode, with no mocked API.
 import { expect } from '@playwright/test';
 import { readFile, mkdir } from 'node:fs/promises';
-import { launchExtension, waitForSavedSettings } from '../tests/helpers/extension.ts';
+import { launchExtension, readSnapshots, waitForSavedSettings } from '../tests/helpers/extension.ts';
 
 const server = process.env.ARCHIVEBOX_TEST_SERVER;
 const keyFile = process.env.ARCHIVEBOX_TEST_KEY_FILE;
@@ -25,7 +25,7 @@ try {
   await expect.poll(async () => Boolean((await registry())?.servers[0]?.token)).toBe(true);
   await waitForSavedSettings(options);
   const serverId = (await registry()).active_server_id;
-  const entries = () => options.evaluate(async () => (await chrome.storage.local.get('entries')).entries || []);
+  const entries = () => readSnapshots(options);
   const target = await context.newPage();
   const url = `https://example.com/?archivebox-agent-task=${Date.now()}`;
   await target.goto(url);

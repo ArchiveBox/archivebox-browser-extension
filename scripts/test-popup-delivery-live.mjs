@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { readSnapshots } from '../tests/helpers/extension.ts';
 const server = process.env.ARCHIVEBOX_TEST_SERVER;
 const keyFile = process.env.ARCHIVEBOX_TEST_KEY_FILE;
 if (!server || !keyFile) throw new Error('Set ARCHIVEBOX_TEST_SERVER and ARCHIVEBOX_TEST_KEY_FILE for a disposable real server.');
@@ -145,7 +146,7 @@ try {
   }
   expect(addRequests).toHaveLength(1);
   expect(await popup.evaluate('document.querySelector(".archivebox-overlay__status")?.textContent')).toBe('Submitted');
-  const entries = () => options.evaluate(async () => (await chrome.storage.local.get('entries')).entries || []);
+  const entries = () => readSnapshots(options);
   const serverId = await options.evaluate(async () => (await chrome.storage.local.get('server_registry')).server_registry.active_server_id);
   await expect.poll(async () => (await entries()).find(e => e.url === url)?.remote_copies?.[serverId]?.status, { timeout: 30000 }).toBe('complete');
   const saved = (await entries()).find(e => e.url === url);

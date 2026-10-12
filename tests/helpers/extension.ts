@@ -101,8 +101,8 @@ export async function seedExtensionStorage(page: Page, values: Record<string, un
 
 // Saved snapshots live in SQLite behind src/lib/models.ts, which every
 // extension page and the service worker expose as globalThis.archiveboxModels.
-// `page` is any extension page. Reads return every snapshot shown in Saved
-// URLs, oldest first.
+// `page` is any extension page. Reads return snapshots shown in Saved URLs,
+// oldest first, including the same configured-server exclusion as the UI.
 type Models = {
   listSnapshots(query: object, sort: object, page: object): Promise<{ snapshots: Snapshot[] }>;
   putSnapshots(snapshots: Snapshot[]): Promise<void>;

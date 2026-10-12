@@ -3,7 +3,7 @@
 import { expect } from '@playwright/test';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { launchExtension, waitForSavedSettings } from '../tests/helpers/extension.ts';
+import { launchExtension, readSnapshots, waitForSavedSettings } from '../tests/helpers/extension.ts';
 
 const server = process.env.ARCHIVEBOX_TEST_SERVER;
 const keyFile = process.env.ARCHIVEBOX_TEST_KEY_FILE;
@@ -34,7 +34,7 @@ try {
   const serverId = (await registry()).active_server_id;
   const fullPage = options.getByLabel('Save full-page screenshots locally', { exact: true });
   await fullPage.click(); await expect(fullPage).toBeChecked();
-  const entries = () => options.evaluate(async () => (await chrome.storage.local.get('entries')).entries || []);
+  const entries = () => readSnapshots(options);
   const paths = () => options.evaluate(async () => {
     async function walk(directory, prefix = '') {
       const paths = [];
