@@ -55,15 +55,15 @@ body {
 
 .archivebox-overlay__page {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
-  gap: 9px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 6px;
   align-items: start;
   margin-bottom: 8px;
   border: 1px solid var(--popup-border);
   border-radius: var(--popup-radius);
   background: var(--popup-surface);
   color: #241b1b;
-  padding: 8px 42px 8px 8px;
+  padding: 6px 40px 6px 6px;
   min-height: 76px;
 }
 
@@ -173,8 +173,7 @@ body {
 }
 
 .archivebox-overlay .archivebox-tag-chip {
-  padding-top: 0;
-  padding-bottom: 0;
+  padding: 0 5px;
   min-width: 0;
 }
 
