@@ -1011,7 +1011,7 @@ function ArchiveBoxOverlay() {
   return (
     <section className="archivebox-overlay" aria-label={t("ArchiveBox save panel")} aria-busy={deleteBusy}>
       <div className="archivebox-overlay__page">
-        <button className="archivebox-overlay__page-link archivebox-overlay__page-title" onClick={openCurrentSnapshotInOptions} title={t("Show this URL in Saved URLs")}>
+        <button className="archivebox-overlay__page-link archivebox-overlay__page-title" onClick={!deleted && remoteStatus === 'archived' ? viewRemoteSnapshot : openCurrentSnapshotInOptions} title={!deleted && remoteStatus === 'archived' ? t("View archived copy on server") : t("Show this URL in Saved URLs")}>
           <strong title={pageTitle}>{pageTitle}</strong>
           <span className="archivebox-overlay__page-url">
             <span className="archivebox-overlay__page-link--favicon" aria-hidden="true">
@@ -1021,7 +1021,7 @@ function ArchiveBoxOverlay() {
                 <span className="archivebox-overlay__favicon-placeholder" aria-hidden="true" />
               )}
             </span>
-            <code>{pageUrl}</code>
+            <code title={pageUrl}>{pageUrl}</code>
           </span>
         </button>
         <div className="archivebox-overlay__page-meta">

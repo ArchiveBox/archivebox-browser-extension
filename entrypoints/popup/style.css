@@ -64,8 +64,8 @@ body {
 }
 
 .archivebox-overlay__page img {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
 }
 
@@ -86,8 +86,8 @@ body {
 
 .archivebox-overlay__page-link--favicon {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   overflow: hidden;
   opacity: .9;
@@ -108,8 +108,8 @@ body {
 .archivebox-overlay__favicon-placeholder {
   display: grid;
   place-items: center;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   border: 1px solid #d9bebe;
   border-radius: 4px;
   background: #f0dfdf;
@@ -117,8 +117,8 @@ body {
 
 .archivebox-overlay__favicon-placeholder::before {
   content: "";
-  width: 7px;
-  height: 9px;
+  width: 9px;
+  height: 12px;
   border: 2px solid #8b4f4f;
   border-top-width: 4px;
   border-radius: 2px;
@@ -147,13 +147,17 @@ body {
 
 .archivebox-overlay__page-url {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr);
+  grid-template-columns: 18px minmax(0, 1fr);
   gap: 5px;
   align-items: start;
   margin-top: 4px;
 }
 
 .archivebox-overlay__page code {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   margin-top: 0;
   color: var(--popup-muted);
   background: transparent;
