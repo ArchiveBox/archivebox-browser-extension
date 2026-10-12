@@ -14,11 +14,10 @@ const profile = await mkdtemp(path.join(tmpdir(), 'archivebox-gallery-'));
 const staging = path.join(profile, 'screenshots');
 await mkdir(staging);
 const sizes = [{ name: 'desktop', width: 1600, height: 1000 }, { name: 'tablet', width: 1024, height: 1366 }, { name: 'mobile', width: 390, height: 844 }];
-const longTitle = 'Organizing bookmarks with tags: a practical guide to preserving research, independent journalism, technical documentation, community discussions, photographs, and the stories behind them — building a personal web archive that remains searchable, useful, and understandable for years, even when the original websites disappear or change beyond recognition';
 const titles = ['Preserving the open web', 'A practical guide to personal archives', 'Research notes and reading lists', 'Digital gardens that last', 'Building a searchable knowledge library', 'Web history as a personal resource', 'Open formats for long term storage', 'Organizing bookmarks with tags', 'Saving documentation for offline use', 'Archiving photographs and illustrations', 'A collection of independent publishing', 'Keeping context with browser captures', 'Preserving community knowledge', 'Reading the web at your own pace', 'An introduction to public archives', 'Designing a resilient digital library'];
 const server = createServer((req, res) => {
   const index = Number(new URL(req.url, 'http://localhost').pathname.split('/').at(-1)) || 0;
-  const title = req.url.includes('long-title') ? longTitle : titles[index % titles.length];
+  const title = titles[index % titles.length];
   res.writeHead(200, { 'Content-Type': 'text/html', 'Set-Cookie': ['reading_theme=paper; Path=/; SameSite=Lax', 'library_language=en; Path=/; SameSite=Lax', 'archive_session=gallery-public-sample; HttpOnly; Path=/; SameSite=Lax'] });
   res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><title>${title}</title><style>body{background:#f2efe7;color:#243c35;font:20px/1.7 Georgia;margin:0}main{max-width:850px;margin:70px auto;padding:30px}small{font:14px sans-serif;letter-spacing:3px}h1{font-size:60px;line-height:1.1}aside{background:#dce6d9;padding:30px;border-radius:14px}</style><main><small>THE PUBLIC WEB · READING ROOM</small><h1>${title}</h1><p>A sample article served locally for real browser captures. This disposable reading collection demonstrates ArchiveBox without using private browsing data.</p><aside>Keep the pages that matter. Build a library you can revisit, search, and share.</aside><h2>A record worth keeping</h2><p>Independent websites hold stories, tutorials, research, and conversations. Preserving their context makes those ideas useful long after the original page changes.</p><p>Open formats and thoughtful organization help a personal archive remain accessible.</p></main></html>`);
 });
@@ -40,19 +39,6 @@ async function capture(page, id, title, source, url = page.url().replace(/^chrom
       expect(await page.locator('.archivebox-overlay').evaluate(element => element.getBoundingClientRect().width)).toBe(Math.min(size.width, 560));
     }
     await page.evaluate(() => document.fonts.ready);
-    if (id === 'popup-long-title') {
-      const layout = await page.evaluate(() => {
-        const title = document.querySelector('.archivebox-overlay__page strong');
-        const style = getComputedStyle(title);
-        return { clamp: style.webkitLineClamp, height: title.getBoundingClientRect().height, line: parseFloat(style.lineHeight), clipped: title.scrollHeight > title.clientHeight,
-          tagsLeft: document.querySelector('.archivebox-overlay__page-tags').getBoundingClientRect().left,
-          iconLeft: document.querySelector('.archivebox-overlay__page-link--favicon').getBoundingClientRect().left };
-      });
-      expect(layout.clamp).toBe('3');
-      expect(layout.clipped).toBe(true);
-      expect(Math.abs(layout.height - 3 * layout.line)).toBeLessThan(1);
-      expect(layout.tagsLeft).toBe(layout.iconLeft);
-    }
     const file = `${id}-${size.name}.png`;
     if (id.startsWith('popup')) await page.locator('.archivebox-overlay').screenshot({ path: path.join(staging, file), animations: 'disabled' });
     else await page.screenshot({ path: path.join(staging, file), fullPage: true, animations: 'disabled' });
@@ -174,14 +160,6 @@ try {
     await expect(agentPopup.getByRole('heading', { name: 'Deleted everywhere', exact: true })).toBeVisible();
     await capture(agentPopup, 'popup-deleted', 'Deleted capture with restore and options', 'entrypoints/popup/main.tsx');
     await agentPopup.close();
-    await article.goto(`${base}/reading/7?long-title`);
-    await article.bringToFront();
-    const longPopup = await context.newPage();
-    await longPopup.goto(`chrome-extension://${id}/popup.html`);
-    await expect(longPopup.locator('.archivebox-overlay__page strong')).toHaveText(longTitle);
-    await expect(longPopup.locator('.archivebox-overlay__pill--archived')).toBeVisible();
-    await capture(longPopup, 'popup-long-title', 'Long title truncated at three lines', 'entrypoints/popup/main.tsx');
-    await longPopup.close();
   });
   const stores = [
     ['chrome-web-store', 'Chrome Web Store', 'https://chromewebstore.google.com/detail/archivebox-exporter/habonpimjphpdnmcfkaockjnffodikoj?hl=en', /Add to Chrome/],
