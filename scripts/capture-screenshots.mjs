@@ -30,8 +30,14 @@ async function capture(page, id, title, source, url = page.url().replace(/^chrom
   // Capturing a background tab can stall Chromium's compositor on Linux.
   await page.bringToFront();
   await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe('visible');
+  const popupScreen = id.startsWith('popup') ? await page.context().newCDPSession(page) : null;
   for (const size of sizes) {
     await page.setViewportSize({ width: size.width, height: size.height });
+    if (popupScreen) {
+      await popupScreen.send('Emulation.setTouchEmulationEnabled', { enabled: size.name !== 'desktop', maxTouchPoints: 5 });
+      await popupScreen.send('Emulation.setDeviceMetricsOverride', { width: size.width, height: size.height, screenWidth: size.width, screenHeight: size.height, deviceScaleFactor: 1, mobile: size.name === 'mobile' });
+      expect(await page.locator('.archivebox-overlay').evaluate(element => element.getBoundingClientRect().width)).toBe(Math.min(size.width, 560));
+    }
     await page.evaluate(() => document.fonts.ready);
     const file = `${id}-${size.name}.png`;
     if (id.startsWith('popup')) await page.locator('.archivebox-overlay').screenshot({ path: path.join(staging, file), animations: 'disabled' });
@@ -39,6 +45,7 @@ async function capture(page, id, title, source, url = page.url().replace(/^chrom
     const png = await readFile(path.join(staging, file));
     entry.images.push({ ...size, file, imageWidth: png.readUInt32BE(16), imageHeight: png.readUInt32BE(20) });
   }
+  if (popupScreen) { await popupScreen.send('Emulation.clearDeviceMetricsOverride'); await popupScreen.send('Emulation.setTouchEmulationEnabled', { enabled: false }); await popupScreen.detach(); }
   const existing = screenshots.findIndex(item => item.id === id);
   if (existing >= 0) screenshots[existing] = entry; else screenshots.push(entry);
   console.log(`Captured ${id} (${sizes.length} viewports)`);
@@ -147,6 +154,11 @@ try {
     await expect(prompt).toHaveValue('');
     await expect(agentPopup.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
     await capture(agentPopup, 'popup-ai-task', 'Ask AI to archive this whole site', 'entrypoints/popup/main.tsx');
+    await aiButton.click();
+    await capture(agentPopup, 'popup', 'Save the current page', 'entrypoints/popup/main.tsx');
+    await agentPopup.getByRole('button', { name: 'Delete everywhere', exact: true }).click();
+    await expect(agentPopup.getByRole('heading', { name: 'Deleted everywhere', exact: true })).toBeVisible();
+    await capture(agentPopup, 'popup-deleted', 'Deleted capture with restore and options', 'entrypoints/popup/main.tsx');
     await agentPopup.close();
   });
   const stores = [

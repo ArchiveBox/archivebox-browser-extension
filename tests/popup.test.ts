@@ -1377,7 +1377,7 @@ test('native action popup supports local save, tags, depth, captures, navigation
     popup = await openNativePopup(harness, page);
     await waitForPopupText(harness, popup, testPageUrl);
     await waitForPopupText(harness, popup, 'Saved');
-    await clickPopupTitle(harness, popup, 'Close');
+    await popup.cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' }, popup.sessionId);
     await waitForNoNativePopup(harness);
     entries = await savedEntries(harness);
     expect(entries.some((entry) => entry.url === testPageUrl)).toBe(true);
@@ -1407,9 +1407,14 @@ test('native action popup supports local save, tags, depth, captures, navigation
     await waitForPopupText(harness, popup, 'Saved');
     await clickPopupTitle(harness, popup, 'Remove from local saved URLs');
     await waitForNoSavedEntry(harness, testPageUrl);
-    await waitForNoNativePopup(harness);
+    await waitForPopupText(harness, popup, 'Removed locally');
+    await waitForPopupText(harness, popup, 'Restore');
     entries = await savedEntries(harness);
     expect(entries.some((entry) => entry.url === testPageUrl)).toBe(false);
+    await clickPopupTitle(harness, popup, 'Restore');
+    const restored = await waitForSavedEntry(harness, testPageUrl, entry => entry.id === snapshot_id, 'restored local capture');
+    expect(restored.mhtml).toEqual(snapshot?.mhtml);
+    await waitForPopupText(harness, popup, 'Saved');
   } finally {
     await closeHarness(harness);
     await new Promise<void>((resolve) => server.server.close(() => resolve()));

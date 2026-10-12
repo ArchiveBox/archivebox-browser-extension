@@ -1,13 +1,13 @@
-import { defaultServers } from '@/src/lib/server_registry';
+import { defaultServers, requireServer } from '@/src/lib/server_registry';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import { Sparkles, LoaderCircle, Check } from 'lucide-react';
+import { Sparkles, LoaderCircle, Check, X, Trash2, Eye } from 'lucide-react';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { archiveBoxServerUrlMatches, findSubmittedSnapshot, getServerPersonas, hasServerHostPermission, isArchiveablePageUrl, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
+import { archiveBoxServerUrlMatches, findSubmittedSnapshot, getServerPersonas, hasServerHostPermission, isArchiveablePageUrl, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { mhtmlUnsupportedMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
-import { assertLocalCaptureStorageAvailable, deleteSnapshots, ensureSnapshot, getSnapshot, snapshotTags, updateSnapshot } from '@/src/lib/models';
+import { addSnapshots, assertLocalCaptureStorageAvailable, deleteSnapshotFiles, deleteSnapshots, ensureSnapshot, getSnapshot, putSnapshots, snapshotTags, updateSnapshot } from '@/src/lib/models';
 import { createSnapshot } from '@/src/lib/snapshots';
 import { getConfig, getPersonas } from '@/src/lib/storage';
 import { resolvePersona } from '@/src/lib/personaSelection';
@@ -178,7 +178,8 @@ function ArchiveBoxOverlay() {
     return server;
   }
   const [faviconFailed, setFaviconFailed] = useState(false);
-  const [isFadingOut, setIsFadingOut] = useState(false);
+  const [deleted, setDeleted] = useState<'local' | 'everywhere' | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [screenshotCapture, setScreenshotCapture] = useState<ScreenshotCaptureState>({
     phase: 'idle',
     captured: 0,
@@ -455,10 +456,10 @@ function ArchiveBoxOverlay() {
   }, []);
 
   useEffect(() => {
-    if (snapshot && server && !snapshot.remote_copies?.[server.id] && !submittedThisSession.current.has(`${snapshot.id}:${server.id}`)) {
+    if (snapshot && server && !deleted && !deleteBusy && !snapshot.remote_copies?.[server.id] && !submittedThisSession.current.has(`${snapshot.id}:${server.id}`)) {
       sendToArchiveBox(snapshot.url, snapshot.tags, snapshot.depth ?? 0, snapshot.id);
     }
-  }, [snapshot?.id, server?.id, Boolean(snapshot?.remote_copies?.[server_id])]);
+  }, [snapshot?.id, server?.id, Boolean(snapshot?.remote_copies?.[server_id]), deleted, deleteBusy]);
 
   useEffect(() => {
     const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
@@ -541,24 +542,59 @@ function ArchiveBoxOverlay() {
   }
 
   function openCurrentSnapshotInOptions() {
+    if (deleted) { openOptions(); return; }
     if (!snapshot?.id) return;
     openOptions(snapshot.id);
   }
 
-  async function removeLocalSnapshot() {
-    if (!activePage) return;
-    setInput('');
-    setCrawlMenuOpen(false);
-    setSnapshot((current) => current ? { ...current, tags: [] } : unsavedSnapshot(activePage));
-    setAllTags([]);
-    setLocalStatus('removed');
+  async function removeSnapshot(everywhere: boolean) {
+    if (!snapshot || deleteBusy) return;
+    setDeleteBusy(true);
     setOk(null);
-    setStatus(t("Removed from local saved URLs"));
-    // Only the snapshot shown: other snapshots of this URL (earlier captures,
-    // other personas) are separate saves.
-    if (snapshot) await deleteSnapshots([snapshot.id]);
-    setIsFadingOut(true);
-    window.setTimeout(close, 450);
+    setStatus(t('Deleting…'));
+    submittedThisSession.current.add(`${snapshot.id}:${server_id}`);
+    try {
+      // Finish any in-flight submission before reading receipts and deleting its files.
+      await navigator.locks.request(`archivebox-delivery:${snapshot.id}`, async () => {
+        const current = await getSnapshot(snapshot.id) || snapshot;
+        setSnapshot(current);
+        if (everywhere) {
+          const config = await getConfig();
+          for (const id of Object.keys(current.remote_copies || {})) await removeFromArchiveBox(requireServer(config, id), current);
+          await deleteSnapshotFiles(current);
+        }
+        await deleteSnapshots([current.id]);
+      });
+      setDeleted(everywhere ? 'everywhere' : 'local');
+      setLocalStatus('removed');
+      if (everywhere) setRemoteStatus('not_archived');
+      setStatus(everywhere ? t('Deleted everywhere') : t('Removed from local saved URLs'));
+      setOk(true);
+    } catch (error) {
+      setSnapshot(await getSnapshot(snapshot.id) || snapshot);
+      setOk(false);
+      setStatus(t('Deletion failed; your local copy is still available: $1', error instanceof Error ? error.message : String(error)));
+    } finally { setDeleteBusy(false); }
+  }
+
+  async function restoreSnapshot() {
+    if (!snapshot || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      if (deleted === 'local') await putSnapshots([snapshot]);
+      else {
+        const restored = createSnapshot(snapshot.url, snapshot.tags, snapshot.title, snapshot.favIconUrl, snapshot.depth);
+        restored.persona_overrides = { ...snapshot.persona_overrides, [server_id]: selectedPersona };
+        await addSnapshots([restored]);
+      }
+      await refresh();
+      setDeleted(null);
+      setStatus(t('Restored locally'));
+      setOk(true);
+    } catch (error) {
+      setOk(false);
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally { setDeleteBusy(false); }
   }
 
   async function removeRemoteSnapshot() {
@@ -973,13 +1009,13 @@ function ArchiveBoxOverlay() {
         : t("Screenshot");
 
   return (
-    <section className={`archivebox-overlay${isFadingOut ? ' archivebox-overlay--leaving' : ''}`} aria-label={t("ArchiveBox save panel")}>
-      <button className="archivebox-overlay__settings" onClick={() => openOptions()} title={t("Open options")}>
+    <section className="archivebox-overlay" aria-label={t("ArchiveBox save panel")} aria-busy={deleteBusy}>
+      {!deleted && <button className="archivebox-overlay__settings" onClick={() => openOptions()} title={t("Open options")}>
         ⚙
-      </button>
-      <button className="archivebox-overlay__close" onClick={close} title={t("Close")}>
-        ×
-      </button>
+      </button>}
+      {!deleted && <button className="archivebox-overlay__delete" onClick={() => removeSnapshot(true)} disabled={!snapshot || deleteBusy} title={t('Delete everywhere')} aria-label={t('Delete everywhere')}>
+        <X size={26} strokeWidth={2.5} aria-hidden="true" />
+      </button>}
       <div className="archivebox-overlay__page">
         <button className="archivebox-overlay__page-link archivebox-overlay__page-link--favicon" onClick={openCurrentSnapshotInOptions} title={t("Show this URL in Saved URLs")}>
           {showPageFavicon ? (
@@ -993,7 +1029,7 @@ function ArchiveBoxOverlay() {
             <strong>{pageTitle}</strong>
             <code>{pageUrl}</code>
           </button>
-          <TagList className="archivebox-overlay__page-tags">
+          {!deleted && !deleteBusy && <TagList className="archivebox-overlay__page-tags">
             {snapshot?.tags.map((tag) => (
               <TagChip key={tag} label={tag} onRemove={() => removeTag(tag)} removeTitle={t("Remove tag $1", tag)} />
             ))}
@@ -1015,11 +1051,16 @@ function ArchiveBoxOverlay() {
                 autoFocus
               />
             )}
-          </TagList>
+          </TagList>}
 
         </div>
       </div>
 
+      {deleted ? <div className="archivebox-overlay__deleted">
+        <h2>{deleted === 'everywhere' ? t('Deleted everywhere') : t('Removed locally')}</h2>
+        <p>{deleted === 'everywhere' ? t('Restore saves a new capture of this page.') : t('Your server copy is unchanged. Restore brings back the local capture.')}</p>
+        <div><button onClick={restoreSnapshot} disabled={deleteBusy} title={t('Restore')}>{t('Restore')}</button><button onClick={() => openOptions()} title={t('Open options')}>{t('Open options')}</button></div>
+      </div> : !deleteBusy && <>
       <div className="archivebox-overlay__header">
         <div className="archivebox-overlay__capture-actions">
           <button
@@ -1129,11 +1170,11 @@ function ArchiveBoxOverlay() {
           <span className={`archivebox-overlay__pill archivebox-overlay__pill--${localStatus}`}>
             {localStatus === 'saved' ? t("Saved") : localStatus === 'removed' ? t("Removed") : t("Unsaved")}
           </span>
-          <button className="archivebox-overlay__action" onClick={removeLocalSnapshot} disabled={localStatus !== 'saved'} title={t("Remove from local saved URLs")}>
-            🗑
+          <button className="archivebox-overlay__action" onClick={() => removeSnapshot(false)} disabled={localStatus !== 'saved'} title={t("Remove from local saved URLs")}>
+            <Trash2 size={14} aria-hidden="true" />
           </button>
           <button className="archivebox-overlay__action" onClick={openCurrentSnapshotInOptions} disabled={localStatus !== 'saved'} title={t("Show in Saved URLs")}>
-            👁
+            <Eye size={15} aria-hidden="true" />
           </button>
         </div>
         <div className="archivebox-overlay__state-row">
@@ -1167,17 +1208,18 @@ function ArchiveBoxOverlay() {
           ) : (
             <>
               <button className="archivebox-overlay__action" onClick={removeRemoteSnapshot} title={t("Remove from ArchiveBox server")}>
-                🗑
+                <Trash2 size={14} aria-hidden="true" />
               </button>
               <button className="archivebox-overlay__action" onClick={viewRemoteSnapshot} title={t("View archived copy on server")}>
-                👁
+                <Eye size={15} aria-hidden="true" />
               </button>
             </>
           )}
         </div>
       </div>
+      </>}
 
-      <small className={ok === false ? 'archivebox-overlay__status archivebox-overlay__status--error' : 'archivebox-overlay__status'}>
+      {(!deleted || ok === false) && <small role={ok === false ? 'alert' : 'status'} className={ok === false ? 'archivebox-overlay__status archivebox-overlay__status--error' : 'archivebox-overlay__status'}>
         <span />
         {status}
         {statusLink?.status === status ? (
@@ -1185,7 +1227,7 @@ function ArchiveBoxOverlay() {
             {statusLink.label}
           </a>
         ) : null}
-      </small>
+      </small>}
     </section>
   );
 }

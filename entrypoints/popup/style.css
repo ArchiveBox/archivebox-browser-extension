@@ -53,11 +53,6 @@ body {
   transition: opacity 240ms ease, transform 240ms ease;
 }
 
-.archivebox-overlay--leaving {
-  opacity: 0;
-  transform: translateY(-6px) scale(0.98);
-}
-
 .archivebox-overlay__page {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
@@ -68,7 +63,7 @@ body {
   border-radius: var(--popup-radius);
   background: var(--popup-surface);
   color: #241b1b;
-  padding: 8px 68px 8px 8px;
+  padding: 8px 80px 8px 8px;
 }
 
 .archivebox-overlay__page img {
@@ -313,7 +308,7 @@ button.archivebox-overlay__tag-chip {
 }
 
 .archivebox-overlay__settings,
-.archivebox-overlay__close {
+.archivebox-overlay__delete {
   border: 0;
   background: transparent;
   color: var(--popup-muted);
@@ -323,7 +318,7 @@ button.archivebox-overlay__tag-chip {
 }
 
 .archivebox-overlay__settings:hover,
-.archivebox-overlay__close:hover {
+.archivebox-overlay__delete:hover {
   background: #eee5e2;
   color: var(--popup-accent);
 }
@@ -331,7 +326,7 @@ button.archivebox-overlay__tag-chip {
 .archivebox-overlay__settings {
   position: absolute;
   top: 17px;
-  right: 46px;
+  right: 58px;
   width: 24px;
   height: 24px;
   z-index: 2;
@@ -342,19 +337,38 @@ button.archivebox-overlay__tag-chip {
   line-height: 1;
 }
 
-.archivebox-overlay__close {
+.archivebox-overlay__delete {
   position: absolute;
-  top: 17px;
-  right: 18px;
-  width: 24px;
-  height: 24px;
-  font-size: 22px;
+  top: 14px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  font-size: 32px;
+  font-weight: 700;
+  color: #b4232c;
+  background: #fff0ef;
+  border: 1px solid #e8b3b3;
   line-height: 1;
   z-index: 2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
+
+.archivebox-overlay__deleted {
+  padding: 18px;
+  text-align: center;
+  border: 1px solid #e8b3b3;
+  border-radius: var(--popup-radius);
+  background: #fff0ef;
+}
+.archivebox-overlay__deleted h2 { margin: 0; font-size: 18px; color: #a02129; }
+.archivebox-overlay__deleted p { margin: 8px 0 14px; }
+.archivebox-overlay__deleted > div { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
+.archivebox-overlay__deleted button { min-height: 36px; padding: 6px 14px; border: 1px solid var(--popup-border); border-radius: var(--popup-radius-sm); background: var(--popup-surface); cursor: pointer; }
+.archivebox-overlay__deleted button:first-child { background: var(--popup-accent); border-color: var(--popup-accent); color: #fff; font-weight: 600; }
+.archivebox-overlay__delete:hover { background: #ffe1df; color: #941923; }
+.archivebox-overlay__delete:disabled { opacity: .45; cursor: wait; }
 
 .archivebox-overlay input,
 .archivebox-overlay__crawl-button,
