@@ -40,7 +40,7 @@ export async function capturePersonaStorage(persona: Persona) {
     tabs: persona.storage.tabs.filter(tab => matchesDomain(tab.url)),
   };
   const tabs = (await browser.tabs.query({})).filter(tab => {
-    if (!tab.id || !tab.url || !/^https?:/.test(tab.url)) return false;
+    if (!tab.id || !tab.url || tab.discarded || !/^https?:/.test(tab.url)) return false;
     return matchesDomain(tab.url);
   });
   if (!tabs.length) return previous;
