@@ -1384,13 +1384,13 @@ test('native action popup supports local save, tags, depth, captures, navigation
 
     popup = await openNativePopup(harness, page);
     await waitForPopupText(harness, popup, testPageUrl);
-    await clickPopupTitle(harness, popup, 'Open options');
-    // runtime.openOptionsPage focuses the already-open options tab.
-    await expect.poll(() => harness.storagePage.evaluate(async () => {
-      const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
-      return (await api.tabs.query({ active: true, lastFocusedWindow: true }))[0]?.url;
-    })).toBe(`chrome-extension://${harness.extensionId}/options.html`);
+    const optionsOpened = harness.context.waitForEvent('page');
+    await clickPopupTitle(harness, popup, 'Options');
+    const newOptions = await optionsOpened;
+    await newOptions.waitForURL(`chrome-extension://${harness.extensionId}/options.html`);
+    expect(newOptions).not.toBe(harness.storagePage);
     await waitForNoNativePopup(harness);
+    await newOptions.close();
 
     popup = await openNativePopup(harness, page);
     await waitForPopupText(harness, popup, testPageUrl);

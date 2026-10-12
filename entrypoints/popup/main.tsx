@@ -532,7 +532,7 @@ function ArchiveBoxOverlay() {
   function openOptions(id?: string) {
     // Opening settings should not depend on a background worker waking up.
     if (!id) {
-      void browser.runtime.openOptionsPage();
+      void browser.tabs.create({ url: browser.runtime.getURL('/options.html') });
       return;
     }
     browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
@@ -1010,7 +1010,7 @@ function ArchiveBoxOverlay() {
 
   return (
     <section className="archivebox-overlay" aria-label={t("ArchiveBox save panel")} aria-busy={deleteBusy}>
-      {!deleted && <button className="archivebox-overlay__settings" onClick={() => openOptions()} title={t("Open options")}>
+      {!deleted && <button className="archivebox-overlay__settings" onClick={() => openOptions()} title={t("Options")} aria-label={t("Options")}>
         <Settings size={24} strokeWidth={2} aria-hidden="true" />
       </button>}
       {!deleted && <button className="archivebox-overlay__delete" onClick={() => removeSnapshot(true)} disabled={!snapshot || deleteBusy} title={t('Delete everywhere')} aria-label={t('Delete everywhere')}>
@@ -1059,7 +1059,7 @@ function ArchiveBoxOverlay() {
       {deleted ? <div className="archivebox-overlay__deleted">
         <h2>{deleted === 'everywhere' ? t('Deleted everywhere') : t('Removed locally')}</h2>
         <p>{deleted === 'everywhere' ? t('Restore saves a new capture of this page.') : t('Your server copy is unchanged. Restore brings back the local capture.')}</p>
-        <div><button onClick={restoreSnapshot} disabled={deleteBusy} title={t('Restore')}>{t('Restore')}</button><button onClick={() => openOptions()} title={t('Open options')}>{t('Open options')}</button></div>
+        <div><button onClick={restoreSnapshot} disabled={deleteBusy} title={t('Restore')}>{t('Restore')}</button><button className="archivebox-overlay__options-icon" onClick={() => openOptions()} title={t('Options')} aria-label={t('Options')}><Settings size={24} strokeWidth={2} aria-hidden="true" /></button></div>
       </div> : !deleteBusy && <>
       <div className="archivebox-overlay__header">
         <div className="archivebox-overlay__capture-actions">

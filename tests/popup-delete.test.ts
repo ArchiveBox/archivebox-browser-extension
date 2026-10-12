@@ -55,7 +55,13 @@ test('delete everywhere stays open, reports server failure, and can restore the 
     }, original.mhtml!.path)).toBe(false);
     await expect(popup.getByRole('button', { name: 'Persona', exact: true })).toHaveCount(0);
     await expect(popup.getByPlaceholder('+ tag', { exact: true })).toHaveCount(0);
-    await expect(popup.getByRole('button', { name: 'Open options', exact: true })).toBeVisible();
+    await expect(popup.getByRole('button', { name: 'Options', exact: true })).toBeVisible();
+    const optionsOpened = harness.context.waitForEvent('page');
+    await popup.getByRole('button', { name: 'Options', exact: true }).click();
+    const newOptions = await optionsOpened;
+    await newOptions.waitForURL(`chrome-extension://${harness.id}/options.html`);
+    expect(newOptions).not.toBe(options);
+    await newOptions.close();
     await popup.screenshot({ path: testInfo.outputPath('popup-deleted.png') });
     await popup.getByRole('button', { name: 'Restore', exact: true }).click();
     await expect(popup.getByRole('heading', { name: 'Deleted everywhere', exact: true })).toHaveCount(0);

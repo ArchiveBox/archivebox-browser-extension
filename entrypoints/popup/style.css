@@ -63,7 +63,8 @@ body {
   border-radius: var(--popup-radius);
   background: var(--popup-surface);
   color: #241b1b;
-  padding: 8px 80px 8px 8px;
+  padding: 8px 42px 8px 8px;
+  min-height: 76px;
 }
 
 .archivebox-overlay__page img {
@@ -314,7 +315,7 @@ button.archivebox-overlay__tag-chip {
   color: var(--popup-muted);
   border-radius: var(--popup-radius-sm);
   position: absolute;
-  top: 12px;
+  top: 10px;
   width: 36px;
   height: 36px;
   padding: 0;
@@ -332,7 +333,8 @@ button.archivebox-overlay__tag-chip {
 }
 
 .archivebox-overlay__settings {
-  right: 50px;
+  top: 46px;
+  right: 12px;
 }
 
 .archivebox-overlay__delete {
@@ -352,6 +354,7 @@ button.archivebox-overlay__tag-chip {
 .archivebox-overlay__deleted > div { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
 .archivebox-overlay__deleted button { min-height: 36px; padding: 6px 14px; border: 1px solid var(--popup-border); border-radius: var(--popup-radius-sm); background: var(--popup-surface); cursor: pointer; }
 .archivebox-overlay__deleted button:first-child { background: var(--popup-accent); border-color: var(--popup-accent); color: #fff; font-weight: 600; }
+.archivebox-overlay__deleted .archivebox-overlay__options-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; padding: 0; }
 .archivebox-overlay__delete:hover { color: #941923; }
 .archivebox-overlay__delete:disabled { opacity: .45; cursor: wait; }
 
