@@ -671,6 +671,9 @@ button.archivebox-overlay__tag-chip {
 }
 
 .archivebox-overlay__action {
+  display: grid;
+  place-items: center;
+  padding: 0;
   width: 24px;
   height: 22px;
   min-height: 22px;
