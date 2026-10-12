@@ -807,11 +807,11 @@ async function shouldAutoArchive(url: string): Promise<boolean> {
   }
 }
 
-async function syncSnapshotToServer(snapshot: Snapshot): Promise<boolean> {
+async function syncSnapshotToServer(snapshot: Snapshot, tabId?: number): Promise<boolean> {
   const server = defaultServers(await getConfig())[0];
   if (!server) return false;
   try {
-    await submitSnapshot(server, snapshot);
+    await submitSnapshot(server, snapshot, undefined, undefined, undefined, tabId);
     return true;
   } catch (error) {
     console.warn(`ArchiveBox: submission to ${server.id} failed: ${errorMessage(error)}`);
@@ -846,7 +846,7 @@ async function autoArchive(
   // Capture can outlive a settings change. Do not submit a URL after the user
   // disables automatic archiving or excludes it while its capture is running.
   if (!(await shouldAutoArchive(snapshot.url))) return;
-  await syncSnapshotToServer(snapshot);
+  await syncSnapshotToServer(snapshot, tab.id);
 }
 
 async function saveTab(tab?: Browser.tabs.Tab): Promise<void> {
@@ -857,7 +857,7 @@ async function saveTab(tab?: Browser.tabs.Tab): Promise<void> {
   try {
     const { snapshot, created } = await ensureSnapshotForTab(tab);
     await captureConfiguredSnapshotArtifacts(tab, snapshot, created);
-    await syncSnapshotToServer(snapshot);
+    await syncSnapshotToServer(snapshot, tab.id);
   } catch (error) {
     console.error('Failed to save tab to ArchiveBox:', error);
   }
@@ -960,7 +960,9 @@ export default defineBackground(() => {
                 await captureConfiguredSnapshotArtifacts(tab, snapshot, message.body.only_new === false);
               });
             return new Promise<Awaited<ReturnType<typeof submitSnapshot>>>((resolve, reject) => {
-              void submitSnapshot(server, { ...snapshot, tags: message.body.tags, depth: message.body.depth ?? 0 }, captureReady, resolve, message.body.only_new)
+              void submitSnapshot(server, { ...snapshot, tags: message.body.tags, depth: message.body.depth ?? 0,
+                ...(message.body.persona === undefined ? {} : { persona_overrides: { ...snapshot.persona_overrides, [server.id]: message.body.persona } }),
+              }, captureReady, resolve, message.body.only_new, message.tabId)
                 .then(resolve, reject);
             });
           }

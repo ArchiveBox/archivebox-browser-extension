@@ -153,15 +153,18 @@ export async function getArchiveBoxServerUrl(): Promise<string> {
 export async function getPersonas(): Promise<{
   personas: Persona[];
   active_persona: string;
+  anonymous_persona?: string;
 }> {
   await migratePublishedStorage();
-  const { personas = [], active_persona = '' } = await browser.storage.local.get([
+  const { personas = [], active_persona = '', anonymous_persona } = await browser.storage.local.get([
     'personas',
     'active_persona',
+    'anonymous_persona',
   ]);
   return {
     personas: Array.isArray(personas) ? (personas as Persona[]) : [],
     active_persona: String(active_persona || ''),
+    anonymous_persona: anonymous_persona as string | undefined,
   };
 }
 
@@ -198,20 +201,27 @@ export function defaultPersona(name: string): Persona {
   };
 }
 
-export async function ensurePersonas(): Promise<{
-  personas: Persona[];
-  active_persona: string;
-}> {
-  let { personas, active_persona } = await getPersonas();
-  if (personas.length === 0) {
-    personas = ['Private', 'Work', 'Anonymous'].map(defaultPersona);
-    await setPersonas(personas);
-  }
-  if (!active_persona && personas[0]) {
-    active_persona = personas[0].id;
-    await setActivePersona(active_persona);
-  }
-  return { personas, active_persona };
+export async function ensurePersonas() {
+  return navigator.locks.request('archivebox-personas', async () => {
+    let { personas, active_persona, anonymous_persona } = await getPersonas();
+    if (personas.length === 0) {
+      personas = ['Private', 'Work'].map(defaultPersona);
+      await setPersonas(personas);
+    }
+    if (anonymous_persona === undefined) {
+      const target = 'brave' in navigator ? 'brave' : import.meta.env.BROWSER || 'chrome';
+      const name = `Anonymous ${target[0]!.toUpperCase()}${target.slice(1)}`;
+      const persona = personas.find(item => item.name === name) || defaultPersona(name);
+      if (!personas.includes(persona)) { personas.push(persona); await setPersonas(personas); }
+      anonymous_persona = persona.id;
+      await browser.storage.local.set({ anonymous_persona });
+    }
+    if (!active_persona && personas[0]) {
+      active_persona = personas[0].id;
+      await setActivePersona(active_persona);
+    }
+    return { personas, active_persona, anonymous_persona };
+  });
 }
 
 export { defaultConfig };

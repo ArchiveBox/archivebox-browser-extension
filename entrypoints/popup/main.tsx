@@ -9,7 +9,8 @@ import { mhtmlUnsupportedMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapt
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { assertLocalCaptureStorageAvailable, deleteSnapshots, ensureSnapshot, getSnapshot, snapshotTags, updateSnapshot } from '@/src/lib/models';
 import { createSnapshot } from '@/src/lib/snapshots';
-import { getConfig } from '@/src/lib/storage';
+import { getConfig, getPersonas } from '@/src/lib/storage';
+import { resolvePersona } from '@/src/lib/personaSelection';
 import { matchingTagSuggestions } from '@/src/lib/tags';
 import type { ArchiveDepth, RuntimeMessage, RuntimeResponse, Snapshot, ServerDestination } from '@/src/lib/types';
 import { compactUuid } from '@/src/lib/uuid';
@@ -153,8 +154,9 @@ function ArchiveBoxOverlay() {
     setPersonasError('');
     if (!server) return;
     setPersonasLoading(true);
+    void getPersonas().then(({ personas }) => { if (current) setServerPersonas(items => [...items, ...personas]); });
     void getServerPersonas(server).then(
-      items => { if (current) setServerPersonas(items); },
+      items => { if (current) setServerPersonas(local => [...local, ...items]); },
       error => { if (current) setPersonasError(error instanceof Error ? error.message : String(error)); },
     ).finally(() => { if (current) setPersonasLoading(false); });
     return () => { current = false; };
@@ -210,12 +212,13 @@ function ArchiveBoxOverlay() {
   }, []);
 
   async function refresh(checkServer = false) {
-    const configured = defaultServers(await getConfig())[0] || null;
-    setServer(configured);
+    let configured = defaultServers(await getConfig())[0] || null;
     const archivebox_server_url = configured?.server || '';
     const nextActivePage = activePage || await getActivePage();
     setActivePage(nextActivePage);
     const { currentSnapshot: savedSnapshot } = await getCurrentSnapshot(nextActivePage);
+    if (configured) configured = await resolvePersona(configured, savedSnapshot, nextActivePage.tabId);
+    setServer(configured);
     let currentSnapshot = savedSnapshot;
     const cached = currentSnapshot.remote_copies?.[configured?.id || ''];
     let checkError = '';
@@ -310,14 +313,16 @@ function ArchiveBoxOverlay() {
   ): Promise<void> {
     let latestSnapshot = await getSnapshot(snapshot_id);
     if (!server || !latestSnapshot || (remoteStatus !== 'archived' && !latestSnapshot.remote_copies?.[server_id]?.crawl_id)) return;
-    if (kind === 'screenshot' && !server.policy.upload_screenshots_to_server && !server.policy.upload_viewport_screenshots_to_server) return;
-    if (kind === 'mhtml' && !server.policy.upload_mhtml_to_server) return;
+    const connection = await resolvePersona(defaultServers(await getConfig())[0] || server, latestSnapshot);
+    if (kind === 'screenshot' && !connection.policy.upload_screenshots_to_server && !connection.policy.upload_viewport_screenshots_to_server) return;
+    if (kind === 'mhtml' && !connection.policy.upload_mhtml_to_server) return;
+    if (kind === 'singlefile' && !connection.policy.upload_singlefile_to_server) return;
 
     try {
       setOk(null);
       setStatus(t("Uploading $1 to ArchiveBox Server...", artifactLabel));
       latestSnapshot = await ensureServerSnapshotId(snapshot_id, latestSnapshot);
-      await uploadSnapshotCaptureArtifactsToArchiveBox(destination(), latestSnapshot);
+      await uploadSnapshotCaptureArtifactsToArchiveBox(connection, latestSnapshot);
       setOk(true);
       setRemoteDetail('');
       setStatus(t("Saved local $1 and uploaded to ArchiveBox Server", artifactLabel));
@@ -377,7 +382,7 @@ function ArchiveBoxOverlay() {
     localSnapshotId?: string,
     requestPermission = false,
     onlyNew?: boolean,
-    persona = snapshot?.persona_overrides?.[server_id] ?? (snapshot?.remote_copies?.[server_id]?.persona === null ? 'Default' : snapshot?.remote_copies?.[server_id]?.persona),
+    persona = snapshot?.persona_overrides?.[server_id] ?? (snapshot?.remote_copies?.[server_id]?.persona === null ? 'Default' : snapshot?.remote_copies?.[server_id]?.persona) ?? server?.persona ?? undefined,
     replaceFresh = false,
   ) {
     if (localSnapshotId) submittedThisSession.current.add(`${localSnapshotId}:${destination().id}`);
@@ -995,7 +1000,7 @@ function ArchiveBoxOverlay() {
             {suggestions.map((tag) => (
               <TagChip key={tag} label={tag} suffix="+" variant="suggestion" onClick={() => addTag(tag)} />
             ))}
-            {localStatus !== 'removed' && (
+            {snapshot && localStatus !== 'removed' && (
               <TagInputChip
                 value={input}
                 placeholder={t("+ tag")}
@@ -1081,7 +1086,7 @@ function ArchiveBoxOverlay() {
           )}
         </div>
           <div className="archivebox-overlay__persona">
-            <button aria-label={t("Persona")} aria-expanded={personaMenuOpen}
+            <button aria-label={t("Persona")} title={selectedPersona} aria-expanded={personaMenuOpen}
               disabled={!server || !snapshot || personasLoading || changingPersona}
               onClick={() => setPersonaMenuOpen(open => !open)}><span>👤</span><span className="archivebox-overlay__persona-name">{selectedPersona}</span><span>▾</span></button>
             {personaMenuOpen && <div className="archivebox-overlay__persona-menu" role="menu">

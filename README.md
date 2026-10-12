@@ -78,6 +78,17 @@ automatically; the last-synced time changes only after a successful upload.
 Uncheck Auto-sync to pause updates. Switching persona tabs only changes the
 editor; **Use for archiving** changes the profile used for captures.
 
+Configuration has separate **Default logged-in persona** and **Default anonymous
+persona** selectors. The latter starts with an ordinary **Anonymous Chrome**
+(or Brave, Edge, Firefox, Safari) profile. It can sync browser settings and selected
+cookies, including an alternate account, through the same opt-in sync controls.
+The popup shows the detected persona and lets you override it for that capture.
+With cookie and page-access permissions, a live page without site cookies,
+local/session storage, or IndexedDB uses the anonymous default. Other or unknown
+states use the logged-in default. Visibility follows the server persona settings.
+Browser-captured files stay local when using the anonymous default; the server
+captures with that profile's own state.
+
 ## Local Captures
 
 Viewport screenshots and MHTML captures (Chrome/Edge/Brave) are enabled by default, along with uploading these artifacts to the selected server. Safari and Firefox do not capture MHTML. Full-page capture and upload are separate opt-in settings. Viewport and full-page images are stored independently when both are enabled. Existing explicit capture and upload choices are preserved.

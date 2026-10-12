@@ -1,4 +1,5 @@
 import { getConfig, getPersonas } from './storage';
+import { resolvePersona } from './personaSelection';
 import { getSnapshot, updateSnapshot, updateSnapshots } from './models';
 import { t } from './i18n';
 import { archiveBoxServerUrlMatches, isArchiveablePageUrl } from './archiveboxUrlExclusions';
@@ -726,8 +727,10 @@ export async function submitSnapshot(
   captureReady?: Promise<void> | (() => Promise<void>),
   onAccepted?: (receipt: ArchiveSubmissionReceipt) => void,
   only_new?: boolean,
+  tabId?: number,
 ): Promise<ArchiveSubmissionReceipt> {
   return await navigator.locks.request<Promise<ArchiveSubmissionReceipt>>(`archivebox-delivery:${snapshot.id}`, { mode: 'shared' }, async () => {
+    server = await resolvePersona(server, snapshot, tabId);
     let captureAttempted = false;
     const captureAndDeliver = (remoteId?: string) => navigator.locks.request(`archivebox-capture-delivery:${snapshot.id}`, async () => {
       // Acceptance stays concurrent, but a later capture must not replace these local bytes mid-upload.

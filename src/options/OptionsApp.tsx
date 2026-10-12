@@ -811,6 +811,7 @@ function OptionsMain() {
   const checkedArtifactReceipts = useRef(new Set<string>());
   const [personas, setPersonasState] = useState<Persona[]>([]);
   const [active_persona, setActivePersonaState] = useState('');
+  const [anonymousPersonaId, setAnonymousPersonaId] = useState('');
   const [cookiesByDomain, setCookiesByDomain] = useState<Record<string, StoredCookie[]>>({});
   const [selectedCookieDomains, setSelectedCookieDomains] = useState<Set<string>>(new Set());
   const [viewedPersonaId, setViewedPersonaId] = useState('');
@@ -868,6 +869,7 @@ function OptionsMain() {
     setCookieSyncStates(await getCookieSyncStates());
     setPersonasState(personaState.personas);
     setActivePersonaState(personaState.active_persona);
+    setAnonymousPersonaId(personaState.anonymous_persona || '');
   }
 
   useEffect(() => {
@@ -2258,16 +2260,23 @@ function OptionsMain() {
             <button disabled={!archiveboxServerUrlIsValid} onClick={testApiKeyValue}>{t("Test")}</button>
             <StatusBadge status={apiStatus} />
           </Field>
-          <Field label={t("Default Persona")}>
-            <select aria-label="Default Persona" value={server?.persona ?? 'Default'} disabled={!server?.token}
-              onChange={(event) => saveServer({ persona: event.currentTarget.value === 'Default' ? null : event.currentTarget.value })}>
-              {[...new Set(['Default', ...(server?.persona ? [server.persona] : []), ...server_personas.map((item) => item.name)])].map((name) => (
+          {(['logged-in', 'anonymous'] as const).map(kind => {
+            const anonymous = kind === 'anonymous';
+            const localId = anonymous ? (server?.policy.anonymous_persona === undefined ? anonymousPersonaId : server.policy.anonymous_local_persona_id) : server?.policy.local_persona_id;
+            const selected = personas.find(item => item.id === localId)?.name || (anonymous ? server?.policy.anonymous_persona : server?.persona) || 'Default';
+            const label = anonymous ? t('Default anonymous persona') : t('Default logged-in persona');
+            return <Field key={kind} label={label}>
+            <select aria-label={label} value={selected} disabled={!server?.token}
+              onChange={(event) => { const name = event.currentTarget.value; const id = personas.find(item => item.name === name)?.id;
+                void saveServer(anonymous ? { policy: { anonymous_persona: name, anonymous_local_persona_id: id } }
+                  : { persona: name === 'Default' ? null : name, policy: { local_persona_id: id } }); }}>
+              {[...new Set(['Default', selected, ...personas.map(item => item.name), ...server_personas.map((item) => item.name)])].map((name) => (
                 <option key={name} value={name}>{name}</option>
               ))}
             </select>
-          </Field>
+          </Field>; })}
           {persona_error && <p className="status error">{persona_error}</p>}
-          <p className="help-text">The selected server persona is used for popup and automatic submissions. Cookie uploads require separate consent for this server.</p>
+          <p className="help-text">{t('Pages without site cookies or browser storage use the anonymous default. Other pages use the logged-in default. Override either in the popup. Profile sync is optional; anonymous profiles can include selected account cookies.')}</p>
           <div className="doc-links">
             <a href="https://github.com/ArchiveBox/archivebox-browser-extension#setup" target="_blank" rel="noopener noreferrer">{t("Extension setup guide")}</a>
             <a href="https://github.com/ArchiveBox/ArchiveBox/wiki/Configuration#public_index--public_snapshots--public_add_view" target="_blank" rel="noopener noreferrer">{t("ArchiveBox server config")}</a>

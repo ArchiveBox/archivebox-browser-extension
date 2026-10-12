@@ -62,8 +62,8 @@ try {
     await expect.poll(async () => (await registry())?.servers.find((item) => item.server === address)?.server).toBe(address);
     await keyInput.fill(token);
     await keyInput.blur();
-    await expect(page.getByLabel('Default Persona').locator(`option[value="${persona}"]`)).toHaveCount(1);
-    await page.getByLabel('Default Persona').selectOption(persona);
+    await expect(page.getByLabel('Default logged-in persona').locator(`option[value="${persona}"]`)).toHaveCount(1);
+    await page.getByLabel('Default logged-in persona').selectOption(persona);
     await expect.poll(async () => (await registry()).servers.find((item) => item.server === address)?.persona).toBe(persona);
     return (await registry()).active_server_id;
   };
