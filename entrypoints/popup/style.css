@@ -137,6 +137,10 @@ body {
 }
 
 .archivebox-overlay__page strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
   color: #201819;
   font-size: 14px;
   line-height: 1.2;
@@ -155,6 +159,8 @@ body {
 }
 
 .archivebox-overlay__page-tags {
+  grid-column: 1 / -1;
+  margin-top: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;

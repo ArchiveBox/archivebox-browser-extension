@@ -1026,9 +1026,10 @@ function ArchiveBoxOverlay() {
         </button>
         <div>
           <button className="archivebox-overlay__page-link archivebox-overlay__page-title" onClick={openCurrentSnapshotInOptions} title={t("Show this URL in Saved URLs")}>
-            <strong>{pageTitle}</strong>
+            <strong title={pageTitle}>{pageTitle}</strong>
             <code>{pageUrl}</code>
           </button>
+        </div>
           {!deleted && !deleteBusy && <TagList className="archivebox-overlay__page-tags">
             {snapshot?.tags.map((tag) => (
               <TagChip key={tag} label={tag} onRemove={() => removeTag(tag)} removeTitle={t("Remove tag $1", tag)} />
@@ -1053,7 +1054,6 @@ function ArchiveBoxOverlay() {
             )}
           </TagList>}
 
-        </div>
       </div>
 
       {deleted ? <div className="archivebox-overlay__deleted">
