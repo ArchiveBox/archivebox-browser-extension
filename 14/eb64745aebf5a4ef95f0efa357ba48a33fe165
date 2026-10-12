@@ -1,0 +1,19 @@
+scripts/capture-screenshots.mjs
+  s_7b6896aa6827c3::t_584275cb7e16db 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "14eb64745aebf5a4ef95f0efa357ba48a33fe165",
+  "prompts": {},
+  "sessions": {
+    "s_7b6896aa6827c3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12ef2-0863-7230-8409-df4b9254935c",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
