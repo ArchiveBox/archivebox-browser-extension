@@ -1,0 +1,24 @@
+src/lib/archivebox.ts
+  s_10bc94d001be49::t_56018a6877b727 199-201
+tests/popup.test.ts
+  s_10bc94d001be49::t_a661bcdb2a2fec 1068
+  s_10bc94d001be49::t_a8c131b4c6d627 1034-1045,1047-1049,1051-1053,1060-1067,1069-1071,1074-1080
+  s_10bc94d001be49::t_aa7a3d6e804d61 1046
+  s_10bc94d001be49::t_5211e742885af2 1050,1054-1059,1072-1073
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "976abb3b3b61e4032bce8a6102dadc48da2ded98",
+  "prompts": {},
+  "sessions": {
+    "s_10bc94d001be49": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11f62-2c55-7051-a677-585a21b42fb4",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
