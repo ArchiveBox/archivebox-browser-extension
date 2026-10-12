@@ -48,7 +48,7 @@ body {
   color: #302826;
   font-size: 12px;
   line-height: 1.4;
-  padding: 10px;
+  padding: 8px;
   box-shadow: none;
   transition: opacity 240ms ease, transform 240ms ease;
 }
@@ -313,7 +313,15 @@ button.archivebox-overlay__tag-chip {
   background: transparent;
   color: var(--popup-muted);
   border-radius: var(--popup-radius-sm);
-  height: 32px;
+  position: absolute;
+  top: 12px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
 }
 
@@ -324,50 +332,27 @@ button.archivebox-overlay__tag-chip {
 }
 
 .archivebox-overlay__settings {
-  position: absolute;
-  top: 17px;
-  right: 58px;
-  width: 24px;
-  height: 24px;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  line-height: 1;
+  right: 50px;
 }
 
 .archivebox-overlay__delete {
-  position: absolute;
-  top: 14px;
-  right: 16px;
-  width: 36px;
-  height: 36px;
-  font-size: 32px;
-  font-weight: 700;
+  right: 12px;
   color: #b4232c;
-  background: #fff0ef;
-  border: 1px solid #e8b3b3;
-  line-height: 1;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .archivebox-overlay__deleted {
   padding: 18px;
   text-align: center;
-  border: 1px solid #e8b3b3;
+  border: 1px solid var(--popup-border);
   border-radius: var(--popup-radius);
-  background: #fff0ef;
+  background: var(--popup-surface);
 }
-.archivebox-overlay__deleted h2 { margin: 0; font-size: 18px; color: #a02129; }
+.archivebox-overlay__deleted h2 { margin: 0; font-size: 18px; color: inherit; }
 .archivebox-overlay__deleted p { margin: 8px 0 14px; }
 .archivebox-overlay__deleted > div { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
 .archivebox-overlay__deleted button { min-height: 36px; padding: 6px 14px; border: 1px solid var(--popup-border); border-radius: var(--popup-radius-sm); background: var(--popup-surface); cursor: pointer; }
 .archivebox-overlay__deleted button:first-child { background: var(--popup-accent); border-color: var(--popup-accent); color: #fff; font-weight: 600; }
-.archivebox-overlay__delete:hover { background: #ffe1df; color: #941923; }
+.archivebox-overlay__delete:hover { color: #941923; }
 .archivebox-overlay__delete:disabled { opacity: .45; cursor: wait; }
 
 .archivebox-overlay input,

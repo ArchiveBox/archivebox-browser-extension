@@ -1,7 +1,7 @@
 import { defaultServers, requireServer } from '@/src/lib/server_registry';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import { Sparkles, LoaderCircle, Check, X, Trash2, Eye } from 'lucide-react';
+import { Sparkles, LoaderCircle, Check, X, Trash2, Eye, Settings } from 'lucide-react';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { archiveBoxServerUrlMatches, findSubmittedSnapshot, getServerPersonas, hasServerHostPermission, isArchiveablePageUrl, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
@@ -1011,10 +1011,10 @@ function ArchiveBoxOverlay() {
   return (
     <section className="archivebox-overlay" aria-label={t("ArchiveBox save panel")} aria-busy={deleteBusy}>
       {!deleted && <button className="archivebox-overlay__settings" onClick={() => openOptions()} title={t("Open options")}>
-        ⚙
+        <Settings size={24} strokeWidth={2} aria-hidden="true" />
       </button>}
       {!deleted && <button className="archivebox-overlay__delete" onClick={() => removeSnapshot(true)} disabled={!snapshot || deleteBusy} title={t('Delete everywhere')} aria-label={t('Delete everywhere')}>
-        <X size={26} strokeWidth={2.5} aria-hidden="true" />
+        <X size={24} strokeWidth={2} aria-hidden="true" />
       </button>}
       <div className="archivebox-overlay__page">
         <button className="archivebox-overlay__page-link archivebox-overlay__page-link--favicon" onClick={openCurrentSnapshotInOptions} title={t("Show this URL in Saved URLs")}>
