@@ -10,8 +10,7 @@ export function parseLocalDate(value: string): Date {
 export async function loadHistorySnapshots(
   startDateValue: string,
   endDateValue: string,
-  existingUrls: Set<string>,
-): Promise<Array<Snapshot & { selected: boolean; isNew: boolean }>> {
+): Promise<Snapshot[]> {
   const startDate = parseLocalDate(startDateValue);
   const endDate = parseLocalDate(endDateValue);
   startDate.setHours(0, 0, 0, 0);
@@ -31,27 +30,14 @@ export async function loadHistorySnapshots(
   return historyItems.map((item) => ({
     ...createSnapshot(item.url || '', [], item.title || ''),
     timestamp: new Date(item.lastVisitTime || Date.now()).toISOString(),
-    selected: false,
-    isNew: !existingUrls.has(item.url || ''),
   }));
 }
 
-export async function loadBookmarkSnapshots(
-  existingUrls: Set<string>,
-): Promise<Array<Snapshot & { selected: boolean; isNew: boolean }>> {
-  function walk(nodes: Browser.bookmarks.BookmarkTreeNode[]): Array<Snapshot & {
-    selected: boolean;
-    isNew: boolean;
-  }> {
+export async function loadBookmarkSnapshots(): Promise<Snapshot[]> {
+  function walk(nodes: Browser.bookmarks.BookmarkTreeNode[]): Snapshot[] {
     return nodes.flatMap((node) => {
-      const entries: Array<Snapshot & { selected: boolean; isNew: boolean }> = [];
-      if (node.url) {
-        entries.push({
-          ...createSnapshot(node.url, [], node.title || ''),
-          selected: false,
-          isNew: !existingUrls.has(node.url),
-        });
-      }
+      const entries: Snapshot[] = [];
+      if (node.url) entries.push(createSnapshot(node.url, [], node.title || ''));
       if (node.children) entries.push(...walk(node.children));
       return entries;
     });
@@ -67,8 +53,7 @@ type ExportedPage = { url: string; title: string; timestamp?: string; source: Ex
 // export locally, then reuse the same review, deduplication, and save flow.
 export async function loadSafariExportSnapshots(
   files: File[], source: SafariImportSource, startDateValue: string, endDateValue: string,
-  existingUrls: Set<string>,
-): Promise<Array<Snapshot & { selected: boolean; isNew: boolean }>> {
+): Promise<Snapshot[]> {
   const { unzipSync, strFromU8 } = await import('fflate');
   const maxBytes = 64 * 1024 * 1024;
   let totalBytes = 0;
@@ -141,6 +126,5 @@ export async function loadSafariExportSnapshots(
   return [...unique.values()].map(page => ({
     ...createSnapshot(page.url, [], page.title),
     ...(page.timestamp ? { timestamp: page.timestamp } : {}),
-    selected: false, isNew: !existingUrls.has(page.url),
   }));
 }

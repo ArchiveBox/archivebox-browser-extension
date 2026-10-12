@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { launchExtension, waitForSavedSettings } from './helpers/extension';
+import { launchExtension, readSnapshots, waitForSavedSettings } from './helpers/extension';
 
 test('automatic archiving obeys changed URL patterns and the off switch', async () => {
   const document = await readFile(new URL('./fixtures/auto-archive.html', import.meta.url));
@@ -23,10 +23,7 @@ test('automatic archiving obeys changed URL patterns and the off switch', async 
     const match = options.locator('.field').filter({ has: options.getByText('Match URL regex', { exact: true }) }).locator('input');
     const exclude = options.locator('.field').filter({ has: options.getByText('Exclude URL regex', { exact: true }) }).locator('input');
     const enabled = options.getByLabel('Enable automatic archiving', { exact: true });
-    const entries = () => options.evaluate(async () => {
-      const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
-      return (await api.storage.local.get('entries')).entries || [];
-    });
+    const entries = () => readSnapshots(options);
     const visit = async (name: string) => {
       // Every visit checks the settings changed just before it.
       await waitForSavedSettings(options);

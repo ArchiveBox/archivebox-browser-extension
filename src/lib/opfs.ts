@@ -2,6 +2,9 @@ import type { CaptureKind, Snapshot, SnapshotMhtml, SnapshotScreenshot, Snapshot
 import { capturePlugins } from './captureStatus';
 import { t } from './i18n';
 
+// Private to models.ts: every other module reads and writes capture files
+// through models.ts, so the storage backend can be swapped in one place.
+
 function pathSafeSegment(value: string): string {
   return value
     .trim()
@@ -11,63 +14,105 @@ function pathSafeSegment(value: string): string {
     .replace(/^-+|-+$/g, '') || 'unknown';
 }
 
-function snapshotDateSegment(snapshot: Snapshot): string {
-  const date = new Date(snapshot.timestamp);
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}${month}${day}`;
-}
-
-function snapshotHostSegment(snapshot: Snapshot): string {
-  try {
-    return pathSafeSegment(new URL(snapshot.url).hostname);
-  } catch {
-    return 'unknown';
+// ArchiveBox's Snapshot.extract_domain_from_url() (archivebox/core/models.py):
+// the full hostname with an explicit port appended as _port, "localhost" for
+// file: URLs, otherwise the scheme name. Parsed from the raw URL because
+// `new URL()` drops explicit default ports (:443) that Python keeps.
+function snapshotDomainSegment(url: string): string {
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(url)?.[1]?.toLowerCase();
+  if (scheme === 'http' || scheme === 'https') {
+    const authority = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/?#]*@)?(\[[^\]]*\]|[^:/?#]*)(?::(\d+))?/i.exec(url);
+    const host = authority?.[1]?.replace(/^\[|\]$/g, '').toLowerCase();
+    if (!host) return 'unknown';
+    return pathSafeSegment(authority?.[2] ? `${host}_${Number(authority[2])}`.replaceAll(':', '_') : host);
   }
+  if (scheme === 'file') return 'localhost';
+  return scheme ? pathSafeSegment(scheme) : 'unknown';
 }
 
+// The server names snapshot folders str(uuid), which is dashed. Local ids are
+// uuidv7() hex without dashes.
+function snapshotIdSegment(id: string): string {
+  const hex = id.toLowerCase().replaceAll('-', '');
+  return /^[0-9a-f]{32}$/.test(hex)
+    ? `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+    : pathSafeSegment(id);
+}
+
+// Django usernames allow letters, digits and @.+-_ (and are case-sensitive).
+function usernameSegment(username?: string): string {
+  const value = (username || 'system').replace(/[^A-Za-z0-9@.+_-]/g, '_');
+  return value === '.' || value === '..' ? 'system' : value;
+}
+
+// Same layout as the server's archive directory (Snapshot.get_storage_path_for_version):
+// users/{username}/snapshots/{YYYYMMDD of the UTC creation date}/{domain}/{uuid}/
+// so a snapshot folder copies between the browser and the server unchanged.
+// A folder never moves once written: capture records and upload receipts store
+// these paths, and retention matches them against the server's copy.
 export function snapshotDirectoryPath(snapshot: Snapshot): string {
   return [
-    'snapshots',
-    snapshotDateSegment(snapshot),
-    snapshotHostSegment(snapshot),
-    pathSafeSegment(snapshot.id),
+    'users', usernameSegment(snapshot.created_by_username), 'snapshots',
+    new Date(snapshot.timestamp).toISOString().slice(0, 10).replaceAll('-', ''),
+    snapshotDomainSegment(snapshot.url),
+    snapshotIdSegment(snapshot.id),
   ].join('/');
+}
+
+// Before 3.4 captures were written to snapshots/{local date}/{host without
+// www. or port}/{id}/. Those files stay where they are (see above); this is
+// only used to find and delete them.
+function legacySnapshotDirectoryPath(snapshot: Snapshot): string {
+  const date = new Date(snapshot.timestamp);
+  let host = 'unknown';
+  try { host = pathSafeSegment(new URL(snapshot.url).hostname); } catch { /* Invalid saved URL. */ }
+  return ['snapshots',
+    `${date.getFullYear()}${`${date.getMonth() + 1}`.padStart(2, '0')}${`${date.getDate()}`.padStart(2, '0')}`,
+    host, pathSafeSegment(snapshot.id)].join('/');
+}
+
+// Every folder that may hold this snapshot's files: the current layout, the
+// legacy one, and the folders its stored capture paths point into.
+function snapshotDirectoryPaths(snapshot: Snapshot): string[] {
+  const stored = captureFilePaths(snapshot).flatMap(path => {
+    const relative = snapshotRelativePath(snapshot, path);
+    return relative ? [path.slice(0, path.length - relative.length - 1)] : [];
+  });
+  return [...new Set([snapshotDirectoryPath(snapshot), legacySnapshotDirectoryPath(snapshot), ...stored])];
+}
+
+function captureFilePaths(snapshot: Snapshot, kinds = Object.keys(capturePlugins) as CaptureKind[]): string[] {
+  return kinds.flatMap(kind => {
+    const capture = snapshot[kind];
+    if (!capture) return [];
+    return 'parts' in capture && capture.parts?.length ? capture.parts.map(part => part.path) : [capture.path];
+  });
+}
+
+// A capture path relative to its snapshot folder ("{plugin}/{file}"), the
+// form ArchiveResult.output_files uses on the server. Works for both layouts.
+export function snapshotRelativePath(snapshot: Snapshot, path: string): string | null {
+  const ids = new Set([snapshotIdSegment(snapshot.id), pathSafeSegment(snapshot.id)]);
+  const segments = path.split('/');
+  const index = segments.findIndex(segment => ids.has(segment.toLowerCase()));
+  return index < 0 || index === segments.length - 1 ? null : segments.slice(index + 1).join('/');
+}
+
+function capturePath(snapshot: Snapshot, plugin: string, fileName: string): string {
+  return `${snapshotDirectoryPath(snapshot)}/${plugin}/${fileName}`;
 }
 
 export function snapshotScreenshotPath(snapshot: Snapshot, partIndex = 0, viewport = false): string {
-  const fileName = partIndex === 0 ? 'screenshot.png' : `screenshot-${partIndex}.png`;
-  return [
-    'snapshots',
-    snapshotDateSegment(snapshot),
-    snapshotHostSegment(snapshot),
-    pathSafeSegment(snapshot.id),
-    viewport ? 'chrome_extension_viewport' : 'chrome_extension_screenshot',
-    fileName,
-  ].join('/');
+  return capturePath(snapshot, viewport ? capturePlugins.viewport_screenshot : capturePlugins.screenshot,
+    partIndex === 0 ? 'screenshot.png' : `screenshot-${partIndex}.png`);
 }
 
-export function snapshotMhtmlPath(snapshot: Snapshot): string {
-  return [
-    'snapshots',
-    snapshotDateSegment(snapshot),
-    snapshotHostSegment(snapshot),
-    pathSafeSegment(snapshot.id),
-    'chrome_extension_mhtml',
-    'snapshot.mhtml',
-  ].join('/');
+function snapshotMhtmlPath(snapshot: Snapshot): string {
+  return capturePath(snapshot, capturePlugins.mhtml, 'snapshot.mhtml');
 }
 
-export function snapshotSingleFilePath(snapshot: Snapshot): string {
-  return [
-    'snapshots',
-    snapshotDateSegment(snapshot),
-    snapshotHostSegment(snapshot),
-    pathSafeSegment(snapshot.id),
-    'chrome_extension_singlefile',
-    'singlefile.html',
-  ].join('/');
+function snapshotSingleFilePath(snapshot: Snapshot): string {
+  return capturePath(snapshot, capturePlugins.singlefile, 'singlefile.html');
 }
 
 function errorMessage(error: unknown): string {
@@ -457,143 +502,67 @@ async function listDirectoryFiles(
   return files;
 }
 
-async function listSnapshotIdDirectoryFiles(
-  directory: FileSystemDirectoryHandle,
-  pathPrefix: string,
-  snapshotIdSegment: string,
-): Promise<Array<{ path: string; blob: Blob }>> {
-  const entries = (directory as FileSystemDirectoryHandleWithEntries).entries;
-  if (typeof entries !== 'function') return [];
+async function getExistingDirectory(path: string): Promise<FileSystemDirectoryHandle | null> {
+  let directory = await navigator.storage.getDirectory();
+  for (const segment of path.split('/')) {
+    try { directory = await directory.getDirectoryHandle(segment); } catch { return null; }
+  }
+  return directory;
+}
 
+export async function readSnapshotOpfsFiles(snapshot: Snapshot): Promise<Array<{ path: string; blob: Blob }>> {
   const files: Array<{ path: string; blob: Blob }> = [];
-  for await (const [name, handle] of entries.call(directory as FileSystemDirectoryHandleWithEntries)) {
-    if (handle.kind !== 'directory') continue;
-    const path = `${pathPrefix}/${name}`;
-    if (name.toLowerCase() === snapshotIdSegment) {
-      files.push(...await listDirectoryFiles(handle, path));
-      continue;
-    }
-    files.push(...await listSnapshotIdDirectoryFiles(handle, path, snapshotIdSegment));
+  for (const path of snapshotDirectoryPaths(snapshot)) {
+    const directory = await getExistingDirectory(path);
+    if (directory) files.push(...await listDirectoryFiles(directory, path));
   }
   return files;
 }
 
-export async function readSnapshotOpfsFiles(snapshot: Snapshot): Promise<Array<{ path: string; blob: Blob }>> {
-  const filesByPath = new Map<string, { path: string; blob: Blob }>();
-  const expectedPath = snapshotDirectoryPath(snapshot);
-  try {
-    const directory = await getDirectory(expectedPath.split('/'), false);
-    for (const file of await listDirectoryFiles(directory, expectedPath)) {
-      filesByPath.set(file.path, file);
-    }
-  } catch {
-    // Fall through to the UUID scan below.
-  }
-
-  try {
-    const snapshotsDirectory = await getDirectory(['snapshots'], false);
-    const snapshotIdSegment = pathSafeSegment(snapshot.id);
-    for (const file of await listSnapshotIdDirectoryFiles(snapshotsDirectory, 'snapshots', snapshotIdSegment)) {
-      filesByPath.set(file.path, file);
-    }
-  } catch {
-    // No OPFS snapshots directory exists yet.
-  }
-
-  return [...filesByPath.values()];
-}
-
 export async function readSnapshotMhtmlBlob(mhtml?: SnapshotMhtml): Promise<Blob | null> {
-  if (!mhtml?.path) return null;
-  const segments = mhtml.path.split('/');
-  const fileName = segments.pop();
-  if (!fileName) return null;
-
-  try {
-    const directory = await getDirectory(segments, false);
-    const fileHandle = await directory.getFileHandle(fileName);
-    return await fileHandle.getFile();
-  } catch {
-    return null;
-  }
+  return readBlobAtPath(mhtml?.path);
 }
 
 export async function readSnapshotSingleFileBlob(singlefile?: SnapshotSingleFile): Promise<Blob | null> {
-  if (!singlefile?.path) return null;
-  const segments = singlefile.path.split('/');
-  const fileName = segments.pop();
-  if (!fileName) return null;
-
-  try {
-    const directory = await getDirectory(segments, false);
-    const fileHandle = await directory.getFileHandle(fileName);
-    return await fileHandle.getFile();
-  } catch {
-    return null;
-  }
+  return readBlobAtPath(singlefile?.path);
 }
 
-/** Delete the entire UUID tree, including unindexed/partial captures and empty host directories. */
+/** Delete a snapshot's capture folders (or only the given capture types), then any parent folders left empty. */
 export async function deleteSnapshotOpfs(snapshot: Snapshot, kinds?: CaptureKind[]): Promise<void> {
   const root = await navigator.storage.getDirectory();
-  const id = pathSafeSegment(snapshot.id);
   const isMissing = (error: unknown) => error instanceof DOMException && error.name === 'NotFoundError';
   async function isEmpty(directory: FileSystemDirectoryHandle): Promise<boolean> {
     for await (const _ of (directory as FileSystemDirectoryHandleWithEntries).entries()) return false;
     return true;
   }
-  async function removeTree(directory: FileSystemDirectoryHandle): Promise<boolean> {
-    let removed = false;
-    for await (const [name, handle] of (directory as FileSystemDirectoryHandleWithEntries).entries()) {
-      if (handle.kind !== 'directory') continue;
-      if (name.toLowerCase() === id) {
-        if (kinds) {
-          const captureDirectory = handle as FileSystemDirectoryHandle;
-          for (const plugin of [...kinds.map(kind => capturePlugins[kind]), ...(kinds.includes('mhtml') ? ['chrome_mhtml'] : [])]) {
-            try { await captureDirectory.removeEntry(plugin, { recursive: true }); }
-            catch (error) { if (!isMissing(error)) throw error; }
-          }
-          if (await isEmpty(captureDirectory)) await directory.removeEntry(name);
-        } else await directory.removeEntry(name, { recursive: true });
-        removed = true;
-      } else if (await removeTree(handle as FileSystemDirectoryHandle)) {
-        if (await isEmpty(handle as FileSystemDirectoryHandle)) await directory.removeEntry(name);
-        removed = true;
-      }
-    }
-    return removed;
-  }
-  try {
-    const snapshots = await root.getDirectoryHandle('snapshots');
-    await removeTree(snapshots);
-    if (await isEmpty(snapshots)) await root.removeEntry('snapshots');
-  } catch (error) {
-    if (!isMissing(error)) throw error;
-  }
-  // Also remove explicitly referenced files from older storage layouts.
-  const paths = (kinds || Object.keys(capturePlugins) as CaptureKind[]).flatMap(kind => {
-    const capture = snapshot[kind];
-    return [capture?.path, ...(capture && 'parts' in capture ? capture.parts?.map(part => part.path) || [] : [])];
-  });
-  for (const path of new Set(paths.filter((path): path is string => Boolean(path)))) {
+  // Removes path (a file or folder), then walks up removing folders it left empty.
+  async function removePath(path: string): Promise<void> {
     const segments = path.split('/');
     if (segments.some((segment) => !segment || segment === '.' || segment === '..')) throw new Error('Invalid capture path');
-    const name = segments.pop()!;
-    try {
-      let directory = root;
-      const parents: Array<{ parent: FileSystemDirectoryHandle; name: string; child: FileSystemDirectoryHandle }> = [];
-      for (const segment of segments) {
-        const child = await directory.getDirectoryHandle(segment);
-        parents.push({ parent: directory, name: segment, child });
-        directory = child;
+    const parents: FileSystemDirectoryHandle[] = [root];
+    for (const segment of segments.slice(0, -1)) {
+      try { parents.push(await parents.at(-1)!.getDirectoryHandle(segment)); } catch (error) {
+        if (isMissing(error)) return;
+        throw error;
       }
-      await directory.removeEntry(name);
-      for (const parent of parents.reverse()) {
-        if (!(await isEmpty(parent.child))) break;
-        await parent.parent.removeEntry(parent.name);
-      }
-    } catch (error) {
+    }
+    try { await parents.at(-1)!.removeEntry(segments.at(-1)!, { recursive: true }); } catch (error) {
       if (!isMissing(error)) throw error;
     }
+    for (let index = segments.length - 2; index >= 0; index--) {
+      if (!(await isEmpty(parents[index + 1]!))) break;
+      await parents[index]!.removeEntry(segments[index]!);
+    }
+  }
+  for (const directory of snapshotDirectoryPaths(snapshot)) {
+    if (!kinds) { await removePath(directory); continue; }
+    // chrome_mhtml is the plugin folder older versions wrote MHTML into.
+    for (const plugin of [...kinds.map(kind => capturePlugins[kind]), ...(kinds.includes('mhtml') ? ['chrome_mhtml'] : [])]) {
+      await removePath(`${directory}/${plugin}`);
+    }
+  }
+  // Explicitly referenced files outside any snapshot folder (oldest layouts).
+  for (const path of captureFilePaths(snapshot, kinds)) {
+    if (!snapshotRelativePath(snapshot, path)) await removePath(path);
   }
 }

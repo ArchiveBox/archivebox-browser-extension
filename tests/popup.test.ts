@@ -1,5 +1,5 @@
 import { test } from './helpers/archivebox';
-import { seedExtensionStorage, waitForSavedSettings } from './helpers/extension';
+import { readSnapshots, seedExtensionStorage, seedSnapshots, waitForSavedSettings } from './helpers/extension';
 import type { Snapshot } from '../src/lib/types';
 import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { chromium } from '@playwright/test';
@@ -909,7 +909,7 @@ async function typeTag(harness: BrowserHarness, popup: NativePopup, tag: string)
 }
 
 async function savedEntries(harness: BrowserHarness): Promise<Array<Record<string, unknown>>> {
-  return (await getExtensionStorage<Array<Record<string, unknown>>>(harness, 'entries')) || [];
+  return await readSnapshots(harness.storagePage) as unknown as Array<Record<string, unknown>>;
 }
 
 async function waitForSavedEntry(
@@ -969,18 +969,16 @@ test('ArchiveBox server URLs are ignored before archive requests', async () => {
   const harness = await launchHarness();
 
   try {
-    await setExtensionStorage(harness, {
-      entries: [{
-        id: 'server-url-entry',
-        url: 'https://admin.example.com/admin/core/snapshot/',
-        timestamp: new Date('2026-01-01T00:00:00.000Z').toISOString(),
-        tags: [],
-        title: 'ArchiveBox Admin',
-        favIconUrl: null,
-        depth: 0,
-      }],
-      ...serverSettings('https://api.example.com', 'test-key'),
-    });
+    await setExtensionStorage(harness, serverSettings('https://api.example.com', 'test-key'));
+    await seedSnapshots(harness.storagePage, [{
+      id: 'server-url-entry',
+      url: 'https://admin.example.com/admin/core/snapshot/',
+      timestamp: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+      tags: [],
+      title: 'ArchiveBox Admin',
+      favIconUrl: null,
+      depth: 0,
+    }]);
     await harness.storagePage.reload({ waitUntil: 'domcontentloaded' });
     await expect(harness.storagePage.locator('body')).not.toContainText('https://admin.example.com/admin/core/snapshot/');
 
@@ -1079,7 +1077,7 @@ test('persona sync updates the real remote persona while location permission is 
     expect(remote.config.USER_AGENT).toBe('stale-user-agent');
     const remoteId = remote.id;
     await profile.getByRole('button', { name: 'Detect Settings', exact: true }).click();
-    const detected = await page.evaluate(() => ({ userAgent: navigator.userAgent, platform: navigator.platform, viewport: `${innerWidth}x${innerHeight}`, language: navigator.language, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, scale: devicePixelRatio }));
+    const detected = await page.evaluate(async () => ({ userAgentMetadata: await (navigator as Navigator & { userAgentData: { getHighEntropyValues: (hints: string[]) => Promise<Record<string, unknown>> } }).userAgentData.getHighEntropyValues(["architecture", "bitness", "fullVersionList", "model", "platformVersion", "wow64", "formFactors"]), userAgent: navigator.userAgent, platform: navigator.platform, viewport: `${innerWidth}x${innerHeight}`, language: navigator.language, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, scale: devicePixelRatio }));
     await expect(profile.getByLabel('User Agent', { exact: true })).toHaveValue(detected.userAgent);
     await expect(profile.getByLabel('Viewport Size', { exact: true })).toHaveValue(detected.viewport);
     await expect(profile.getByLabel('Language', { exact: true })).toHaveValue(detected.language);
@@ -1092,6 +1090,7 @@ test('persona sync updates the real remote persona while location permission is 
     expect(remote.config.BROWSER_TIMEZONE).toBe(detected.timezone);
     expect(remote.config.BROWSER_DEVICE_SCALE_FACTOR).toBe(detected.scale);
     expect(remote.config.BROWSER_PLATFORM).toBe(detected.platform);
+    expect(remote.config.BROWSER_USER_AGENT_METADATA).toEqual(detected.userAgentMetadata);
     await expect(profile.locator('.persona-sync-link--synced')).toHaveAttribute('href', `${archivebox.server}/admin/personas/persona/${remoteId}/change/`);
     expect(serverId).toBeTruthy();
   } finally { await closeHarness(harness); }
@@ -1225,18 +1224,16 @@ test('native action popup supports local save, tags, depth, captures, navigation
   const harness = await launchHarness();
 
   try {
-    await setExtensionStorage(harness, {
-      entries: [{
-        id: 'seed-entry',
-        url: 'https://seed.archivebox.test/',
-        timestamp: new Date('2026-01-01T00:00:00.000Z').toISOString(),
-        tags: ['existing', 'research'],
-        title: 'Seed entry',
-        favIconUrl: null,
-        depth: 0,
-      }],
-      ...serverSettings(''),
-    });
+    await setExtensionStorage(harness, serverSettings(''));
+    await seedSnapshots(harness.storagePage, [{
+      id: 'seed-entry',
+      url: 'https://seed.archivebox.test/',
+      timestamp: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+      tags: ['existing', 'research'],
+      title: 'Seed entry',
+      favIconUrl: null,
+      depth: 0,
+    }]);
 
     await harness.storagePage.reload();
     await harness.storagePage.getByRole('button', { name: 'Configuration', exact: true }).click();
@@ -1377,7 +1374,6 @@ test('auto-archive captures MHTML + screenshots on page load without console err
     // Real local capture exercises the
     // genuine pageCapture.saveAsMHTML + captureVisibleTab paths the user hits.
     await setExtensionStorage(harness, {
-      entries: [],
       ...serverSettings(''),
       save_mhtml_locally: true,
       save_screenshots_locally: true,
@@ -1445,7 +1441,6 @@ test('action popup saves MHTML + screenshots without console errors or closing t
 
   try {
     await setExtensionStorage(harness, {
-      entries: [],
       ...serverSettings(''),
       save_mhtml_locally: true,
       save_screenshots_locally: true,
@@ -1499,7 +1494,6 @@ test('popup fits mobile viewports without horizontal overflow', async () => {
   const harness = await launchHarness();
   try {
     await setExtensionStorage(harness, {
-      entries: [],
       ...serverSettings(''),
       save_mhtml_locally: false,
       save_screenshots_locally: false,

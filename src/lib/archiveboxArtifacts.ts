@@ -9,12 +9,9 @@ import {
   type ArchiveResultOutputFile,
   type ArchiveResultUploadFile,
 } from './archivebox';
-import {
-  readSnapshotOpfsFiles,
-} from './screenshotStorage';
 import type { ArtifactDelivery, CaptureKind, Snapshot, ServerConfiguration, ServerDestination } from './types';
 import { capturePlugins } from './captureStatus';
-import { getSnapshots, mutateSnapshots } from './storage';
+import { getSnapshot, readSnapshotFiles, snapshotRelativePath, updateSnapshot } from './models';
 
 const extensionArtifactSource = 'archivebox-browser-extension';
 const snapshotSyncLocks = new Map<string, Promise<{ opfs: boolean }>>();
@@ -35,12 +32,8 @@ type OpfsFile = {
 };
 
 function getOpfsFilesForSnapshot(snapshot: Snapshot, files: Array<{ path: string; blob: Blob }>): OpfsFile[] {
-  const snapshotIdSegment = snapshot.id.toLowerCase();
   return files.flatMap((file) => {
-    const segments = file.path.split('/');
-    const snapshotIdIndex = segments.findIndex((segment) => segment.toLowerCase() === snapshotIdSegment);
-    if (snapshotIdIndex < 0) return [];
-    const [directory, ...outputSegments] = segments.slice(snapshotIdIndex + 1);
+    const [directory, ...outputSegments] = snapshotRelativePath(snapshot, file.path)?.split('/') ?? [];
     if (!directory || outputSegments.length === 0) return [];
     return [{
       path: file.path,
@@ -141,11 +134,11 @@ export async function refreshSnapshotArtifactReceipts(server: ServerDestination,
     artifacts[kind] = { status: 'uploaded', archive_result_id: result.id, uploaded_at: result.end_ts,
       path: result.output_json.capture?.path, captured_at: result.output_json.capture?.captured_at };
   }
-  await mutateSnapshots(entries => entries.map(item => {
+  await updateSnapshot(snapshot.id, item => {
     const latest = item.remote_copies?.[server.id];
-    if (item.id !== snapshot.id || !latest || latest.snapshot_id !== copy.snapshot_id || latest.crawl_id !== copy.crawl_id || latest.artifacts !== undefined) return item;
+    if (!latest || latest.snapshot_id !== copy.snapshot_id || latest.crawl_id !== copy.crawl_id || latest.artifacts !== undefined) return item;
     return { ...item, remote_copies: { ...item.remote_copies, [server.id]: { ...latest, artifacts } } };
-  }));
+  });
 }
 
 // Retention requires fresh evidence of the exact uploaded version, not merely
@@ -162,10 +155,10 @@ export async function confirmedSnapshotCaptureKinds(server: ServerConfiguration,
       || result.output_json.capture?.captured_at !== capture.capturedAt) return false;
     const paths = 'parts' in capture && capture.parts?.length ? capture.parts.map(part => part.path) : [capture.path];
     return paths.every(path => {
-      const segments = path.split('/');
-      const id = segments.findIndex(segment => segment.toLowerCase() === snapshot.id.toLowerCase());
-      if (id < 0) return false;
-      const file = result.output_files?.[segments.slice(id + 2).join('/')];
+      // output_files keys are relative to the plugin folder: drop "{plugin}/".
+      const relative = snapshotRelativePath(snapshot, path)?.split('/').slice(1).join('/');
+      if (!relative) return false;
+      const file = result.output_files?.[relative];
       return file && Number(file.size) > 0 && (!file.upload || file.upload.complete === true);
     });
   });
@@ -222,17 +215,17 @@ export async function uploadSnapshotCaptureArtifactsToArchiveBox(server: ServerD
   const sync = previousSync
     .catch(() => emptySyncResult)
     .then(() => withSnapshotArtifacts(snapshot.id, async () => {
-      const current = (await getSnapshots()).find((item) => item.id === snapshot.id);
+      const current = await getSnapshot(snapshot.id);
       if (!current || !snapshot_id) return emptySyncResult;
       const copy = current.remote_copies?.[server.id];
       const setStatus = async (status: 'accepted' | 'complete') => {
-        await mutateSnapshots((entries) => entries.map((item) => {
+        await updateSnapshot(current.id, (item) => {
           const latest = item.remote_copies?.[server.id];
-          if (item.id !== current.id || !latest || latest.snapshot_id !== snapshot_id || latest.crawl_id !== copy?.crawl_id) return item;
+          if (!latest || latest.snapshot_id !== snapshot_id || latest.crawl_id !== copy?.crawl_id) return item;
           return { ...item, remote_copies: { ...item.remote_copies, [server.id]: { ...latest, status,
             delivery_error: status === 'complete' ? undefined : latest.delivery_error,
           } } };
-        }));
+        });
       };
       await setStatus('accepted');
       try {
@@ -240,13 +233,13 @@ export async function uploadSnapshotCaptureArtifactsToArchiveBox(server: ServerD
         await setStatus('complete');
         return result;
       } catch (error) {
-        await mutateSnapshots(entries => entries.map(item => {
+        await updateSnapshot(current.id, item => {
           const latest = item.remote_copies?.[server.id];
-          if (item.id !== current.id || latest?.snapshot_id !== snapshot_id || latest.crawl_id !== copy?.crawl_id) return item;
+          if (latest?.snapshot_id !== snapshot_id || latest.crawl_id !== copy?.crawl_id) return item;
           return { ...item, remote_copies: { ...item.remote_copies, [server.id]: { ...latest,
             status: 'accepted', delivery_error: error instanceof Error ? error.message : String(error),
           } } };
-        }));
+        });
         throw error;
       }
     }))
@@ -264,7 +257,7 @@ async function uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked(server: Server
 }> {
   let uploadedAny = false;
   if (!snapshot_id) return emptySyncResult;
-  const opfsFiles = getOpfsFilesForSnapshot(snapshot, await readSnapshotOpfsFiles(snapshot));
+  const opfsFiles = getOpfsFilesForSnapshot(snapshot, await readSnapshotFiles(snapshot));
 
   for (const group of buildSnapshotArtifactGroups(snapshot, opfsFiles)) {
     if (group.plugin === 'chrome_extension_viewport' && !server.policy.upload_viewport_screenshots_to_server) continue;
@@ -278,13 +271,13 @@ async function uploadSnapshotCaptureArtifactsToArchiveBoxUnlocked(server: Server
     const matchingReceipt = capture && previous?.path === capture.path && previous.captured_at === capture.capturedAt ? previous : undefined;
     const saveReceipt = async (receipt: ArtifactDelivery) => {
       if (!kind || !capture) return;
-      await mutateSnapshots(entries => entries.map(item => {
+      await updateSnapshot(snapshot.id, item => {
         const latest = item.remote_copies?.[server.id];
-        if (item.id !== snapshot.id || latest?.snapshot_id !== snapshot_id || latest.crawl_id !== copy?.crawl_id) return item;
+        if (latest?.snapshot_id !== snapshot_id || latest.crawl_id !== copy?.crawl_id) return item;
         return { ...item, remote_copies: { ...item.remote_copies, [server.id]: { ...latest,
           artifacts: { ...latest.artifacts, [kind]: { ...receipt, path: capture.path, captured_at: capture.capturedAt } },
         } } };
-      }));
+      });
     };
     try {
       const result = await uploadSnapshotArtifactGroup(server, group, snapshot_id, matchingReceipt);

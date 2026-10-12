@@ -1,12 +1,12 @@
 import { defaultServers, requireServer } from '@/src/lib/server_registry';
 import { configureLocalRetention, withSnapshotArtifacts } from '@/src/lib/retention';
 import { configureCookieSync } from '@/src/lib/cookieSync';
-import { submitAgentTask, findSubmittedSnapshot, removeFreshOwnedCapture, submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, supportsArchiveBoxApi, testApiKey, testServerUrl } from '@/src/lib/archivebox';
+import { hasServerHostPermission, submitAgentTask, findSubmittedSnapshot, removeFreshOwnedCapture, submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, supportsArchiveBoxApi, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
-import { appendSnapshotScreenshotParts, writeSnapshotMhtmlBytes, writeSnapshotScreenshot, writeSnapshotScreenshotParts, writeSnapshotSingleFileHtml } from '@/src/lib/screenshotStorage';
+import { addSnapshots, appendSnapshotScreenshotParts, ensureSnapshot, getSnapshot, latestSnapshotForUrl, updateSnapshot, writeSnapshotMhtmlBytes, writeSnapshotScreenshot, writeSnapshotScreenshotParts, writeSnapshotSingleFileHtml } from '@/src/lib/models';
 import { createSnapshot } from '@/src/lib/snapshots';
-import { getArchiveBoxServerUrl, getConfig, getPersonas, getSnapshots, mutateSnapshots, setConfig } from '@/src/lib/storage';
+import { getArchiveBoxServerUrl, getConfig, getPersonas, setConfig, updateServer } from '@/src/lib/storage';
 import type { RuntimeMessage, RuntimeResponse, Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotSingleFile } from '@/src/lib/types';
 import { compactUuid } from '@/src/lib/uuid';
 
@@ -376,21 +376,15 @@ async function measureScreenshotPage(tab: Browser.tabs.Tab): Promise<PageMetrics
 }
 
 async function attachScreenshotToSnapshot(snapshot_id: string, screenshot: SnapshotScreenshot, viewport = false): Promise<void> {
-  await mutateSnapshots((snapshots) => snapshots.map((snapshot) => (
-    snapshot.id === snapshot_id ? { ...snapshot, [viewport ? 'viewport_screenshot' : 'screenshot']: screenshot } : snapshot
-  )));
+  await updateSnapshot(snapshot_id, (snapshot) => ({ ...snapshot, [viewport ? 'viewport_screenshot' : 'screenshot']: screenshot }));
 }
 
 async function attachMhtmlToSnapshot(snapshot_id: string, mhtml: SnapshotMhtml): Promise<void> {
-  await mutateSnapshots((snapshots) => snapshots.map((snapshot) => (
-    snapshot.id === snapshot_id ? { ...snapshot, mhtml } : snapshot
-  )));
+  await updateSnapshot(snapshot_id, (snapshot) => ({ ...snapshot, mhtml }));
 }
 
 async function attachSingleFileToSnapshot(snapshot_id: string, singlefile: SnapshotSingleFile): Promise<void> {
-  await mutateSnapshots((snapshots) => snapshots.map((snapshot) => (
-    snapshot.id === snapshot_id ? { ...snapshot, singlefile } : snapshot
-  )));
+  await updateSnapshot(snapshot_id, (snapshot) => ({ ...snapshot, singlefile }));
 }
 
 async function captureFullPageScreenshot(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<SnapshotScreenshot> {
@@ -654,7 +648,7 @@ async function captureAndAttachSnapshotScreenshot(
   fullPage = true,
 ): Promise<SnapshotScreenshot> {
   return withSnapshotArtifacts(snapshot.id, async () => {
-    if (!(await getSnapshotById(snapshot.id))) throw new Error(t("Saved snapshot not found."));
+    if (!(await getSnapshot(snapshot.id))) throw new Error(t("Saved snapshot not found."));
     if (await usesFastTestCapture()) {
       const screenshot = await writeSnapshotScreenshot(snapshot, dataUrlToBlob(testScreenshotPngDataUrl), 1, 1, !fullPage);
       await attachScreenshotToSnapshot(snapshot.id, screenshot, !fullPage);
@@ -683,7 +677,7 @@ async function captureAndAttachSnapshotMhtml(
   snapshot: Snapshot,
 ): Promise<SnapshotMhtml> {
   return withSnapshotArtifacts(snapshot.id, async () => {
-    if (!(await getSnapshotById(snapshot.id))) throw new Error(t("Saved snapshot not found."));
+    if (!(await getSnapshot(snapshot.id))) throw new Error(t("Saved snapshot not found."));
     if (await usesFastTestCapture()) {
       const bytes = new TextEncoder().encode([
         'MIME-Version: 1.0',
@@ -710,7 +704,7 @@ async function captureAndAttachSnapshotSingleFile(
   snapshot: Snapshot,
 ): Promise<SnapshotSingleFile> {
   return withSnapshotArtifacts(snapshot.id, async () => {
-    if (!(await getSnapshotById(snapshot.id))) throw new Error(t("Saved snapshot not found."));
+    if (!(await getSnapshot(snapshot.id))) throw new Error(t("Saved snapshot not found."));
     const singlefile = await captureSingleFileHtml(tab, snapshot);
     await attachSingleFileToSnapshot(snapshot.id, singlefile);
     snapshot.singlefile = singlefile;
@@ -792,28 +786,7 @@ async function ensureSnapshotForTab(tab: Browser.tabs.Tab): Promise<{
   created: boolean;
 }> {
   if (!tab.url) throw new Error(t("No URL found for the current tab."));
-  let snapshot!: Snapshot;
-  let created = false;
-  await mutateSnapshots((snapshots) => {
-    snapshot = snapshots.find((item) => item.url === tab.url)!;
-
-    if (!snapshot) {
-      snapshot = createSnapshot(
-        tab.url!,
-        [],
-        tab.title || '',
-        tab.favIconUrl || null,
-      );
-      snapshots.push(snapshot);
-      created = true;
-    } else {
-      snapshot.title = snapshot.title || tab.title || '';
-      snapshot.favIconUrl = snapshot.favIconUrl || tab.favIconUrl || null;
-    }
-
-    return snapshots;
-  });
-  return { snapshot, created };
+  return ensureSnapshot(createSnapshot(tab.url, [], tab.title || '', tab.favIconUrl || null));
 }
 
 async function shouldAutoArchive(url: string): Promise<boolean> {
@@ -832,10 +805,6 @@ async function shouldAutoArchive(url: string): Promise<boolean> {
     console.error('Error checking auto-archive patterns:', error);
     return false;
   }
-}
-
-async function getSnapshotById(snapshot_id: string): Promise<Snapshot | null> {
-  return (await getSnapshots()).find((snapshot) => snapshot.id === snapshot_id) || null;
 }
 
 async function syncSnapshotToServer(snapshot: Snapshot): Promise<boolean> {
@@ -858,10 +827,8 @@ async function autoArchive(
   if (changeInfo.status !== 'complete' || !tab.url) return;
   if (!isArchiveablePageUrl(tab.url)) return;
 
-  // Runs for every page load, enabled or not, so it only reads the config here.
-  // Already-saved URLs are skipped by the locked mutateSnapshots() below; a
-  // separate getSnapshots() pre-check would read every saved entry (100k+)
-  // on each page load for nothing.
+  // Runs for every page load, enabled or not, so it only reads the config
+  // before deciding; the saved-URL check is an indexed lookup in addSnapshots.
   if (!(await shouldAutoArchive(tab.url))) return;
 
   const snapshot = createSnapshot(
@@ -870,13 +837,7 @@ async function autoArchive(
     tab.title || '',
     tab.favIconUrl || null,
   );
-  let added = false;
-  await mutateSnapshots((items) => {
-    if (items.some((item) => item.url === snapshot.url)) return items;
-    added = true;
-    return [...items, snapshot];
-  });
-  if (!added) return;
+  if (!(await addSnapshots([snapshot], { skipSavedUrls: true })).length) return;
   console.info(`ArchiveBox: auto-archiving ${snapshot.url}`);
 
   await captureConfiguredSnapshotArtifacts(tab, snapshot, true).catch((error) => {
@@ -902,6 +863,20 @@ async function saveTab(tab?: Browser.tabs.Tab): Promise<void> {
   }
 }
 
+// New snapshots are filed under the default server user's folder
+// (users/{username}/, see models.ts), so learn that username from the API key.
+// Servers older than 0.9.x do not report it; each server+key is asked once per
+// worker lifetime, and snapshots fall back to "system" meanwhile.
+const checkedServerKeys = new Set<string>();
+async function refreshServerUsername(): Promise<void> {
+  const server = defaultServers(await getConfig())[0];
+  if (!server?.token || server.username || checkedServerKeys.has(`${server.id}:${server.token}`)) return;
+  checkedServerKeys.add(`${server.id}:${server.token}`);
+  if (!(await hasServerHostPermission(server.server))) return;
+  const { username } = await testApiKey(server.server, server.token);
+  if (username) await updateServer(server.id, { username });
+}
+
 async function getMessageTab(tabId: number): Promise<Browser.tabs.Tab> {
   const tab = await browser.tabs.get(tabId);
   if (!tab?.id) throw new Error(t("No tab ID available."));
@@ -918,6 +893,7 @@ export default defineBackground(() => {
   configureCookieSync();
   configureLocalRetention();
   refreshUiLanguage().catch(() => undefined);
+  refreshServerUsername().catch(() => undefined);
   browser.runtime.onInstalled.addListener(() => {
     refreshUiLanguage()
       .catch(() => undefined)
@@ -932,6 +908,7 @@ export default defineBackground(() => {
   });
 
   browser.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.server_registry) refreshServerUsername().catch(() => undefined);
     if (area === 'local' && changes.ui_language) {
       refreshUiLanguage()
         .then(() => browser.contextMenus.update('save_to_archivebox_ctxmenu', { title: t("Save to ArchiveBox") }))
@@ -973,7 +950,8 @@ export default defineBackground(() => {
               local_persona_id: localPersona?.name === message.body.persona ? localPersona.id : undefined,
             } };
           }
-          const snapshot = (await getSnapshots()).find((item) => item.id === message.body.snapshot_ids?.[0] && item.url === message.body.urls[0]);
+          const saved = message.body.snapshot_ids?.[0] ? await getSnapshot(message.body.snapshot_ids[0]) : null;
+          const snapshot = saved?.url === message.body.urls[0] ? saved : null;
           if (snapshot && message.body.urls.length === 1) {
             if (message.body.replace_fresh) await removeFreshOwnedCapture(server, snapshot);
             const captureReady = message.tabId === undefined ? undefined : () => getMessageTab(message.tabId!)
@@ -994,7 +972,7 @@ export default defineBackground(() => {
       case 'submit_agent_task':
         return (async (): Promise<RuntimeResponse> => await navigator.locks.request<Promise<RuntimeResponse>>(`archivebox-agent:${message.server_id}:${message.snapshot_id}`, async () => {
           const server = requireServer(await getConfig(), message.server_id);
-          const snapshot = await getSnapshotById(message.snapshot_id);
+          const snapshot = await getSnapshot(message.snapshot_id);
           if (!snapshot) throw new Error(t("Saved snapshot not found."));
           const copy = snapshot.remote_copies?.[server.id];
           const receipt = copy?.agent_task;
@@ -1002,11 +980,11 @@ export default defineBackground(() => {
             return { ok: true, agentTask: receipt };
           }
           const agentTask = await submitAgentTask(server, snapshot, message.task);
-          await mutateSnapshots(items => items.map(item => {
+          await updateSnapshot(snapshot.id, item => {
             const latest = item.remote_copies?.[server.id];
-            if (item.id !== snapshot.id || !latest || latest.snapshot_id !== copy?.snapshot_id) return item;
+            if (!latest || latest.snapshot_id !== copy?.snapshot_id) return item;
             return { ...item, remote_copies: { ...item.remote_copies, [server.id]: { ...latest, agent_task: agentTask } } };
-          }));
+          });
           // The worker finishes and saves the receipt even if the popup has closed.
           await browser.tabs.create({ url: agentTask.session_url, active: false }).catch(() => undefined);
           return { ok: true, agentTask };
@@ -1014,7 +992,7 @@ export default defineBackground(() => {
 
       case 'archivebox_remove':
         return getConfig().then(async (config) => {
-          const snapshot = await getSnapshotById(message.snapshot_id);
+          const snapshot = await getSnapshot(message.snapshot_id);
           if (!snapshot) throw new Error('Saved URL not found.');
           return removeFromArchiveBox(requireServer(config, message.server_id), snapshot);
         })
@@ -1022,10 +1000,9 @@ export default defineBackground(() => {
           .catch((error: Error) => ({ ok: false, errorMessage: error.message }));
 
       case 'capture_snapshot_screenshot': {
-        return getSnapshots()
-          .then(async (snapshots) => {
+        return getSnapshot(message.snapshot_id)
+          .then(async (snapshot) => {
             const tab = await getMessageTab(message.tabId);
-            const snapshot = snapshots.find((item) => item.id === message.snapshot_id);
             if (!snapshot) throw new Error(t("Saved snapshot not found."));
             return captureAndAttachSnapshotScreenshot(tab, snapshot, message.fullPage ?? true);
           })
@@ -1051,10 +1028,9 @@ export default defineBackground(() => {
       }
 
       case 'capture_snapshot_mhtml': {
-        return getSnapshots()
-          .then(async (snapshots) => {
+        return getSnapshot(message.snapshot_id)
+          .then(async (snapshot) => {
             const tab = await getMessageTab(message.tabId);
-            const snapshot = snapshots.find((item) => item.id === message.snapshot_id);
             if (!snapshot) throw new Error(t("Saved snapshot not found."));
             return captureAndAttachSnapshotMhtml(tab, snapshot);
           })
@@ -1063,10 +1039,9 @@ export default defineBackground(() => {
       }
 
       case 'capture_snapshot_singlefile': {
-        return getSnapshots()
-          .then(async (snapshots) => {
+        return getSnapshot(message.snapshot_id)
+          .then(async (snapshot) => {
             const tab = await getMessageTab(message.tabId);
-            const snapshot = snapshots.find((item) => item.id === message.snapshot_id);
             if (!snapshot) throw new Error(t("Saved snapshot not found."));
             return captureAndAttachSnapshotSingleFile(tab, snapshot);
           })
@@ -1081,7 +1056,7 @@ export default defineBackground(() => {
 
       case 'test_api_key':
         return testApiKey(message.server, message.token)
-          .then((user_id) => ({ ok: true, user_id }))
+          .then(({ user_id, username }) => ({ ok: true, user_id, username }))
           .catch((error: Error) => ({ ok: false, error: error.message }));
 
       case 'open_options': {
@@ -1107,7 +1082,7 @@ export default defineBackground(() => {
             const modernApi = await supportsArchiveBoxApi(serverUrl).catch(() => true);
             let snapshotId: string | undefined;
             if (modernApi) {
-              const copy = (await getSnapshots()).find(item => item.url === message.url)?.remote_copies?.[server.id];
+              const copy = (await latestSnapshotForUrl(message.url))?.remote_copies?.[server.id];
               snapshotId = copy?.submitted_to === new URL(serverUrl).toString().replace(/\/$/, '') ? copy.snapshot_id : undefined;
               snapshotId ||= (await findSubmittedSnapshot(server, message.url))?.id;
               if (!snapshotId) throw new Error(t("The URL is queued, but its archived copy is not available yet."));

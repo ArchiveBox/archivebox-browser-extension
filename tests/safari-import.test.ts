@@ -1,4 +1,4 @@
-import { launchExtension } from './helpers/extension';
+import { launchExtension, readSnapshots } from './helpers/extension';
 import { expect, test } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -47,10 +47,7 @@ test('imports Safari exports, separates Reading List, and preserves saved URL de
     await page.getByRole('button', { name: 'Import Selected (1)', exact: true }).click();
     await page.getByRole('button', { name: 'Saved URLs', exact: true }).click();
     await expect(page.locator('.saved-url-table tbody tr')).toHaveCount(1);
-    const entries = await page.evaluate(async () => {
-      const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
-      return (await api.storage.local.get('entries') as { entries: Snapshot[] }).entries;
-    });
+    const entries = await readSnapshots(page);
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({ url: expectedURL, title: 'Example Domain', timestamp: new Date(exportedHistory.history[0].time_usec / 1000).toISOString() });
 

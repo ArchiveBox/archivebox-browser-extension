@@ -26,6 +26,7 @@ export function validateRegistry(registry: ServerRegistry): void {
       return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(server.id)
         && typeof server.name === 'string' && typeof server.token === 'string'
         && (server.persona === null || typeof server.persona === 'string')
+        && (server.username === undefined || typeof server.username === 'string')
         && ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash;
     } catch { return false; }
   };

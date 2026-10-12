@@ -233,3 +233,5 @@ Other projects that help with ingest URLs into ArchiveBox from various sources.
 ## License
 
 MIT License
+
+Persona Detect Settings also saves UA client hints (browser brands, OS version, architecture and bitness) and syncs them with the user-agent string. Use Detect Settings and Sync now to refresh an existing profile created before these hints were captured.

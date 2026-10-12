@@ -1,5 +1,5 @@
 import { activeServer, requireServer } from '@/src/lib/server_registry';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Camera,
@@ -27,7 +27,7 @@ import {
   UserRoundCog,
   type LucideIcon,
 } from 'lucide-react';
-import { strToU8, zipSync } from 'fflate';
+import { Zip, ZipDeflate } from 'fflate';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { SnapshotSyncStatus } from '@/src/components/SnapshotSyncStatus';
 import { refreshSnapshotArtifactReceipts } from '@/src/lib/archiveboxArtifacts';
@@ -39,21 +39,35 @@ import { CookieSitePicker } from './CookieSitePicker';
 import { cookieSiteDomain, groupCookieSites } from '@/src/lib/cookieSites';
 import {
   archiveboxExportBaseName,
-  downloadCsv,
-  downloadJson,
-  snapshotCsvContent,
-  snapshotJsonContent,
+  downloadBlob,
+  snapshotCsvBlob,
+  snapshotJsonBlob,
+  type SnapshotBatches,
 } from '@/src/lib/downloads';
 import {
+  addSnapshots,
   assertLocalCaptureStorageAvailable,
-  readSnapshotSingleFileBlob,
+  countSnapshots,
+  deleteSnapshots,
+  forEachSnapshot,
+  getSnapshot,
+  getSnapshots,
+  listSnapshots,
+  onSnapshotsChanged,
+  readSnapshotFiles,
   readSnapshotMhtmlBlob,
   readSnapshotScreenshotBlob,
   readSnapshotScreenshotBlobs,
-  readSnapshotOpfsFiles,
-} from '@/src/lib/screenshotStorage';
+  readSnapshotSingleFileBlob,
+  savedSnapshotUrls,
+  snapshotTagCounts,
+  snapshotTags,
+  updateSnapshot,
+  updateSnapshots,
+  type SnapshotSort,
+} from '@/src/lib/models';
 import { renderMhtmlToHtml } from '@/src/lib/mhtml';
-import { createSnapshot, filterSnapshots, uniqueTags } from '@/src/lib/snapshots';
+import { createSnapshot } from '@/src/lib/snapshots';
 import { matchingTagSuggestions } from '@/src/lib/tags';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { getCookieSyncStates, disablePersonaCookieSync, syncPersonaManually, type CookieSyncState } from '@/src/lib/cookieSync';
@@ -66,13 +80,11 @@ import {
   ensurePersonas,
   getConfig,
   getPersonas,
-  getSnapshots,
   setActivePersona,
   updateServer,
   removeServer,
   mutatePersonas,
   updatePersona,
-  mutateSnapshots,
 } from '@/src/lib/storage';
 import type { ConfigPatch, ConfigState, Persona, RuntimeMessage, RuntimeResponse, Snapshot, StoredCookie } from '@/src/lib/types';
 import { retentionDurations } from '@/src/lib/types';
@@ -92,7 +104,12 @@ function snapshotSyncStatus(snapshot: Snapshot, serverId: string, pending?: Stat
 type ImportItem = Snapshot & { selected: boolean; isNew: boolean };
 type PersonaSettingKey = keyof Persona['settings'];
 type EditablePersonaSettingKey = Exclude<PersonaSettingKey, 'geolocation'>;
-type SavedUrlSortKey = 'date' | 'url' | 'tags' | 'sync';
+type SavedUrlSortKey = SnapshotSort['key'];
+// Either explicit ids, or every snapshot matching a search except some, so
+// "select all" covers 100k+ snapshots without loading them.
+type Selection = { all: false; ids: Set<string> } | { all: true; search: string; except: Set<string> };
+const noSelection: Selection = { all: false, ids: new Set() };
+const savedUrlPageSize = 100;
 type SortDirection = 'asc' | 'desc';
 type OptionTab = { id: Tab; label: string; Icon: LucideIcon };
 type LocalCaptureConfigKey = 'save_viewport_screenshots_locally' | 'save_screenshots_locally' | 'save_mhtml_locally' | 'save_singlefile_locally';
@@ -171,7 +188,7 @@ function tabManagerPlusSessionTag(session: TabManagerPlusSession): string {
   return namedTag || dateTag('tab-manager-plus', session.date);
 }
 
-function tabManagerPlusSessionsToImportItems(sessions: TabManagerPlusSession[], existingUrls: Set<string>): ImportItem[] {
+function tabManagerPlusSessionsToSnapshots(sessions: TabManagerPlusSession[]): Snapshot[] {
   return sessions.flatMap((session) => {
     const sourceTag = 'tab-manager-plus';
     const sessionTag = tabManagerPlusSessionTag(session);
@@ -183,8 +200,6 @@ function tabManagerPlusSessionsToImportItems(sessions: TabManagerPlusSession[], 
       .map((tab) => ({
         ...createSnapshot(tab.url, tags, tab.title || '', tab.favIconUrl || null),
         timestamp: timestampIso,
-        selected: !existingUrls.has(tab.url),
-        isNew: !existingUrls.has(tab.url),
       }));
   });
 }
@@ -262,27 +277,6 @@ function snapshotSingleFileDownloadName(snapshot: Snapshot): string {
   return snapshot.singlefile?.filename || `${snapshot.timestamp.slice(0, 10).replaceAll('-', '')}-${safeFileSegment(host)}-${safeFileSegment(snapshot.id)}-singlefile.html`;
 }
 
-function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.style.display = 'none';
-  document.body.append(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-async function blobToUint8Array(blob: Blob): Promise<Uint8Array> {
-  return new Uint8Array(await blob.arrayBuffer());
-}
-
-function uint8ArrayToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  const copy = new Uint8Array(bytes.byteLength);
-  copy.set(bytes);
-  return copy.buffer;
-}
 
 function extensionUrl(path: string): string {
   return (browser.runtime.getURL as (path: string) => string)(path);
@@ -380,8 +374,7 @@ function MhtmlViewer({ snapshot_id }: { snapshot_id: string }) {
     async function loadMhtml() {
       setState({ loading: true });
       try {
-        const snapshots = await getSnapshots();
-        const snapshot = snapshots.find((item) => item.id === snapshot_id);
+        const snapshot = await getSnapshot(snapshot_id);
         if (!snapshot) throw new Error(t("Saved URL not found"));
         const blob = await readSnapshotMhtmlBlob(snapshot.mhtml);
         if (!blob) throw new Error(t("Local MHTML snapshot not found"));
@@ -517,8 +510,7 @@ function SingleFileViewer({ snapshot_id }: { snapshot_id: string }) {
     async function loadSingleFile() {
       setState({ loading: true });
       try {
-        const snapshots = await getSnapshots();
-        const snapshot = snapshots.find((item) => item.id === snapshot_id);
+        const snapshot = await getSnapshot(snapshot_id);
         if (!snapshot) throw new Error(t("Saved URL not found"));
         const blob = await readSnapshotSingleFileBlob(snapshot.singlefile);
         if (!blob) throw new Error(t("Local SingleFile HTML snapshot not found"));
@@ -620,8 +612,7 @@ function ScreenshotViewer({ snapshot_id }: { snapshot_id: string }) {
     async function loadScreenshot() {
       setState({ loading: true });
       try {
-        const snapshots = await getSnapshots();
-        const snapshot = snapshots.find((item) => item.id === snapshot_id);
+        const snapshot = await getSnapshot(snapshot_id);
         if (!snapshot) throw new Error(t("Saved URL not found"));
         const blobs = await readSnapshotScreenshotBlobs(snapshot.screenshot || snapshot.viewport_screenshot);
         if (blobs.length === 0) throw new Error(t("Local screenshot not found"));
@@ -790,9 +781,19 @@ export default function OptionsApp() {
 
 function OptionsMain() {
   const [tab, setTab] = useState<Tab>('urls');
+  // Saved URLs shows a window of the matching snapshots, loaded from the
+  // database a page at a time; nothing here holds the whole collection.
   const [snapshots, setSnapshotsState] = useState<Snapshot[]>([]);
-  const [selectedSnapshots, setSelectedSnapshots] = useState<Set<string>>(new Set());
+  const [hasMoreSnapshots, setHasMoreSnapshots] = useState(false);
+  const [savedCount, setSavedCount] = useState(0);
+  const [matchingCount, setMatchingCount] = useState(0);
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagCounts, setTagCounts] = useState<Array<[string, number]>>([]);
+  const [selection, setSelection] = useState<Selection>(noSelection);
   const [filterText, setFilterText] = useState('');
+  // The search the table shows: filterText once typing pauses, so each
+  // keystroke does not query the database.
+  const [searchText, setSearchText] = useState('');
   const [highlightedSnapshotId, setHighlightedSnapshotId] = useState('');
   const [config, setConfigState] = useState<ConfigState>(defaultConfig);
   const [serverStatus, setServerStatus] = useState<Status>({ kind: 'idle', text: '' });
@@ -849,18 +850,16 @@ function OptionsMain() {
   ];
 
   async function refreshAll() {
-    const [storedSnapshots, storedConfig, personaState] = await Promise.all([
-      getSnapshots(),
+    const [storedConfig, personaState] = await Promise.all([
       getConfig(),
       ensurePersonas(),
     ]);
     setUiLanguage(storedConfig.ui_language);
-    setSnapshotsState(storedSnapshots);
     setConfigState(storedConfig);
     if (personaState.personas.some((persona) => persona.name === 'Private')) {
       const { privateSettingsInitialized } = await browser.storage.local.get('privateSettingsInitialized');
       if (!privateSettingsInitialized) {
-        const defaults = currentPersonaSettings();
+        const defaults = await currentPersonaSettings();
         personaState.personas = await mutatePersonas((items) => items.map((persona) => persona.name === 'Private'
           ? { ...persona, settings: { ...defaults, ...persona.settings } } : persona));
         await browser.storage.local.set({ privateSettingsInitialized: true });
@@ -885,14 +884,6 @@ function OptionsMain() {
     }
     function refreshPersonas(changes: Record<string, { newValue?: unknown }>, area: string) {
       if (area !== 'local') return;
-      if (changes.entries) getSnapshots().then((entries) => {
-        setSnapshotsState(entries);
-        const ids = new Set(entries.map((entry) => entry.id));
-        setSelectedSnapshots((current) => new Set([...current].filter((id) => ids.has(id))));
-        setSyncStatuses((current) => Object.fromEntries(Object.entries(current).filter(([id]) => ids.has(id))));
-        setInlineTagEditor((current) => current && ids.has(current.snapshot_id) ? current : null);
-        if (!entries.length) { setModalTags([]); setEditingTags(false); }
-      });
       if (Object.keys(changes).some((key) => key.startsWith('cookie_sync:'))) getCookieSyncStates().then(setCookieSyncStates);
       if (changes.personas) getPersonas().then((state) => setPersonasState(state.personas));
       if (changes.server_registry || changes.server_policies || changes.local_retention_ms || changes.capture_retention_ms || Object.keys(changes).some(key => key.startsWith('save_'))) getConfig().then(setConfigState);
@@ -923,48 +914,13 @@ function OptionsMain() {
     return () => dialog.removeEventListener('close', handleClose);
   }, [editingTags]);
 
-  const visibleSnapshots = useMemo(() => {
-    const direction = savedUrlSortDirection === 'asc' ? 1 : -1;
-    return [...filterSnapshots(snapshots, filterText)].sort((a, b) => {
-      let comparison = 0;
-      if (savedUrlSortKey === 'date') {
-        comparison = Date.parse(a.timestamp) - Date.parse(b.timestamp);
-      } else if (savedUrlSortKey === 'url') {
-        comparison = (a.title || a.url).toLowerCase().localeCompare((b.title || b.url).toLowerCase());
-      } else if (savedUrlSortKey === 'tags') {
-        comparison = a.tags.join(' ').toLowerCase().localeCompare(b.tags.join(' ').toLowerCase());
-      } else {
-        const aStatus = snapshotSyncStatus(a, activeServer(config)?.id || '', syncStatuses[a.id]).text;
-        const bStatus = snapshotSyncStatus(b, activeServer(config)?.id || '', syncStatuses[b.id]).text;
-        comparison = aStatus.toLowerCase().localeCompare(bStatus.toLowerCase());
-      }
-      return comparison * direction;
-    });
-  }, [config, filterText, savedUrlSortDirection, savedUrlSortKey, snapshots, syncStatuses]);
-  const visibleSnapshotIds = useMemo(() => visibleSnapshots.map((snapshot) => snapshot.id), [visibleSnapshots]);
-  const visibleSelectedCount = useMemo(
-    () => visibleSnapshotIds.filter((id) => selectedSnapshots.has(id)).length,
-    [selectedSnapshots, visibleSnapshotIds],
-  );
-  const allVisibleSelected = visibleSnapshotIds.length > 0 && visibleSelectedCount === visibleSnapshotIds.length;
-
   useEffect(() => {
     if (!highlightedSnapshotId) return;
     const row = document.querySelector<HTMLElement>('[data-highlighted-snapshot="true"]');
     row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  }, [highlightedSnapshotId, visibleSnapshots]);
-
-  const tags = useMemo(() => uniqueTags(snapshots), [snapshots]);
-  const hasSavedScreenshots = useMemo(() => snapshots.some((snapshot) => Boolean((snapshot.screenshot || snapshot.viewport_screenshot)?.path)), [snapshots]);
-  const tagCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    visibleSnapshots.forEach((snapshot) => {
-      snapshot.tags.forEach((tag) => counts.set(tag, (counts.get(tag) || 0) + 1));
-    });
-    return [...counts.entries()].sort(([tagA, countA], [tagB, countB]) => (
-      countB === countA ? tagA.localeCompare(tagB) : countB - countA
-    ));
-  }, [visibleSnapshots]);
+  }, [highlightedSnapshotId, snapshots]);
+  // Thumbnail column only when a row on screen has a screenshot.
+  const hasSavedScreenshots = snapshots.some((snapshot) => Boolean((snapshot.screenshot || snapshot.viewport_screenshot)?.path));
 
   const modalTagSuggestions = useMemo(() => {
     return matchingTagSuggestions(tags, newTag, modalTags);
@@ -1042,6 +998,102 @@ function OptionsMain() {
     return () => { active = false; browser.storage.onChanged.removeListener(onChanged); };
   }, [pendingSaves]);
   const server_id = server?.id || '';
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearchText(filterText), 200);
+    return () => window.clearTimeout(timer);
+  }, [filterText]);
+  // A selection belongs to the search it was made in.
+  useEffect(() => setSelection(noSelection), [searchText]);
+  const savedUrlSort = useMemo<SnapshotSort>(() => ({ key: savedUrlSortKey, direction: savedUrlSortDirection }),
+    [savedUrlSortKey, savedUrlSortDirection]);
+  // How many rows the current search and sort have paged through (excluding
+  // a highlighted row added on top): the offset of the next page.
+  const queriedRows = useRef(0);
+  const latestSnapshotLoad = useRef(0);
+  const loadSnapshotWindow = useCallback(async (limit: number) => {
+    const request = ++latestSnapshotLoad.current;
+    const query = { search: searchText };
+    const [{ snapshots: rows, hasMore }, matching, saved, counts, allTags] = await Promise.all([
+      listSnapshots(query, savedUrlSort, { offset: 0, limit }), countSnapshots(query), countSnapshots(),
+      snapshotTagCounts(), snapshotTags(),
+    ]);
+    // A page opened for one snapshot (?highlight=) shows it even when it is not on the first page.
+    const highlighted = highlightedSnapshotId && !rows.some(row => row.id === highlightedSnapshotId)
+      ? await getSnapshot(highlightedSnapshotId) : null;
+    if (request !== latestSnapshotLoad.current) return;
+    queriedRows.current = limit;
+    setSnapshotsState([...(highlighted ? [highlighted] : []), ...rows]);
+    setHasMoreSnapshots(hasMore);
+    setMatchingCount(matching);
+    setSavedCount(saved);
+    setTagCounts(counts);
+    setTags(allTags);
+    if (!saved) { setModalTags([]); setEditingTags(false); }
+  }, [searchText, savedUrlSort, highlightedSnapshotId]);
+  useEffect(() => { void loadSnapshotWindow(savedUrlPageSize); }, [loadSnapshotWindow]);
+  // Writes from any context (popup, background sync, another tab) reload the
+  // rows already on screen. Bursts (a bulk edit, an import) coalesce.
+  useEffect(() => {
+    let timer = 0;
+    const unsubscribe = onSnapshotsChanged(() => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => void loadSnapshotWindow(Math.max(savedUrlPageSize, queriedRows.current)), 100);
+    });
+    return () => { window.clearTimeout(timer); unsubscribe(); };
+  }, [loadSnapshotWindow]);
+  useEffect(() => {
+    const ids = new Set(snapshots.map((snapshot) => snapshot.id));
+    setInlineTagEditor((current) => current && ids.has(current.snapshot_id) ? current : null);
+  }, [snapshots]);
+  const loadingMore = useRef(false);
+  async function loadMoreSnapshots() {
+    if (loadingMore.current) return;
+    loadingMore.current = true;
+    try {
+      const request = latestSnapshotLoad.current;
+      const offset = queriedRows.current;
+      const { snapshots: rows, hasMore } = await listSnapshots({ search: searchText }, savedUrlSort, { offset, limit: savedUrlPageSize });
+      if (request !== latestSnapshotLoad.current) return;
+      queriedRows.current = offset + savedUrlPageSize;
+      setHasMoreSnapshots(hasMore);
+      setSnapshotsState((current) => [...current, ...rows.filter((row) => !current.some((item) => item.id === row.id))]);
+    } finally {
+      loadingMore.current = false;
+    }
+  }
+  const loadMoreRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const button = loadMoreRef.current;
+    if (!button || typeof IntersectionObserver !== 'function') return;
+    const observer = new IntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting)) void loadMoreSnapshots(); });
+    observer.observe(button);
+    return () => observer.disconnect();
+  });
+
+  const selectedCount = selection.all ? Math.max(0, matchingCount - selection.except.size) : selection.ids.size;
+  const allMatchingSelected = selection.all && selection.except.size === 0 && matchingCount > 0;
+  function isSelected(id: string) {
+    return selection.all ? !selection.except.has(id) : selection.ids.has(id);
+  }
+  // Walks a selection in database batches. Snapshots deleted meanwhile are skipped.
+  function selectedBatches(current: Selection = selection): SnapshotBatches {
+    return async (fn) => {
+      if (current.all) {
+        await forEachSnapshot({ search: current.search }, async (batch) => {
+          const chosen = batch.filter((snapshot) => !current.except.has(snapshot.id));
+          if (chosen.length) await fn(chosen);
+        });
+        return;
+      }
+      const ids = [...current.ids];
+      for (let start = 0; start < ids.length; start += savedUrlPageSize) {
+        const batch = await getSnapshots(ids.slice(start, start + savedUrlPageSize));
+        if (batch.length) await fn(batch);
+      }
+    };
+  }
+
   useEffect(() => {
     if (!server) return;
     const candidates = snapshots.filter(snapshot => {
@@ -1116,16 +1168,11 @@ function OptionsMain() {
     return savedUrlSortDirection === 'asc' ? '↑' : '↓';
   }
 
-  const selectedSnapshotList = useMemo(
-    () => snapshots.filter((snapshot) => selectedSnapshots.has(snapshot.id)),
-    [selectedSnapshots, snapshots],
-  );
-
-  function exportSelectedSnapshots(format: 'csv' | 'json') {
-    if (!selectedSnapshotList.length) return;
+  async function exportSelectedSnapshots(format: 'csv' | 'json') {
+    if (!selectedCount) return;
     setExportMenuOpen(false);
-    if (format === 'csv') downloadCsv(selectedSnapshotList);
-    else downloadJson(selectedSnapshotList);
+    const blob = format === 'csv' ? await snapshotCsvBlob(selectedBatches()) : await snapshotJsonBlob(selectedBatches());
+    downloadBlob(blob, `${archiveboxExportBaseName()}.${format}`);
   }
 
   async function exportSelectedLocalArtifacts(
@@ -1133,20 +1180,22 @@ function OptionsMain() {
     readBlob: (snapshot: Snapshot) => Promise<Blob | null>,
     downloadName: (snapshot: Snapshot) => string,
   ) {
-    if (!selectedSnapshotList.length) return;
+    if (!selectedCount) return;
     setExportMenuOpen(false);
 
     let downloaded = 0;
     let missing = 0;
-    for (const snapshot of selectedSnapshotList) {
-      const blob = await readBlob(snapshot);
-      if (!blob) {
-        missing += 1;
-        continue;
+    await selectedBatches()(async (batch) => {
+      for (const snapshot of batch) {
+        const blob = await readBlob(snapshot);
+        if (!blob) {
+          missing += 1;
+          continue;
+        }
+        downloadBlob(blob, downloadName(snapshot));
+        downloaded += 1;
       }
-      downloadBlob(blob, downloadName(snapshot));
-      downloaded += 1;
-    }
+    });
 
     if (downloaded === 0) {
       const artifactLabel = artifact === 'screenshot' ? t("screenshots") : artifact === 'mhtml' ? t("MHTML snapshots") : t("SingleFile HTML snapshots");
@@ -1164,20 +1213,22 @@ function OptionsMain() {
   }
 
   async function exportSelectedScreenshots() {
-    if (!selectedSnapshotList.length) return;
+    if (!selectedCount) return;
     setExportMenuOpen(false);
 
     let downloaded = 0;
     let missing = 0;
-    for (const snapshot of selectedSnapshotList) {
-      const blobs = await readSnapshotScreenshotBlobs(snapshot.screenshot || snapshot.viewport_screenshot);
-      if (blobs.length === 0) {
-        missing += 1;
-        continue;
+    await selectedBatches()(async (batch) => {
+      for (const snapshot of batch) {
+        const blobs = await readSnapshotScreenshotBlobs(snapshot.screenshot || snapshot.viewport_screenshot);
+        if (blobs.length === 0) {
+          missing += 1;
+          continue;
+        }
+        blobs.forEach((blob, index) => downloadBlob(blob, snapshotScreenshotDownloadName(snapshot, index)));
+        downloaded += blobs.length;
       }
-      blobs.forEach((blob, index) => downloadBlob(blob, snapshotScreenshotDownloadName(snapshot, index)));
-      downloaded += blobs.length;
-    }
+    });
 
     if (downloaded === 0) {
       setSavedUrlStatus({ kind: 'warning', text: t("No selected snapshots have $1", t("screenshots")) });
@@ -1209,53 +1260,60 @@ function OptionsMain() {
   }
 
   async function exportSelectedZip() {
-    if (!selectedSnapshotList.length) return;
+    if (!selectedCount) return;
     setExportMenuOpen(false);
-    setSavedUrlStatus({ kind: 'idle', text: t("Building ZIP export for $1 snapshots...", selectedSnapshotList.length) });
+    setSavedUrlStatus({ kind: 'idle', text: t("Building ZIP export for $1 snapshots...", selectedCount) });
 
     const baseName = archiveboxExportBaseName();
-    const files: Record<string, Uint8Array> = {
-      [`${baseName}.csv`]: strToU8(snapshotCsvContent(selectedSnapshotList)),
-      [`${baseName}.json`]: strToU8(snapshotJsonContent(selectedSnapshotList)),
+    const current = selection;
+    // fflate's streaming Zip compresses one file at a time and emits output
+    // chunks that become Blob parts, so a large selection never sits in
+    // memory uncompressed.
+    const chunks: Uint8Array<ArrayBuffer>[] = [];
+    const failure: { error?: Error } = {};
+    const zip = new Zip((error, chunk) => {
+      if (error) failure.error = error;
+      else chunks.push(chunk as Uint8Array<ArrayBuffer>);
+    });
+    const addFile = async (path: string, blob: Blob) => {
+      const entry = new ZipDeflate(path, { level: 6 });
+      zip.add(entry);
+      entry.push(new Uint8Array(await blob.arrayBuffer()), true);
     };
+    await addFile(`${baseName}.csv`, await snapshotCsvBlob(selectedBatches(current)));
+    await addFile(`${baseName}.json`, await snapshotJsonBlob(selectedBatches(current)));
     let includedArtifacts = 0;
-
-    for (const snapshot of selectedSnapshotList) {
-      const snapshotFiles = await readSnapshotOpfsFiles(snapshot);
-      for (const file of snapshotFiles) {
-        files[file.path] = await blobToUint8Array(file.blob);
-        includedArtifacts += 1;
+    await selectedBatches(current)(async (batch) => {
+      for (const snapshot of batch) {
+        for (const file of await readSnapshotFiles(snapshot)) {
+          await addFile(file.path, file.blob);
+          includedArtifacts += 1;
+        }
       }
+    });
+    zip.end();
+    if (failure.error) {
+      setSavedUrlStatus({ kind: 'error', text: failure.error.message });
+      return;
     }
-
-    const zipBytes = zipSync(files, { level: 6 });
-    downloadBlob(
-      new Blob([uint8ArrayToArrayBuffer(zipBytes)], { type: 'application/zip' }),
-      `${baseName}.zip`,
-    );
+    downloadBlob(new Blob(chunks, { type: 'application/zip' }), `${baseName}.zip`);
     setSavedUrlStatus({
       kind: 'success',
       text: t("Exported ZIP with $1 local artifacts", includedArtifacts),
     });
   }
 
-  async function persistSnapshots(update: (entries: Snapshot[]) => Snapshot[]) {
-    const next = await mutateSnapshots(update);
-    setSnapshotsState(next);
-    return next;
-  }
-
   function toggleSnapshot(id: string) {
-    setSelectedSnapshots((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+    setSelection((current) => {
+      const ids = new Set(current.all ? current.except : current.ids);
+      if (ids.has(id)) ids.delete(id);
+      else ids.add(id);
+      return current.all ? { ...current, except: ids } : { all: false, ids };
     });
   }
 
   async function updateSnapshotTags(snapshot_id: string, tags: string[], message: string) {
-    const existingSnapshot = snapshots.find((snapshot) => snapshot.id === snapshot_id);
+    const existingSnapshot = await getSnapshot(snapshot_id);
     if (existingSnapshot?.remote_copies?.[server_id]?.snapshot_id) {
       try {
         await syncArchiveBoxSnapshotTags(destination(), existingSnapshot.remote_copies![server_id]!.snapshot_id!, existingSnapshot.tags, tags);
@@ -1264,9 +1322,7 @@ function OptionsMain() {
         return;
       }
     }
-    await persistSnapshots((snapshots) => snapshots.map((snapshot) => (
-      snapshot.id === snapshot_id ? { ...snapshot, tags } : snapshot
-    )));
+    await updateSnapshot(snapshot_id, (snapshot) => ({ ...snapshot, tags }));
     setSavedUrlStatus({ kind: 'success', text: message });
   }
 
@@ -1338,8 +1394,9 @@ function OptionsMain() {
     }
     setApiStatus({ kind: 'idle', text: t("Testing ArchiveBox API key...") });
     try {
-      const userId = await testApiKey(archiveboxServerBaseUrl, (server?.token || ''));
-      setApiStatus({ kind: 'success', text: t("API key is valid: user_id = $1", userId || '') });
+      const { user_id, username } = await testApiKey(archiveboxServerBaseUrl, (server?.token || ''));
+      setApiStatus({ kind: 'success', text: t("API key is valid: user_id = $1", user_id || '') });
+      if (username && username !== server?.username) await saveServer({ username });
       setServerPersonas(await getServerPersonas(destination()));
       setPersonaError('');
     } catch (error) {
@@ -1627,7 +1684,8 @@ function OptionsMain() {
     // Start the location request directly in the click handler, before awaiting storage.
     const location = detectPersonaLocation().then((geolocation) => ({ geolocation, error: '' }),
       (error: GeolocationPositionError) => ({ geolocation: null, error: error.message }));
-    await updatePersona(persona.id, (item) => ({ ...item, settings: { ...item.settings, ...currentPersonaSettings() } }));
+    const settings = await currentPersonaSettings();
+    await updatePersona(persona.id, (item) => ({ ...item, settings: { ...item.settings, ...settings } }));
     setPersonasState((await getPersonas()).personas);
     setPersonaStatus({ kind: 'idle', text: t('Browser settings updated; waiting for location permission or position.') });
     const result = await location;
@@ -1705,13 +1763,20 @@ function OptionsMain() {
     setPersonasState((await getPersonas()).personas);
   }
 
+  // Marks which import candidates are already saved (by URL); with selectNew,
+  // the unsaved ones start selected.
+  async function toImportItems(candidates: Snapshot[], selectNew = false): Promise<ImportItem[]> {
+    const saved = await savedSnapshotUrls(candidates.map((item) => item.url));
+    return candidates.map((item) => ({ ...item, selected: selectNew && !saved.has(item.url), isNew: !saved.has(item.url) }));
+  }
+
   async function loadSafariFiles(files: File[]) {
     if (!files.length) return;
     setImportLoading(true);
     setImportItems([]);
     setImportStatus({ kind: 'idle', text: t('Reading Safari export…') });
     try {
-      const items = await loadSafariExportSnapshots(files, safariImportSource, importStartDate, importEndDate, new Set(snapshots.map(snapshot => snapshot.url)));
+      const items = await toImportItems(await loadSafariExportSnapshots(files, safariImportSource, importStartDate, importEndDate));
       setImportItems(items);
       setImportStatus({ kind: 'success', text: t('Loaded $1 Safari URLs', items.length) });
     } catch (error) {
@@ -1734,9 +1799,8 @@ function OptionsMain() {
       setImportStatus({ kind: 'warning', text: t("History import is not supported in this browser.") });
       return;
     }
-    const existingUrls = new Set(snapshots.map((snapshot) => snapshot.url));
     try {
-      const items = await loadHistorySnapshots(importStartDate, importEndDate, existingUrls);
+      const items = await toImportItems(await loadHistorySnapshots(importStartDate, importEndDate));
       setImportItems(items);
       setImportStatus({ kind: 'success', text: t("Loaded $1 history URLs", items.length) });
     } catch (error) {
@@ -1759,8 +1823,7 @@ function OptionsMain() {
       setImportStatus({ kind: 'warning', text: t("Bookmark import is not supported in this browser.") });
       return;
     }
-    const existingUrls = new Set(snapshots.map((snapshot) => snapshot.url));
-    const items = await loadBookmarkSnapshots(existingUrls);
+    const items = await toImportItems(await loadBookmarkSnapshots());
     setImportItems(items);
     setImportStatus({ kind: 'success', text: t("Loaded $1 bookmark URLs", items.length) });
   }
@@ -1780,8 +1843,7 @@ function OptionsMain() {
         setImportStatus({ kind: response?.error === 'approval_required' ? 'warning' : 'error', text: message });
         return;
       }
-      const existingUrls = new Set(snapshots.map((snapshot) => snapshot.url));
-      const items = tabManagerPlusSessionsToImportItems(response.sessions || [], existingUrls);
+      const items = await toImportItems(tabManagerPlusSessionsToSnapshots(response.sessions || []), true);
       setImportItems(items);
       setImportStatus({ kind: 'success', text: t("Loaded $1 Tab Manager Plus URLs", items.length) });
     } catch (error) {
@@ -1802,7 +1864,7 @@ function OptionsMain() {
       id: uuidv7(),
       tags: [...new Set([...snapshot.tags, ...tagsToAdd])],
     }));
-    await persistSnapshots((snapshots) => [...snapshots, ...imported]);
+    await addSnapshots(imported);
     setImportItems(importItems.map((item) => selectedIds.has(item.id)
       ? { ...item, selected: false, isNew: false }
       : item));
@@ -1819,24 +1881,8 @@ function OptionsMain() {
   }
 
   async function syncSelected() {
-    const selected = snapshots.filter((snapshot) => selectedSnapshots.has(snapshot.id));
-    if (!selected.length) {
+    if (!selectedCount) {
       setSavedUrlStatus({ kind: 'warning', text: t("No snapshots selected") });
-      return;
-    }
-    const archiveableSelected = selected.filter((snapshot) => !archiveBoxServerUrlMatches((server?.server || ''), snapshot.url));
-    const ignoredSelected = selected.filter((snapshot) => archiveBoxServerUrlMatches((server?.server || ''), snapshot.url));
-    if (ignoredSelected.length) {
-      setSyncStatuses((current) => ({
-        ...current,
-        ...Object.fromEntries(ignoredSelected.map((snapshot) => [
-          snapshot.id,
-          { kind: 'warning' as const, text: t("ArchiveBox server URLs are ignored."), serverId: server_id },
-        ])),
-      }));
-    }
-    if (!archiveableSelected.length) {
-      setSavedUrlStatus({ kind: 'warning', text: t("ArchiveBox server URLs are ignored.") });
       return;
     }
     setSavedUrlStatus({ kind: 'idle', text: t("ArchiveBox needs permission to connect to your configured server so it can sync selected URLs.") });
@@ -1850,40 +1896,45 @@ function OptionsMain() {
       setSavedUrlStatus({ kind: 'error', text: (error as Error).message });
       return;
     }
-    setSavedUrlStatus({ kind: 'idle', text: t("Syncing $1 snapshots...", archiveableSelected.length) });
+    setSavedUrlStatus({ kind: 'idle', text: t("Syncing $1 snapshots...", selectedCount) });
     let failed = 0;
-    for (const snapshot of archiveableSelected) {
-      setSyncStatuses((current) => ({
-        ...current,
-        [snapshot.id]: { kind: 'warning', text: t("Syncing..."), serverId: server_id },
-      }));
-      try {
-        await submitSnapshot(destination(), snapshot);
+    let synced = 0;
+    await selectedBatches()(async (batch) => {
+      for (const snapshot of batch) {
+        synced += 1;
         setSyncStatuses((current) => ({
           ...current,
-          [snapshot.id]: { kind: 'success', text: t("Synced"), serverId: server_id },
+          [snapshot.id]: { kind: 'warning', text: t("Syncing..."), serverId: server_id },
         }));
-      } catch (error) {
-        failed += 1;
-        setSyncStatuses((current) => ({
-          ...current,
-          [snapshot.id]: { kind: 'error', text: (error as Error).message, serverId: server_id },
-        }));
+        try {
+          await submitSnapshot(destination(), snapshot);
+          setSyncStatuses((current) => ({
+            ...current,
+            [snapshot.id]: { kind: 'success', text: t("Synced"), serverId: server_id },
+          }));
+        } catch (error) {
+          failed += 1;
+          setSyncStatuses((current) => ({
+            ...current,
+            [snapshot.id]: { kind: 'error', text: (error as Error).message, serverId: server_id },
+          }));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
+    });
     setSavedUrlStatus(failed
-      ? { kind: 'error', text: `${t("Sync failed")}: ${failed}/${archiveableSelected.length}` }
-      : { kind: 'success', text: t("Finished syncing $1 snapshots", archiveableSelected.length) });
+      ? { kind: 'error', text: `${t("Sync failed")}: ${failed}/${synced}` }
+      : { kind: 'success', text: t("Finished syncing $1 snapshots", synced) });
   }
 
-  function openTagEditor() {
-    const selected = snapshots.filter((snapshot) => selectedSnapshots.has(snapshot.id));
-    const commonTags = selected.reduce<Set<string> | null>((acc, snapshot) => {
-      if (!acc) return new Set(snapshot.tags);
-      return new Set([...acc].filter((tag) => snapshot.tags.includes(tag)));
-    }, null);
-    setModalTags(commonTags ? [...commonTags] : []);
+  async function openTagEditor() {
+    const common: { tags?: Set<string> } = {};
+    await selectedBatches()(async (batch) => {
+      for (const snapshot of batch) {
+        common.tags = common.tags ? new Set([...common.tags].filter((tag) => snapshot.tags.includes(tag))) : new Set(snapshot.tags);
+      }
+    });
+    setModalTags(common.tags ? [...common.tags] : []);
     setNewTag('');
     setEditingTags(true);
   }
@@ -1904,45 +1955,49 @@ function OptionsMain() {
   }
 
   async function saveTagChanges() {
-    for (const snapshot of snapshots.filter((item) => selectedSnapshots.has(item.id))) {
-      if (!snapshot.remote_copies?.[server_id]?.snapshot_id) continue;
-      try {
-        await syncArchiveBoxSnapshotTags(destination(), snapshot.remote_copies![server_id]!.snapshot_id!, snapshot.tags, modalTags);
-      } catch (error) {
-        setSavedUrlStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
-        return;
-      }
+    const count = selectedCount;
+    try {
+      await selectedBatches()(async (batch) => {
+        for (const snapshot of batch) {
+          if (!snapshot.remote_copies?.[server_id]?.snapshot_id) continue;
+          await syncArchiveBoxSnapshotTags(destination(), snapshot.remote_copies![server_id]!.snapshot_id!, snapshot.tags, modalTags);
+        }
+        await updateSnapshots(batch.map((snapshot) => snapshot.id), (snapshot) => ({ ...snapshot, tags: modalTags }));
+      });
+    } catch (error) {
+      setSavedUrlStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
+      return;
     }
-    await persistSnapshots((snapshots) => snapshots.map((snapshot) => selectedSnapshots.has(snapshot.id)
-      ? { ...snapshot, tags: modalTags }
-      : snapshot));
     setEditingTags(false);
-    setSavedUrlStatus({ kind: 'success', text: t("Updated tags on $1 snapshots", selectedSnapshots.size) });
+    setSavedUrlStatus({ kind: 'success', text: t("Updated tags on $1 snapshots", count) });
   }
 
   async function deleteSelectedSnapshots() {
-    const selectedIds = new Set(selectedSnapshots);
-    if (!selectedIds.size) return;
-    if (!confirm(t("Delete $1 snapshots?", selectedIds.size))) return;
+    const count = selectedCount;
+    if (!count) return;
+    if (!confirm(t("Delete $1 snapshots?", count))) return;
 
-    const snapshotsToDelete = snapshots.filter((snapshot) => selectedIds.has(snapshot.id));
-    await persistSnapshots((snapshots) => snapshots.filter((snapshot) => !selectedIds.has(snapshot.id)));
-    setSelectedSnapshots(new Set());
-
+    const current = selection;
+    setSelection(noSelection);
+    let deleted = 0;
     const serverErrors: string[] = [];
-    for (const snapshot of snapshotsToDelete) {
-      if (!snapshot.remote_copies?.[server_id]?.snapshot_id) continue;
-      try {
-        await removeFromArchiveBox(destination(), snapshot);
-      } catch (error) {
-        serverErrors.push(error instanceof Error ? error.message : String(error));
+    await selectedBatches(current)(async (batch) => {
+      await deleteSnapshots(batch.map((snapshot) => snapshot.id));
+      deleted += batch.length;
+      for (const snapshot of batch) {
+        if (!snapshot.remote_copies?.[server_id]?.snapshot_id) continue;
+        try {
+          await removeFromArchiveBox(destination(), snapshot);
+        } catch (error) {
+          serverErrors.push(error instanceof Error ? error.message : String(error));
+        }
       }
-    }
+    });
 
     if (serverErrors.length) {
       setSavedUrlStatus({
         kind: 'warning',
-        text: t("Deleted $1 local snapshots. Failed to delete $2 from server: $3", snapshotsToDelete.length, serverErrors.length, [...new Set(serverErrors)].join('; ')),
+        text: t("Deleted $1 local snapshots. Failed to delete $2 from server: $3", deleted, serverErrors.length, [...new Set(serverErrors)].join('; ')),
       });
       return;
     }
@@ -2013,19 +2068,19 @@ function OptionsMain() {
         <section className="layout">
           <div className="panel wide">
             <div className="toolbar saved-url-toolbar">
-              <span className="saved-url-count">{t("$1 visible / $2 saved · $3 selected", visibleSnapshots.length, snapshots.length, visibleSelectedCount)}</span>
+              <span className="saved-url-count">{t("$1 visible / $2 saved · $3 selected", matchingCount, savedCount, selectedCount)}</span>
               <label className="search-field">
                 <Search size={14} aria-hidden="true" />
-                <input value={filterText} onChange={(event) => updateSavedUrlFilter(event.currentTarget.value)} placeholder={t("Search by URL, title, ID, timestamp, or tags")} />
+                <input value={filterText} onChange={(event) => updateSavedUrlFilter(event.currentTarget.value)} placeholder={t("Search by URL, title, or tags")} />
               </label>
-              <button className="icon-button" disabled={!selectedSnapshots.size} onClick={openTagEditor}>
+              <button className="icon-button" disabled={!selectedCount} onClick={openTagEditor}>
                 <Pencil size={14} aria-hidden="true" />
                 <span>{t("Tags")}</span>
               </button>
               <div className="export-menu">
                 <button
                   className="icon-button"
-                  disabled={!selectedSnapshots.size}
+                  disabled={!selectedCount}
                   onClick={() => setExportMenuOpen((open) => !open)}
                   aria-expanded={exportMenuOpen}
                   aria-haspopup="menu"
@@ -2034,7 +2089,7 @@ function OptionsMain() {
                   <span>{t("Export")}</span>
                   <ChevronDown size={13} aria-hidden="true" />
                 </button>
-                {exportMenuOpen && selectedSnapshots.size > 0 && (
+                {exportMenuOpen && selectedCount > 0 && (
                   <div className="export-menu__items" role="menu">
                     <button onClick={() => exportSelectedSnapshots('csv')} role="menuitem">{t("CSV")}</button>
                     <button onClick={() => exportSelectedSnapshots('json')} role="menuitem">{t("JSON")}</button>
@@ -2045,11 +2100,11 @@ function OptionsMain() {
                   </div>
                 )}
               </div>
-              <button disabled={!selectedSnapshots.size} onClick={deleteSelectedSnapshots} className="icon-button">
+              <button disabled={!selectedCount} onClick={deleteSelectedSnapshots} className="icon-button">
                 <Trash2 size={14} aria-hidden="true" />
                 <span>{t("Delete")}</span>
               </button>
-              <button className="icon-button" disabled={!selectedSnapshots.size} onClick={syncSelected}>
+              <button className="icon-button" disabled={!selectedCount} onClick={syncSelected}>
                 <Upload size={14} aria-hidden="true" />
                 <span>{t("Sync")}</span>
               </button>
@@ -2062,20 +2117,11 @@ function OptionsMain() {
                     <th className="saved-url-table__check">
                       <input
                         type="checkbox"
-                        aria-label={allVisibleSelected ? t("Deselect all visible URLs") : t("Select all visible URLs")}
-                        checked={allVisibleSelected}
-                        disabled={visibleSnapshotIds.length === 0}
-                        onChange={(event) => {
-                          const shouldSelect = event.currentTarget.checked;
-                          setSelectedSnapshots((current) => {
-                            const next = new Set(current);
-                            visibleSnapshotIds.forEach((id) => {
-                              if (shouldSelect) next.add(id);
-                              else next.delete(id);
-                            });
-                            return next;
-                          });
-                        }}
+                        aria-label={allMatchingSelected ? t("Deselect all visible URLs") : t("Select all visible URLs")}
+                        checked={allMatchingSelected}
+                        disabled={matchingCount === 0}
+                        onChange={(event) => setSelection(event.currentTarget.checked
+                          ? { all: true, search: searchText, except: new Set() } : noSelection)}
                       />
                     </th>
                     <th aria-sort={savedUrlSortKey === 'date' ? (savedUrlSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
@@ -2084,28 +2130,18 @@ function OptionsMain() {
                         <b>{savedUrlSortIndicator('date')}</b>
                       </button>
                     </th>
-                    <th aria-sort={savedUrlSortKey === 'url' ? (savedUrlSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                      <button className="sort-header" onClick={() => updateSavedUrlSort('url')}>
+                    <th aria-sort={savedUrlSortKey === 'title' ? (savedUrlSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                      <button className="sort-header" onClick={() => updateSavedUrlSort('title')}>
                         <span>{t("URL")}</span>
-                        <b>{savedUrlSortIndicator('url')}</b>
+                        <b>{savedUrlSortIndicator('title')}</b>
                       </button>
                     </th>
-                    <th aria-sort={savedUrlSortKey === 'tags' ? (savedUrlSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                      <button className="sort-header" onClick={() => updateSavedUrlSort('tags')}>
-                        <span>{t("Tags")}</span>
-                        <b>{savedUrlSortIndicator('tags')}</b>
-                      </button>
-                    </th>
-                    <th aria-sort={savedUrlSortKey === 'sync' ? (savedUrlSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                      <button className="sort-header" onClick={() => updateSavedUrlSort('sync')}>
-                        <span>{t("Status")}</span>
-                        <b>{savedUrlSortIndicator('sync')}</b>
-                      </button>
-                    </th>
+                    <th>{t("Tags")}</th>
+                    <th>{t("Status")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleSnapshots.map((snapshot) => {
+                  {snapshots.map((snapshot) => {
                     const syncStatus = snapshotSyncStatus(snapshot, server_id, syncStatuses[snapshot.id]);
                     const inlineTagSuggestions = inlineTagEditor?.snapshot_id === snapshot.id
                       ? matchingTagSuggestions(tags, inlineTagEditor.value, snapshot.tags)
@@ -2117,7 +2153,7 @@ function OptionsMain() {
                         key={snapshot.id}
                       >
                         <td className="saved-url-table__check">
-                          <input type="checkbox" checked={selectedSnapshots.has(snapshot.id)} onChange={() => toggleSnapshot(snapshot.id)} />
+                          <input type="checkbox" checked={isSelected(snapshot.id)} onChange={() => toggleSnapshot(snapshot.id)} />
                         </td>
                         <td className="saved-url-date">
                           <time dateTime={snapshot.timestamp} title={snapshotDate(snapshot)}>{compactSnapshotDate(snapshot)}</time>
@@ -2175,7 +2211,8 @@ function OptionsMain() {
                   })}
                 </tbody>
               </table>
-              {visibleSnapshots.length === 0 && <EmptyState title={t("No saved URLs match this view")} detail={t("Save a page with the toolbar button or import URLs from browser history/bookmarks.")} />}
+              {hasMoreSnapshots && <button type="button" className="load-more" ref={loadMoreRef} onClick={() => void loadMoreSnapshots()}>{t("Load more")}</button>}
+              {snapshots.length === 0 && <EmptyState title={t("No saved URLs match this view")} detail={t("Save a page with the toolbar button or import URLs from browser history/bookmarks.")} />}
             </div>
           </div>
           <aside className="panel tags-panel">
@@ -2505,7 +2542,7 @@ function OptionsMain() {
             </div>
             <footer className="modal-actions">
               <button type="button" className="modal-button modal-button--cancel" onClick={closeTagEditor}>{t("cancel")}</button>
-              <span>{t("Selected snapshots: $1", selectedSnapshots.size)}</span>
+              <span>{t("Selected snapshots: $1", selectedCount)}</span>
               <button type="button" className="modal-button modal-button--primary" onClick={saveTagChanges}>{t("Save Changes")}</button>
             </footer>
           </dialog>

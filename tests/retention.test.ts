@@ -1,4 +1,4 @@
-import { launchExtension, seedExtensionStorage, waitForSavedSettings } from './helpers/extension';
+import { launchExtension, seedSnapshots, waitForSavedSettings } from './helpers/extension';
 import type { ServerRegistry } from '../src/lib/types';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -166,10 +166,10 @@ test('local retention defaults to 30 days and persists every choice', async ({},
     }
     // Existing records hidden by a newly configured server must survive unrelated
     // snapshot transactions (the same storage path used by TTL cleanup).
-    await seedExtensionStorage(page, { entries: [
+    await seedSnapshots(page, [
       { id: 'unsent-hidden', url: 'http://127.0.0.1:18764/page', title: 'Unsent hidden', timestamp: new Date().toISOString(), tags: [] },
       { id: 'unsent-visible', url: 'https://example.com/visible', title: 'Unsent visible', timestamp: new Date().toISOString(), tags: [] },
-    ] });
+    ]);
     await page.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com').fill('http://127.0.0.1:18764');
     await page.getByPlaceholder('http://localhost:5797 or https://archivebox.example.com').blur();
     await expect.poll(() => page.evaluate(async () => {
@@ -192,9 +192,10 @@ test('local retention defaults to 30 days and persists every choice', async ({},
     await page.getByPlaceholder('Add tag', { exact: true }).fill('retained');
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
     await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+    // Hidden snapshots are not shown, so read both by id.
     await expect.poll(() => page.evaluate(async () => {
-      const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
-      return (await api.storage.local.get('entries')).entries;
+      const models = (globalThis as typeof globalThis & { archiveboxModels: { getSnapshot(id: string): Promise<unknown> } }).archiveboxModels;
+      return [await models.getSnapshot('unsent-hidden'), await models.getSnapshot('unsent-visible')];
     })).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'unsent-hidden', tags: [] }),
       expect.objectContaining({ id: 'unsent-visible', tags: ['retained'] }),

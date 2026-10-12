@@ -1540,6 +1540,11 @@ code {
   text-transform: uppercase;
 }
 
+.load-more {
+  display: block;
+  margin: 12px auto;
+}
+
 .empty-state {
   display: grid;
   gap: 3px;

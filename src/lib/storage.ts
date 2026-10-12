@@ -1,10 +1,9 @@
 import { supportsMhtmlCapture } from './browserCapabilities';
 import { appConnection } from './appConnection';
 import { activeServer, validateRegistry, defaultServerPolicy } from './server_registry';
-import type { ConfigPatch, ConfigState, Persona, Snapshot, ServerConfiguration, ServerRegistry, ServerPolicy } from './types';
+import type { ConfigPatch, ConfigState, Persona, ServerConfiguration, ServerRegistry, ServerPolicy } from './types';
 import { retentionDurations } from './types';
 import { capturePlugins } from './captureStatus';
-import { archiveBoxServerUrlMatches } from './archiveboxUrlExclusions';
 import { uuidv7 } from './uuid';
 import { migratePublishedStorage } from './storage_migration';
 
@@ -149,52 +148,6 @@ export async function removeServer(id: string): Promise<void> {
 
 export async function getArchiveBoxServerUrl(): Promise<string> {
   return activeServer(await getConfig())?.server || '';
-}
-
-export async function getSnapshots(): Promise<Snapshot[]> {
-  await migratePublishedStorage();
-  const { entries = [] } = await browser.storage.local.get('entries');
-  return filterConfiguredArchiveBoxSnapshots(Array.isArray(entries) ? entries : []);
-}
-
-// All read/modify/write operations share a cross-context lock, including TTL cleanup.
-export async function mutateSnapshots(update: (entries: Snapshot[]) => Snapshot[] | Promise<Snapshot[]>): Promise<Snapshot[]> {
-  await migratePublishedStorage();
-  return navigator.locks.request('archivebox-snapshots', async () => {
-    const { entries = [] } = await browser.storage.local.get('entries');
-    const current: Snapshot[] = Array.isArray(entries) ? entries as Snapshot[] : [];
-    const previous_snapshots = new Map(current.map((entry) => [entry.id, entry]));
-    const existingIds = new Set(current.map((entry) => entry.id));
-    const updated = await update(current);
-    const { server_policies } = await getConfig();
-    const next = updated.map((snapshot) => {
-      const previous = previous_snapshots.get(snapshot.id);
-      if (!previous || !snapshot.remote_copies) return snapshot;
-      const changed = (kind: 'screenshot' | 'viewport_screenshot' | 'mhtml' | 'singlefile') => snapshot[kind]
-        && JSON.stringify(previous[kind]) !== JSON.stringify(snapshot[kind]);
-      if (!changed('screenshot') && !changed('viewport_screenshot') && !changed('mhtml') && !changed('singlefile')) return snapshot;
-      const remote_copies = Object.fromEntries(Object.entries(snapshot.remote_copies).map(([id, copy]) => {
-        const policy = { ...defaultServerPolicy, ...server_policies[id] };
-        const pending = (changed('viewport_screenshot') && policy.upload_viewport_screenshots_to_server)
-          || (changed('screenshot') && policy.upload_screenshots_to_server)
-          || (changed('mhtml') && policy.upload_mhtml_to_server)
-          || (changed('singlefile') && policy.upload_singlefile_to_server);
-        return [id, pending ? { ...copy, status: 'accepted' as const } : copy];
-      }));
-      return { ...snapshot, remote_copies };
-    });
-    const visible = await filterConfiguredArchiveBoxSnapshots(next);
-    const visibleIds = new Set(visible.map((entry) => entry.id));
-    // Exclusions reject new server URLs; they must not silently delete older,
-    // unsent records just because cleanup updated a different snapshot.
-    await browser.storage.local.set({ entries: next.filter((entry) => existingIds.has(entry.id) || visibleIds.has(entry.id)) });
-    return visible;
-  });
-}
-
-async function filterConfiguredArchiveBoxSnapshots(entries: Snapshot[]): Promise<Snapshot[]> {
-  const { servers } = await getConfig();
-  return entries.filter((snapshot) => !servers.some((server) => server.server && archiveBoxServerUrlMatches(server.server, snapshot.url)));
 }
 
 export async function getPersonas(): Promise<{

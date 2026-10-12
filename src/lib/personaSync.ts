@@ -61,6 +61,7 @@ async function buildPersonaSyncPayload(persona: Persona) {
     name: persona.name,
     settings: {
       user_agent: persona.settings.userAgent || '',
+      ...(persona.settings.userAgentMetadata !== undefined ? { user_agent_metadata: persona.settings.userAgentMetadata } : {}),
       platform: persona.settings.platform || '',
       viewport_size: toViewportSize(persona.settings.viewport),
       viewport_device_scale_factor: Number.isFinite(viewportScale) ? viewportScale : 1,

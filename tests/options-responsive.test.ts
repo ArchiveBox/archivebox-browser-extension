@@ -1,4 +1,4 @@
-import { launchExtension, seedExtensionStorage, waitForSavedSettings } from './helpers/extension';
+import { launchExtension, seedSnapshots } from './helpers/extension';
 import { expect, test, type Page } from '@playwright/test';
 import type { Snapshot } from '../src/lib/types';
 
@@ -39,7 +39,7 @@ test('options sections and saved URL actions fit mobile and desktop viewports', 
       timestamp: new Date().toISOString(), tags: ['mobile', 'a-long-tag-name-with-no-spaces-to-test-wrapping'],
       favIconUrl: null, depth: 0,
     };
-    await seedExtensionStorage(page, { entries: [entry] });
+    await seedSnapshots(page, [entry]);
     const screenshot = await page.screenshot();
     const viewport = await page.evaluate(async (bytes) => {
       const root = await navigator.storage.getDirectory();
@@ -49,9 +49,9 @@ test('options sections and saved URL actions fit mobile and desktop viewports', 
       await writer.close();
       return { width: window.innerWidth, height: window.innerHeight };
     }, [...screenshot]);
-    await seedExtensionStorage(page, { entries: [{ ...entry, screenshot: {
+    await seedSnapshots(page, [{ ...entry, screenshot: {
       storage: 'opfs', path: 'responsive-layout.png', mimeType: 'image/png', capturedAt: new Date().toISOString(), ...viewport,
-    } }] });
+    } }]);
     await page.reload();
     await expect(page.locator('.snapshot-screenshot-thumb')).toBeVisible();
     await expect(page.locator('.saved-url-table tbody tr')).toHaveCount(1);

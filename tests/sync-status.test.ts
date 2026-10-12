@@ -1,8 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { launchExtension } from './helpers/extension';
-import type { Snapshot } from '../src/lib/types';
+import { launchExtension, readSnapshots } from './helpers/extension';
 
 test('admin-style output piles distinguish local captures and fit after refresh', async ({}, testInfo) => {
   const html = await readFile(new URL('./fixtures/auto-archive.html', import.meta.url));
@@ -28,12 +27,10 @@ test('admin-style output piles distinguish local captures and fit after refresh'
     await expect(automatic).toBeChecked();
     const target = await harness.context.newPage();
     await target.goto(url);
-    await expect.poll(() => page.evaluate(async url => {
-      const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
-      const entries = (await api.storage.local.get('entries')).entries as Snapshot[] || [];
-      const entry = entries.find(entry => entry.url === url);
+    await expect.poll(async () => {
+      const entry = (await readSnapshots(page)).find(entry => entry.url === url);
       return Boolean(entry?.mhtml && entry?.viewport_screenshot && entry?.screenshot);
-    }, url), { timeout: 30000 }).toBe(true);
+    }, { timeout: 30000 }).toBe(true);
     await page.reload();
     const row = page.locator('.saved-url-table tbody tr').filter({ hasText: url });
     await expect(row.locator('.files-icon-pile')).toHaveCount(3);

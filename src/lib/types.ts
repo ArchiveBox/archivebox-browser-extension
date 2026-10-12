@@ -6,6 +6,9 @@ export type ServerConfiguration = {
   server: string;
   token: string;
   persona: string | null;
+  // The API key owner's username, from POST /api/v1/auth/check_api_token.
+  // Servers before 0.9.x return only user_id, so this stays unset for them.
+  username?: string;
 };
 
 // Browser-only policy is stored separately, keyed by the same server ID.
@@ -64,6 +67,11 @@ export type Snapshot = {
   id: string;
   url: string;
   timestamp: string;
+  // Username whose users/{username}/snapshots/ folder holds this snapshot's
+  // captures, like the server's Snapshot.created_by_username. Fixed when the snapshot
+  // is first saved (see saveSnapshotOwner in models.ts); "system" when no
+  // server username is known.
+  created_by_username?: string;
   tags: string[];
   title: string;
   favIconUrl?: string | null;
@@ -114,6 +122,18 @@ export type SnapshotSingleFile = {
 
 export type PersonaSettings = {
   userAgent?: string;
+  userAgentMetadata?: {
+    brands: { brand: string; version: string }[];
+    mobile: boolean;
+    platform: string;
+    platformVersion: string;
+    architecture: string;
+    model: string;
+    bitness?: string;
+    fullVersionList?: { brand: string; version: string }[];
+    wow64?: boolean;
+    formFactors?: string[];
+  } | null;
   platform?: string;
   language?: string;
   timezone?: string;
@@ -322,6 +342,7 @@ export type RuntimeResponse = {
   error?: string;
   errorMessage?: string;
   user_id?: string | number;
+  username?: string;
   screenshotNeedsScroll?: boolean;
   screenshotCanceled?: boolean;
   screenshot?: SnapshotScreenshot;

@@ -1,4 +1,5 @@
-import { getConfig, getPersonas, getSnapshots, mutateSnapshots } from './storage';
+import { getConfig, getPersonas } from './storage';
+import { getSnapshot, updateSnapshot, updateSnapshots } from './models';
 import { t } from './i18n';
 import { archiveBoxServerUrlMatches, isArchiveablePageUrl } from './archiveboxUrlExclusions';
 import type { AgentTaskReceipt, ArchiveSubmissionReceipt, SubmissionReceipt, ArchiveDepth, ServerConfiguration, ServerDestination, Snapshot } from './types';
@@ -176,7 +177,7 @@ export async function addToArchiveBox(
       : [];
     async function recordSubmission(result: ArchiveSubmissionReceipt): Promise<void> {
       const submitted_at = new Date().toISOString();
-      await mutateSnapshots((entries) => entries.map((snapshot) => {
+      await updateSnapshots(archiveableSnapshotIds.filter(Boolean), (snapshot) => {
         const index = archiveableSnapshotIds.indexOf(snapshot.id);
         if (index < 0 || snapshot.url !== archiveableUrls[index]) return snapshot;
         const previous = snapshot.remote_copies?.[server.id];
@@ -187,7 +188,7 @@ export async function addToArchiveBox(
           owned_crawl_id: previous?.owned_crawl_id || (previous?.snapshot_crawl_id === previous?.crawl_id ? previous?.crawl_id : undefined),
           ...(result.crawl_id ? { crawl_id: result.crawl_id } : {}), persona: server.persona,
         } } };
-      }));
+      });
     }
     const formattedTags = tags.join(',');
     const { personas } = await getPersonas();
@@ -369,13 +370,13 @@ export async function removeFromArchiveBox(server: ServerConfiguration, snapshot
   } else {
     throw new Error('No server-owned crawl or snapshot ID for this submission.');
   }
-  await mutateSnapshots((entries) => entries.map((item) => {
+  await updateSnapshot(snapshot.id, (item) => {
     const current = item.remote_copies?.[server.id];
-    if (item.id !== snapshot.id || !current || current.crawl_id !== copy.crawl_id || current.snapshot_id !== copy.snapshot_id) return item;
+    if (!current || current.crawl_id !== copy.crawl_id || current.snapshot_id !== copy.snapshot_id) return item;
     const remote_copies = { ...item.remote_copies };
     delete remote_copies[server.id];
     return { ...item, remote_copies };
-  }));
+  });
 }
 
 export async function uploadSnapshotArchiveResult(server: ServerConfiguration,
@@ -646,7 +647,7 @@ export async function testServerUrl(serverUrl: string): Promise<void> {
   throw serverUrlError(`${response.status} ${response.statusText}`, server);
 }
 
-export async function testApiKey(serverUrl: string, apiKey: string): Promise<string | number> {
+export async function testApiKey(serverUrl: string, apiKey: string): Promise<{ user_id: string | number; username?: string }> {
   const archiveboxServerUrl = serverBaseUrl(serverUrl);
   await ensureServerHostPermission(archiveboxServerUrl);
   if (!apiKey) {
@@ -666,11 +667,13 @@ export async function testApiKey(serverUrl: string, apiKey: string): Promise<str
     throw serverUrlError(`${response.status} ${response.statusText}`, archiveboxServerUrl);
   }
 
-  const data = (await response.json()) as { user_id?: string | number };
+  // username was added to this response in ArchiveBox 0.9.x; older servers
+  // send only user_id, which must keep working (the caller falls back to "system").
+  const data = (await response.json()) as { user_id?: string | number; username?: unknown };
   if (!data.user_id) {
     throw new Error(t("Invalid API key response"));
   }
-  return data.user_id;
+  return { user_id: data.user_id, ...(typeof data.username === 'string' && data.username ? { username: data.username } : {}) };
 }
 
 export async function findSubmittedSnapshot(server: ServerConfiguration, url: string): Promise<{ id: string; created_at: string; crawl_id?: string; persona?: string | null } | null> {
@@ -733,7 +736,7 @@ export async function submitSnapshot(
         await (typeof captureReady === 'function' ? captureReady() : captureReady);
       }
       if (remoteId) {
-        const captured = (await getSnapshots()).find((item) => item.id === snapshot.id);
+        const captured = await getSnapshot(snapshot.id);
         const { uploadSnapshotCaptureArtifactsToArchiveBox } = await import('./archiveboxArtifacts');
         if (captured) await uploadSnapshotCaptureArtifactsToArchiveBox(server, captured, remoteId);
       }
@@ -765,7 +768,7 @@ export async function submitSnapshot(
       const previousOwner = previous?.owned_crawl_id || previous?.crawl_id;
       const owned = !reused || (sameSnapshot && Boolean(metadata.crawl_id && previousOwner
         && metadata.crawl_id.replaceAll('-', '') === previousOwner.replaceAll('-', '')));
-      await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
+      await updateSnapshot(snapshot.id, (item) => item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
         ...item, remote_copies: { ...item.remote_copies, [server.id]: {
           ...item.remote_copies?.[server.id], status: 'accepted', submitted_to: serverBaseUrl(server.server), snapshot_id: metadata.id, snapshot_crawl_id: metadata.crawl_id,
           owned_crawl_id: owned ? metadata.crawl_id : undefined,
@@ -773,22 +776,22 @@ export async function submitSnapshot(
           ...(metadata.persona !== undefined ? { persona: metadata.persona } : reused ? { persona: snapshot.remote_copies?.[server.id]?.persona } : {}),
           ...(reused ? { submitted_at: metadata.created_at } : {}),
         } },
-      } : item));
+      } : item);
       // ONLY_NEW can resolve to somebody else's older capture. Its artifacts and persona are immutable here.
       // A retry of our own snapshot may finish its uploads. A URL resolving to
       // another submission's older snapshot still must not overwrite its files.
       await captureAndDeliver(owned ? metadata.id : undefined);
-      await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
+      await updateSnapshot(snapshot.id, (item) => item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
         ...item, remote_copies: { ...item.remote_copies, [server.id]: { ...item.remote_copies[server.id]!, status: 'complete' } },
-      } : item));
+      } : item);
       return result;
     } catch (error) {
       await captureAndDeliver().catch(() => undefined);
-      await mutateSnapshots((entries) => entries.map((item) => item.id === snapshot.id && item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
+      await updateSnapshot(snapshot.id, (item) => item.remote_copies?.[server.id]?.crawl_id === result.crawl_id ? {
         ...item, remote_copies: { ...item.remote_copies, [server.id]: {
           ...item.remote_copies[server.id]!, delivery_error: error instanceof Error ? error.message : String(error),
         } },
-      } : item));
+      } : item);
       throw error;
     }
   });
@@ -799,7 +802,7 @@ export async function removeFreshOwnedCapture(server: ServerDestination, snapsho
   const expectedCrawl = snapshot.remote_copies?.[server.id]?.crawl_id;
   // Wait for metadata to establish actual ownership, including a fast persona change just after acceptance.
   await navigator.locks.request(`archivebox-delivery:${snapshotId}`, async () => {
-    const copy = (await getSnapshots()).find(item => item.id === snapshotId)?.remote_copies?.[server.id];
+    const copy = (await getSnapshot(snapshotId))?.remote_copies?.[server.id];
     const age = Date.now() - Date.parse(copy?.submitted_at || '');
     // A receipt alone is not ownership: ONLY_NEW may have reused an older capture.
     if (!copy?.snapshot_id || copy.submitted_to !== serverBaseUrl(server.server) || copy.crawl_id !== expectedCrawl

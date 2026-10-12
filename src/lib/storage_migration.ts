@@ -24,7 +24,8 @@ function serverAddress(value: unknown): string | undefined {
 export async function migratePublishedStorage(): Promise<void> {
   await navigator.locks.request('archivebox-storage-migration', async () => {
     const marker = await browser.storage.local.get('storage_schema_version');
-    if (marker.storage_schema_version === 1) return;
+    // Version 2 (snapshots moved to SQLite) is applied by models.ts on top of 1.
+    if (marker.storage_schema_version === 1 || marker.storage_schema_version === 2) return;
     if (marker.storage_schema_version !== undefined) throw new Error('Unsupported extension storage version.');
     const stored = await browser.storage.local.get(null);
     const sync = await browser.storage.sync.get('config_archiveBoxBaseUrl');

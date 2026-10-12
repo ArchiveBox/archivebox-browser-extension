@@ -7,9 +7,9 @@ import { archiveBoxServerUrlMatches, findSubmittedSnapshot, getServerPersonas, h
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { mhtmlUnsupportedMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
-import { assertLocalCaptureStorageAvailable } from '@/src/lib/screenshotStorage';
+import { assertLocalCaptureStorageAvailable, deleteSnapshots, ensureSnapshot, getSnapshot, snapshotTags, updateSnapshot } from '@/src/lib/models';
 import { createSnapshot } from '@/src/lib/snapshots';
-import { getConfig, getSnapshots, mutateSnapshots } from '@/src/lib/storage';
+import { getConfig } from '@/src/lib/storage';
 import { matchingTagSuggestions } from '@/src/lib/tags';
 import type { ArchiveDepth, RuntimeMessage, RuntimeResponse, Snapshot, ServerDestination } from '@/src/lib/types';
 import { compactUuid } from '@/src/lib/uuid';
@@ -75,27 +75,13 @@ function toArchiveDepth(value: number): ArchiveDepth {
   return 4;
 }
 
+// The page's newest snapshot, created on first open.
 async function getCurrentSnapshot(activePage: ActivePage): Promise<{
   currentSnapshot: Snapshot;
-  snapshots: Snapshot[];
   created: boolean;
 }> {
-  let currentSnapshot!: Snapshot;
-  let created = false;
-  const snapshots = await mutateSnapshots((snapshots) => {
-    currentSnapshot = snapshots.find((snapshot) => snapshot.url === activePage.url)!;
-    if (!currentSnapshot) {
-      currentSnapshot = createSnapshot(activePage.url, [], activePage.title, activePage.favIconUrl || null);
-      snapshots.push(currentSnapshot);
-      created = true;
-    } else {
-      currentSnapshot.title ||= activePage.title;
-      currentSnapshot.favIconUrl ||= activePage.favIconUrl || null;
-    }
-    return snapshots;
-  });
-
-  return { currentSnapshot, snapshots, created };
+  const { snapshot, created } = await ensureSnapshot(createSnapshot(activePage.url, [], activePage.title, activePage.favIconUrl || null));
+  return { currentSnapshot: snapshot, created };
 }
 
 function unsavedSnapshot(activePage: ActivePage | null): Snapshot | null {
@@ -229,7 +215,7 @@ function ArchiveBoxOverlay() {
     const archivebox_server_url = configured?.server || '';
     const nextActivePage = activePage || await getActivePage();
     setActivePage(nextActivePage);
-    const { currentSnapshot: savedSnapshot, snapshots } = await getCurrentSnapshot(nextActivePage);
+    const { currentSnapshot: savedSnapshot } = await getCurrentSnapshot(nextActivePage);
     let currentSnapshot = savedSnapshot;
     const cached = currentSnapshot.remote_copies?.[configured?.id || ''];
     let checkError = '';
@@ -243,8 +229,7 @@ function ArchiveBoxOverlay() {
       try {
         const remote = await findSubmittedSnapshot(configured, currentSnapshot.url);
         setConfirmedRemoteId(remote?.id || null);
-        const stored = await mutateSnapshots(items => items.map(item => {
-          if (item.id !== currentSnapshot.id) return item;
+        const stored = await updateSnapshot(currentSnapshot.id, item => {
           const latest = item.remote_copies?.[configured.id];
           if (!latest || latest.submitted_at !== cached.submitted_at || latest.snapshot_id !== cached.snapshot_id || latest.crawl_id !== cached.crawl_id) return item;
           const copies = { ...item.remote_copies };
@@ -259,8 +244,8 @@ function ArchiveBoxOverlay() {
             };
           } else delete copies[configured.id];
           return { ...item, remote_copies: copies };
-        }));
-        currentSnapshot = stored.find(item => item.id === currentSnapshot.id) || currentSnapshot;
+        });
+        currentSnapshot = stored || currentSnapshot;
       } catch (error) {
         checkError = error instanceof Error ? error.message : String(error);
       }
@@ -288,7 +273,7 @@ function ArchiveBoxOverlay() {
       setRemoteDetail(receipt.delivery_error);
       setStatus(t("URL submitted. Capture upload failed: $1", receipt.delivery_error));
     }
-    setAllTags([...new Set([...snapshots].reverse().flatMap((item) => item.tags))]);
+    setAllTags(await snapshotTags());
   }
 
   async function ensureConfiguredServerPermission(requestPermission: boolean): Promise<void> {
@@ -309,12 +294,11 @@ function ArchiveBoxOverlay() {
     if (latestSnapshot.remote_copies?.[connection.id]?.snapshot_id) return latestSnapshot;
     const metadata = await syncArchiveBoxSnapshotMetadata(connection, latestSnapshot);
     if (!metadata.id) return latestSnapshot;
-    const entries = await mutateSnapshots((snapshots) => snapshots.map((item) => item.id === snapshot_id && item.remote_copies?.[connection.id]?.crawl_id === latestSnapshot.remote_copies?.[connection.id]?.crawl_id ? {
+    const updated = await updateSnapshot(snapshot_id, (item) => item.remote_copies?.[connection.id]?.crawl_id === latestSnapshot.remote_copies?.[connection.id]?.crawl_id ? {
       ...item, remote_copies: { ...item.remote_copies, [connection.id]: {
         status: 'accepted', ...item.remote_copies?.[connection.id], submitted_to: new URL(connection.server).origin, snapshot_id: metadata.id,
       } },
-    } : item));
-    const updated = entries.find((item) => item.id === snapshot_id) || latestSnapshot;
+    } : item) || latestSnapshot;
     setSnapshot(updated);
     return updated;
   }
@@ -324,8 +308,7 @@ function ArchiveBoxOverlay() {
     kind: 'screenshot' | 'mhtml' | 'singlefile',
     artifactLabel: string,
   ): Promise<void> {
-    const snapshots = await getSnapshots();
-    let latestSnapshot = snapshots.find((item) => item.id === snapshot_id);
+    let latestSnapshot = await getSnapshot(snapshot_id);
     if (!server || !latestSnapshot || (remoteStatus !== 'archived' && !latestSnapshot.remote_copies?.[server_id]?.crawl_id)) return;
     if (kind === 'screenshot' && !server.policy.upload_screenshots_to_server && !server.policy.upload_viewport_screenshots_to_server) return;
     if (kind === 'mhtml' && !server.policy.upload_mhtml_to_server) return;
@@ -353,7 +336,7 @@ function ArchiveBoxOverlay() {
     const previousTags = currentSnapshot.tags;
     currentSnapshot.tags = tags;
     currentSnapshot.depth = depth;
-    await mutateSnapshots((items) => items.map((item) => item.id === currentSnapshot.id ? { ...item, tags, depth } : item));
+    await updateSnapshot(currentSnapshot.id, (item) => ({ ...item, tags, depth }));
     setSnapshot({ ...currentSnapshot });
     setLocalStatus('saved');
     if (currentSnapshot.remote_copies?.[server_id]?.snapshot_id) {
@@ -381,7 +364,7 @@ function ArchiveBoxOverlay() {
     setActivePage(nextActivePage);
     const { currentSnapshot } = await getCurrentSnapshot(nextActivePage);
     currentSnapshot.depth = nextDepth;
-    await mutateSnapshots((items) => items.map((item) => item.id === currentSnapshot.id ? { ...item, depth: nextDepth } : item));
+    await updateSnapshot(currentSnapshot.id, (item) => ({ ...item, depth: nextDepth }));
     setSnapshot({ ...currentSnapshot });
     setLocalStatus('saved');
     await sendToArchiveBox(currentSnapshot.url, currentSnapshot.tags, nextDepth, currentSnapshot.id, true);
@@ -430,7 +413,7 @@ function ArchiveBoxOverlay() {
     if (response.ok) {
       if (localSnapshotId) submittedThisSession.current.add(`${localSnapshotId}:${destination().id}`);
       if (localSnapshotId) {
-        const updated = (await getSnapshots()).find((item) => item.id === localSnapshotId);
+        const updated = await getSnapshot(localSnapshotId);
         if (updated) setSnapshot(updated);
       }
       setOk(true);
@@ -498,10 +481,9 @@ function ArchiveBoxOverlay() {
     if (!snapshot || !server || persona === selectedPersona) return;
     setChangingPersona(true);
     try {
-      const entries = await mutateSnapshots(items => items.map(item => item.id === snapshot.id ? {
+      const updated = await updateSnapshot(snapshot.id, item => ({
         ...item, persona_overrides: { ...item.persona_overrides, [server.id]: persona },
-      } : item));
-      const updated = entries.find(item => item.id === snapshot.id);
+      }));
       if (!updated) throw new Error(t("Saved snapshot not found."));
       setSnapshot(updated);
       // The background checks actual server ownership before replacing a recent capture.
@@ -567,7 +549,9 @@ function ArchiveBoxOverlay() {
     setLocalStatus('removed');
     setOk(null);
     setStatus(t("Removed from local saved URLs"));
-    await mutateSnapshots((snapshots) => snapshots.filter((item) => item.url !== activePage.url));
+    // Only the snapshot shown: other snapshots of this URL (earlier captures,
+    // other personas) are separate saves.
+    if (snapshot) await deleteSnapshots([snapshot.id]);
     setIsFadingOut(true);
     window.setTimeout(close, 450);
   }
@@ -841,8 +825,7 @@ function ArchiveBoxOverlay() {
         return;
       }
 
-      let snapshots = await getSnapshots();
-      let nextSnapshot = snapshots.find((item) => item.id === currentSnapshot.id) || currentSnapshot;
+      let nextSnapshot = await getSnapshot(currentSnapshot.id) || currentSnapshot;
       setSnapshot({ ...nextSnapshot });
       setLocalStatus('saved');
       setOk(true);
@@ -890,8 +873,7 @@ function ArchiveBoxOverlay() {
         fullPage: true,
       });
 
-      snapshots = await getSnapshots();
-      nextSnapshot = snapshots.find((item) => item.id === currentSnapshot.id) || currentSnapshot;
+      nextSnapshot = await getSnapshot(currentSnapshot.id) || currentSnapshot;
       setSnapshot({ ...nextSnapshot });
       setLocalStatus('saved');
       if (!fullPageResponse.ok) {
@@ -941,8 +923,7 @@ function ArchiveBoxOverlay() {
       return;
     }
 
-    const snapshots = await getSnapshots();
-    const nextSnapshot = snapshots.find((item) => item.id === currentSnapshot.id) || currentSnapshot;
+    const nextSnapshot = await getSnapshot(currentSnapshot.id) || currentSnapshot;
     setSnapshot({ ...nextSnapshot });
     setLocalStatus('saved');
     setOk(true);

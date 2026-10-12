@@ -1,7 +1,15 @@
 import type { PersonaSettings } from './types';
 
 // Permission-free values are collected in an extension page, never during a sync.
-export function currentPersonaSettings(): PersonaSettings {
+export async function currentPersonaSettings(): Promise<PersonaSettings> {
+  // A UA string alone makes CDP erase client hints. Export the browser's real
+  // metadata alongside it, including OS/CPU values absent from the reduced UA.
+  const { userAgentData } = navigator as Navigator & { userAgentData?: {
+    getHighEntropyValues(hints: string[]): Promise<NonNullable<PersonaSettings['userAgentMetadata']>>;
+  } };
+  const userAgentMetadata = await userAgentData?.getHighEntropyValues([
+    'architecture', 'bitness', 'fullVersionList', 'model', 'platformVersion', 'wow64', 'formFactors',
+  ]) ?? null;
   const ua = navigator.userAgent;
   const operatingSystem = ua.includes('Android') ? 'Android'
     : /iPhone|iPad|iPod/.test(ua) ? 'iOS'
@@ -10,6 +18,7 @@ export function currentPersonaSettings(): PersonaSettings {
           : ua.includes('Linux') ? 'Linux' : '';
   return {
     userAgent: ua,
+    userAgentMetadata,
     platform: navigator.platform,
     language: navigator.language,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,

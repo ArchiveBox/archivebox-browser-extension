@@ -1,0 +1,447 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "282d1105-6bd1-4097-b8d2-4ba2075c4b9e",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "core_archiveresult": {
+      "name": "core_archiveresult",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "modified_at": {
+          "name": "modified_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "snapshot_id": {
+          "name": "snapshot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "plugin": {
+          "name": "plugin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "hook_name": {
+          "name": "hook_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "end_ts": {
+          "name": "end_ts",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "output_str": {
+          "name": "output_str",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "output_json": {
+          "name": "output_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "output_files": {
+          "name": "output_files",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "output_size": {
+          "name": "output_size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "delete_at": {
+          "name": "delete_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "unique_archiveresult_per_snapshot_hook": {
+          "name": "unique_archiveresult_per_snapshot_hook",
+          "columns": [
+            "snapshot_id",
+            "plugin",
+            "hook_name"
+          ],
+          "isUnique": true
+        },
+        "core_archiveresult_delete_at": {
+          "name": "core_archiveresult_delete_at",
+          "columns": [
+            "delete_at"
+          ],
+          "isUnique": false,
+          "where": "\"core_archiveresult\".\"delete_at\" IS NOT NULL"
+        }
+      },
+      "foreignKeys": {
+        "core_archiveresult_snapshot_id_core_snapshot_id_fk": {
+          "name": "core_archiveresult_snapshot_id_core_snapshot_id_fk",
+          "tableFrom": "core_archiveresult",
+          "tableTo": "core_snapshot",
+          "columnsFrom": [
+            "snapshot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "core_snapshot": {
+      "name": "core_snapshot",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "modified_at": {
+          "name": "modified_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_by_username": {
+          "name": "created_by_username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bookmarked_at": {
+          "name": "bookmarked_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "depth": {
+          "name": "depth",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "delete_at": {
+          "name": "delete_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "favIconUrl": {
+          "name": "favIconUrl",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "persona_overrides": {
+          "name": "persona_overrides",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "unassigned_remote_copy": {
+          "name": "unassigned_remote_copy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "core_snapshot_url": {
+          "name": "core_snapshot_url",
+          "columns": [
+            "url"
+          ],
+          "isUnique": false
+        },
+        "core_snapshot_bookmarked_at": {
+          "name": "core_snapshot_bookmarked_at",
+          "columns": [
+            "bookmarked_at"
+          ],
+          "isUnique": false
+        },
+        "core_snapshot_title": {
+          "name": "core_snapshot_title",
+          "columns": [
+            "\"title\" COLLATE NOCASE"
+          ],
+          "isUnique": false
+        },
+        "core_snapshot_delete_at": {
+          "name": "core_snapshot_delete_at",
+          "columns": [
+            "delete_at"
+          ],
+          "isUnique": false,
+          "where": "\"core_snapshot\".\"delete_at\" IS NOT NULL"
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "core_snapshot_tags": {
+      "name": "core_snapshot_tags",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "snapshot_id": {
+          "name": "snapshot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tag_id": {
+          "name": "tag_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "core_snapshot_tags_snapshot_tag": {
+          "name": "core_snapshot_tags_snapshot_tag",
+          "columns": [
+            "snapshot_id",
+            "tag_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "core_snapshot_tags_snapshot_id_core_snapshot_id_fk": {
+          "name": "core_snapshot_tags_snapshot_id_core_snapshot_id_fk",
+          "tableFrom": "core_snapshot_tags",
+          "tableTo": "core_snapshot",
+          "columnsFrom": [
+            "snapshot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "core_tag": {
+      "name": "core_tag",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "modified_at": {
+          "name": "modified_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "num_snapshots": {
+          "name": "num_snapshots",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "core_tag_name_unique": {
+          "name": "core_tag_name_unique",
+          "columns": [
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "remote_copies": {
+      "name": "remote_copies",
+      "columns": {
+        "snapshot_id": {
+          "name": "snapshot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "server_id": {
+          "name": "server_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "remote_copy": {
+          "name": "remote_copy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "remote_copies_snapshot_id_core_snapshot_id_fk": {
+          "name": "remote_copies_snapshot_id_core_snapshot_id_fk",
+          "tableFrom": "remote_copies",
+          "tableTo": "core_snapshot",
+          "columnsFrom": [
+            "snapshot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "remote_copies_snapshot_id_server_id_pk": {
+          "columns": [
+            "snapshot_id",
+            "server_id"
+          ],
+          "name": "remote_copies_snapshot_id_server_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {
+      "core_snapshot_title": {
+        "columns": {
+          "\"title\" COLLATE NOCASE": {
+            "isExpression": true
+          }
+        }
+      }
+    }
+  }
+}
