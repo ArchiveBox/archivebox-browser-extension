@@ -66,7 +66,10 @@ export async function launchExtension(permissions: string[] = [], hostPermission
     // Enable it through Chrome's real UI in this disposable development profile.
     const extensions = await context.newPage();
     await extensions.goto('chrome://extensions');
-    await extensions.locator('#devMode').check();
+    // Stable Chrome exposes cr-toggle as a pressed button, while Canary uses
+    // a switch. Its checked property is consistent across both versions.
+    await extensions.locator('#devMode').click();
+    await expect(extensions.locator('#devMode')).toHaveJSProperty('checked', true);
     await extensions.close();
     const { id } = await (await browserInstance.newBrowserCDPSession()).send('Extensions.loadUnpacked', { path: extensionPath });
     return { context, id, profile, close };
