@@ -1,0 +1,19 @@
+entrypoints/popup/style.css
+  s_7b6896aa6827c3::t_3236267b943767 63,67-68,90-91,109-110,119-120,142-143,160,163,193-216,356-357,470
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8a40cc8a065cec78ed946a5a1aa5b73c5aefc770",
+  "prompts": {},
+  "sessions": {
+    "s_7b6896aa6827c3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12ef2-0863-7230-8409-df4b9254935c",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
