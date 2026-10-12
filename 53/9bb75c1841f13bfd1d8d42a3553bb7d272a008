@@ -1,0 +1,45 @@
+entrypoints/background.ts
+  s_7b6896aa6827c3::t_261f4874a1da30 810,814,849,860,963-965
+src/lib/archivebox.ts
+  s_7b6896aa6827c3::t_261f4874a1da30 2,730,733
+scripts/test-multiserver-live.mjs
+  s_7b6896aa6827c3::t_7b6903504cff58 65-66
+entrypoints/popup/main.tsx
+  s_7b6896aa6827c3::t_261f4874a1da30 12-13,159,215,220-221,385
+  s_7b6896aa6827c3::t_d387ebcd383bfe 1003
+  s_7b6896aa6827c3::t_de79f0df2f5460 1089
+  s_7b6896aa6827c3::t_d18c78afb3c461 157,316-319,325
+src/lib/storage.ts
+  s_7b6896aa6827c3::t_21dda20c99ec67 156,159,162,167,204-224
+src/options/OptionsApp.tsx
+  s_7b6896aa6827c3::t_261f4874a1da30 814,872,2263-2273,2277,2279
+tests/persona-defaults.test.ts
+  s_7b6896aa6827c3::t_b42a78e5bcb015 16,55,69-106,112-121
+  s_7b6896aa6827c3::t_c781140e542f97 7,54,56
+  s_7b6896aa6827c3::t_c8fa2252b61b72 1-6,8-15,17-53,57-68,122-126
+  s_7b6896aa6827c3::t_61c119554a30f7 107-108,110-111
+  s_7b6896aa6827c3::t_7b6903504cff58 109
+  s_7b6896aa6827c3::t_4dc3e636fc1b22 127-128
+src/lib/personaSelection.ts
+  s_7b6896aa6827c3::t_21dda20c99ec67 1-35
+README.md
+  s_7b6896aa6827c3::t_208aa3ad2c7e6b 81-91
+src/lib/types.ts
+  s_7b6896aa6827c3::t_21dda20c99ec67 17-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "539bb75c1841f13bfd1d8d42a3553bb7d272a008",
+  "prompts": {},
+  "sessions": {
+    "s_7b6896aa6827c3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12ef2-0863-7230-8409-df4b9254935c",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
