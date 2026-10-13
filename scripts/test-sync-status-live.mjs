@@ -91,9 +91,14 @@ try {
   await waitForSavedSettings(options);
   const target = await context.newPage(); await target.goto(urls.partial);
   const popup = await context.newPage(); await target.bringToFront();
+  // A fast click on a slower device can capture before refresh() loads the
+  // popup's server state. Delivery must use the saved receipt even then.
+  const popupCDP = await context.newCDPSession(popup);
+  await popupCDP.send('Emulation.setCPUThrottlingRate', { rate: 6 });
   await popup.goto(`chrome-extension://${id}/popup.html`);
   await popup.getByTitle('Save an MHTML snapshot for this URL', { exact: true }).click();
   await expect.poll(async () => (await entries()).find(item => item.url === urls.partial)?.remote_copies?.[serverId]?.artifacts?.mhtml?.status).toBe('failed');
+  await popupCDP.send('Emulation.setCPUThrottlingRate', { rate: 1 });
   await popup.close(); await target.close();
   await options.reload();
   const partial = options.locator('.saved-url-table tbody tr').filter({ hasText: urls.partial });

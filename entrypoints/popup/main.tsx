@@ -293,8 +293,7 @@ function ArchiveBoxOverlay() {
     }
   }
 
-  async function ensureServerSnapshotId(snapshot_id: string, latestSnapshot: Snapshot): Promise<Snapshot> {
-    const connection = destination();
+  async function ensureServerSnapshotId(connection: ServerDestination, snapshot_id: string, latestSnapshot: Snapshot): Promise<Snapshot> {
     if (latestSnapshot.remote_copies?.[connection.id]?.snapshot_id) return latestSnapshot;
     const metadata = await syncArchiveBoxSnapshotMetadata(connection, latestSnapshot);
     if (!metadata.id) return latestSnapshot;
@@ -313,8 +312,11 @@ function ArchiveBoxOverlay() {
     artifactLabel: string,
   ): Promise<void> {
     let latestSnapshot = await getSnapshot(snapshot_id);
-    if (!server || !latestSnapshot || (remoteStatus !== 'archived' && !latestSnapshot.remote_copies?.[server_id]?.crawl_id)) return;
-    const connection = await resolvePersona(defaultServers(await getConfig())[0] || server, latestSnapshot);
+    const configured = defaultServers(await getConfig())[0];
+    // A capture can start before the popup's initial refresh has populated React
+    // state. Its saved receipt, not that render's server/status closure, owns delivery.
+    if (!configured || !latestSnapshot?.remote_copies?.[configured.id]) return;
+    const connection = await resolvePersona(configured, latestSnapshot);
     if (kind === 'screenshot' && !connection.policy.upload_screenshots_to_server && !connection.policy.upload_viewport_screenshots_to_server) return;
     if (kind === 'mhtml' && !connection.policy.upload_mhtml_to_server) return;
     if (kind === 'singlefile' && !connection.policy.upload_singlefile_to_server) return;
@@ -322,7 +324,7 @@ function ArchiveBoxOverlay() {
     try {
       setOk(null);
       setStatus(t("Uploading $1 to ArchiveBox Server...", artifactLabel));
-      latestSnapshot = await ensureServerSnapshotId(snapshot_id, latestSnapshot);
+      latestSnapshot = await ensureServerSnapshotId(connection, snapshot_id, latestSnapshot);
       await uploadSnapshotCaptureArtifactsToArchiveBox(connection, latestSnapshot);
       setOk(true);
       setRemoteDetail('');

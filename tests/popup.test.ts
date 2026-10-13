@@ -1305,6 +1305,12 @@ test('native action popup supports local save, tags, depth, captures, navigation
     await waitForPopupText(harness, popup, 'Saved');
     await waitForPopupText(harness, popup, 'Saved locally. Server connection unavailable.');
 
+    // The saved badge renders before refresh() finishes its separate tag query.
+    // Wait for the actual suggestion before trying the native popup control.
+    await waitForPopupElementsCondition(
+      harness, popup, 'existing tag suggestion', 'button',
+      items => items.some(html => /^existing\s*\+$/.test(htmlText(html))),
+    );
     await clickPopupButtonText(harness, popup, /^existing\s*\+$/);
     await waitForPopupElementsCondition(
       harness,
