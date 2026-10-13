@@ -247,7 +247,14 @@ async function readSnapshots(tx: Tx, rows: SnapshotRow[]): Promise<Snapshot[]> {
 
 async function selectSnapshots(tx: Tx, where: SQL | undefined, options: { orderBy?: SQL[]; limit?: number; offset?: number } = {}): Promise<Snapshot[]> {
   let query = tx.select().from(core_snapshot).where(where).orderBy(...(options.orderBy ?? [])).$dynamic();
-  if (options.limit !== undefined) query = query.limit(options.limit).offset(options.offset ?? 0);
+  if (options.limit !== undefined) {
+    // Sort only rowids, then fetch the bounded page's full records. Broad FTS
+    // matches otherwise copy every snapshot's fields into the temporary sort.
+    const rowid = sql<number>`"core_snapshot".rowid`;
+    const page = tx.select({ rowid }).from(core_snapshot).where(where).orderBy(...(options.orderBy ?? []))
+      .limit(options.limit).offset(options.offset ?? 0);
+    query = query.where(inArray(rowid, page));
+  }
   return readSnapshots(tx, await query);
 }
 
