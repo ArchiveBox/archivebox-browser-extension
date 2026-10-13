@@ -1,0 +1,23 @@
+entrypoints/popup/main.tsx
+  s_8dbda046044e96::t_260e0b28ae9a98 296,315-319,327
+scripts/test-sync-status-live.mjs
+  s_8dbda046044e96::t_0bc2c840736556 94-97,101
+tests/popup.test.ts
+  s_8dbda046044e96::t_e4c2cf5b193bf0 1308-1313
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "77d6e25cfbf232f406efc11e243b6b7efa2caf8c",
+  "prompts": {},
+  "sessions": {
+    "s_8dbda046044e96": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a133ba-5ab0-71c3-976a-587dc300c72c",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
