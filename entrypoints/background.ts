@@ -809,7 +809,7 @@ async function shouldAutoArchive(url: string): Promise<boolean> {
 
 async function syncSnapshotToServer(snapshot: Snapshot, tabId?: number): Promise<boolean> {
   const server = defaultServers(await getConfig())[0];
-  if (!server) return false;
+  if (!server?.policy.upload_metadata_to_server) return false;
   try {
     await submitSnapshot(server, snapshot, undefined, undefined, undefined, tabId);
     return true;

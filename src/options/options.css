@@ -2087,8 +2087,6 @@ code {
 .capture-output-name { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .capture-output:not(.capture-output--metadata) .capture-output-name { margin-left: 18px; }
 .capture-output--metadata { background: var(--ab-paper-2); }
-.capture-metadata-upload { display: flex; align-items: center; gap: 5px; color: var(--ab-ink-3); font-size: 11px; }
-.capture-metadata-upload svg { color: var(--ab-moss); }
 .capture-output-icon { display: grid; place-items: center; flex: 0 0 38px; height: 42px; border-radius: 8px; }
 .capture-output-icon--metadata { color: #556440; background: #e9edde; }
 .capture-output-icon--viewport_screenshot { color: #426b79; background: #eaf0f1; }

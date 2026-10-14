@@ -16,6 +16,8 @@ export type ServerPolicy = {
   local_persona_id?: string;
   anonymous_persona?: string;
   anonymous_local_persona_id?: string;
+  // Off keeps captures local: nothing is sent to this server unless the user presses Sync.
+  upload_metadata_to_server: boolean;
   upload_screenshots_to_server: boolean;
   upload_viewport_screenshots_to_server: boolean;
   upload_mhtml_to_server: boolean;

@@ -266,6 +266,9 @@ function ArchiveBoxOverlay() {
     } else if (receipt) {
       setOk(true);
       setStatus(submissionMessage(currentSnapshot.depth ?? 0));
+    } else if (!configured?.policy.upload_metadata_to_server) {
+      setOk(null);
+      setStatus(t("Saved locally. Server upload is turned off."));
     }
     if (checkError) {
       setOk(false);
@@ -347,6 +350,7 @@ function ArchiveBoxOverlay() {
     await updateSnapshot(currentSnapshot.id, (item) => ({ ...item, tags, depth }));
     setSnapshot({ ...currentSnapshot });
     setLocalStatus('saved');
+    if (!destination().policy.upload_metadata_to_server) return;
     if (currentSnapshot.remote_copies?.[server_id]?.snapshot_id) {
       try {
         await syncArchiveBoxSnapshotTags(destination(), currentSnapshot.remote_copies![server_id]!.snapshot_id!, previousTags, tags);
@@ -375,6 +379,7 @@ function ArchiveBoxOverlay() {
     await updateSnapshot(currentSnapshot.id, (item) => ({ ...item, depth: nextDepth }));
     setSnapshot({ ...currentSnapshot });
     setLocalStatus('saved');
+    if (!destination().policy.upload_metadata_to_server) return;
     await sendToArchiveBox(currentSnapshot.url, currentSnapshot.tags, nextDepth, currentSnapshot.id, true);
   }
 
@@ -458,7 +463,7 @@ function ArchiveBoxOverlay() {
   }, []);
 
   useEffect(() => {
-    if (snapshot && server && !deleted && !deleteBusy && !snapshot.remote_copies?.[server.id] && !submittedThisSession.current.has(`${snapshot.id}:${server.id}`)) {
+    if (snapshot && server?.policy.upload_metadata_to_server && !deleted && !deleteBusy && !snapshot.remote_copies?.[server.id] && !submittedThisSession.current.has(`${snapshot.id}:${server.id}`)) {
       sendToArchiveBox(snapshot.url, snapshot.tags, snapshot.depth ?? 0, snapshot.id);
     }
   }, [snapshot?.id, server?.id, Boolean(snapshot?.remote_copies?.[server_id]), deleted, deleteBusy]);
