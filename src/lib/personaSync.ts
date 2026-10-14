@@ -65,7 +65,11 @@ async function syncedIdentity(persona: Persona): Promise<Persona['settings']> {
 }
 
 async function buildPersonaSyncPayload(persona: Persona) {
-  const storage = await capturePersonaStorage(persona);
+  // Cookies are the profile's login; browser storage only supplements them.
+  const storage = await capturePersonaStorage(persona).catch((error: unknown) => {
+    console.warn(`ArchiveBox: kept saved browser storage for profile ${persona.name}: ${error instanceof Error ? error.message : String(error)}`);
+    return persona.storage;
+  });
   if (storage) await updatePersona(persona.id, item => ({ ...item, storage }));
   persona = { ...persona, settings: await syncedIdentity(persona) };
   const cookies = Object.values(persona.cookies || {}).flat().map(cookieForAuthJson);

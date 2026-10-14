@@ -206,8 +206,14 @@ export async function addToArchiveBox(
     }
 
     if (supportsApi && persona) {
-      const { syncPersonaCookies } = await import('./cookieSync');
-      const synced = await syncPersonaCookies(server, persona.id);
+      const { getCookieSyncStates, syncPersonaCookies } = await import('./cookieSync');
+      // A failed refresh keeps retrying in the background and is shown in settings.
+      // The server keeps this persona's last synced login, so archiving proceeds.
+      const synced = await syncPersonaCookies(server, persona.id).catch(async (error: unknown) => {
+        if (!(await getCookieSyncStates())[`${server.id}:${persona.id}`]?.last_synced_at) throw error;
+        console.warn(`ArchiveBox: archiving with the last synced ${persona.name} profile: ${error instanceof Error ? error.message : String(error)}`);
+        return true;
+      });
       if (!synced && Object.keys(persona.cookies).length) {
         throw new Error(t("Sync this persona to the configured server before archiving with its cookies."));
       }
