@@ -1065,6 +1065,17 @@ test('persona URL submission uses real API acceptance without fetching API docum
       entry => Boolean((entry as Snapshot).remote_copies?.[serverId]?.crawl_id), 'API acceptance');
     const receipt = (saved as Snapshot).remote_copies![serverId]!;
     expect(receipt.persona).toBe(name);
+    // Metadata is saved by the worker after the fast crawl acknowledgement.
+    // Keep the SAME native popup open while that database write completes.
+    const resolved = await waitForSavedEntry(harness, url,
+      entry => Boolean((entry as Snapshot).remote_copies?.[serverId]?.snapshot_id), 'server snapshot ID');
+    expect((resolved as Snapshot).remote_copies![serverId]!.snapshot_id).toBeTruthy();
+    await clickPopupSelector(harness, popup, '[aria-label="Ask AI about this capture"]');
+    await waitForPopupDom(harness, popup, 'AI capture form', '#capture-agent-task');
+    await popup.cdp.send('Input.insertText', { text: 'Summarize this capture' }, popup.sessionId);
+    await waitForPopupElementsCondition(harness, popup, 'AI task enabled after worker metadata commit',
+      '#capture-agent-form button[type="submit"]', items => items.length === 1 && !items[0]!.includes('disabled'));
+    expect(await popupElementsHtml(popup, '#capture-agent-form small')).toEqual([]);
     const crawl = await archivebox.api('/api/v1/crawls/crawl/' + receipt.crawl_id);
     expect(crawl.urls).toContain(url);
     expect(requests).toContain('POST /api/v1/cli/add');

@@ -7,7 +7,7 @@ import { archiveBoxServerUrlMatches, findSubmittedSnapshot, getServerPersonas, h
 import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { mhtmlUnsupportedMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
-import { addSnapshots, assertLocalCaptureStorageAvailable, deleteSnapshotFiles, deleteSnapshots, ensureSnapshot, getSnapshot, putSnapshots, snapshotTags, updateSnapshot } from '@/src/lib/models';
+import { addSnapshots, assertLocalCaptureStorageAvailable, deleteSnapshotFiles, deleteSnapshots, ensureSnapshot, getSnapshot, onSnapshotsChanged, putSnapshots, snapshotTags, updateSnapshot } from '@/src/lib/models';
 import { createSnapshot } from '@/src/lib/snapshots';
 import { getConfig, getPersonas } from '@/src/lib/storage';
 import { resolvePersona } from '@/src/lib/personaSelection';
@@ -469,10 +469,11 @@ function ArchiveBoxOverlay() {
   }, [snapshot?.id, server?.id, Boolean(snapshot?.remote_copies?.[server_id]), deleted, deleteBusy]);
 
   useEffect(() => {
-    const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
-      if (area !== 'local' || !changes.entries || !snapshot || !server) return;
-      const updated = (changes.entries.newValue as Snapshot[] | undefined)?.find((item) => item.id === snapshot.id);
-      if (!updated) return;
+    if (!snapshot || !server) return;
+    let active = true;
+    const refreshSnapshot = async () => {
+      const updated = await getSnapshot(snapshot.id);
+      if (!active || !updated) return;
       setSnapshot(updated);
       const copy = updated.remote_copies?.[server.id];
       if (copy?.delivery_error) {
@@ -481,8 +482,13 @@ function ArchiveBoxOverlay() {
         setStatus(t("URL submitted. Capture upload failed: $1", copy.delivery_error));
       }
     };
-    browser.storage.onChanged.addListener(listener);
-    return () => browser.storage.onChanged.removeListener(listener);
+    const unsubscribe = onSnapshotsChanged(({ ids }) => {
+      if (ids.includes(snapshot.id)) void refreshSnapshot();
+    });
+    // Subscribe before reading: the worker may have committed metadata between
+    // the fast submission receipt and this popup effect being installed.
+    void refreshSnapshot();
+    return () => { active = false; unsubscribe(); };
   }, [snapshot?.id, server?.id]);
 
   useEffect(() => {
