@@ -101,6 +101,10 @@ The extension stores capture artifacts in the browser's extension-local OPFS sto
 
 Older local MHTML files retain their recorded `chrome_mhtml` paths. Uploads use the separate `chrome_extension_mhtml` server directory so server-side MHTML captures cannot overwrite browser-captured files.
 
+Snapshot metadata lives in SQLite backed by IndexedDB; capture bytes remain in OPFS. `core_snapshot`, `core_archiveresult`, `core_tag`, and `core_snapshot_tags` follow the server's table and shared field names, including `bookmarked_at`, `delete_at`, and plugin/hook uniqueness. The extension keeps a local projection: usernames replace server user foreign keys, capture records contain OPFS metadata, and `remote_copies` tracks independent receipts for each server. Local IDs are not substituted for server IDs.
+
+Upgrades import the old `entries` array in idempotent 500-row transactions. The migration marker advances only after every source ID is present; the original array is retained as `entries_backup_v1`. A failed later batch leaves the source intact and can resume after restart. SQLite schema changes are transactional and checked with `pnpm db:check`. Open views subscribe to committed snapshot changes rather than polling or watching the retired array.
+
 Local snapshot retention defaults to 30 days after submission and confirmed file uploads. Each capture type can inherit that duration or use a shorter TTL (1 minute, 1 day, 30 days, or 90 days, up to the snapshot limit). Keep snapshots forever and give MHTML/screenshots a short TTL to retain cheap metadata and upload receipts while removing heavy local files.
 
 **Snapshot metadata** is the parent of the local output rows in **Capture & storage**. Each output defaults to the metadata retention limit and can use a shorter duration. Turning metadata off also turns off local outputs; enabling an output re-enables metadata. With metadata off, confirmed local copies are removed after upload. Pending files and their metadata are kept until their server copies are verified.

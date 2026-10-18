@@ -751,16 +751,19 @@ export default function OptionsApp() {
     const params = new URLSearchParams(window.location.search);
     const id = params.get('screenshot') || params.get('mhtml') || params.get('singlefile');
     if (!id) return;
-    function onEntriesChanged(changes: Record<string, { newValue?: unknown }>, area: string) {
-      if (area !== 'local' || !changes.entries) return;
-      const entries = changes.entries.newValue;
-      if (Array.isArray(entries) && !entries.some((entry: Snapshot) => entry.id === id)) {
+    let active = true;
+    async function checkCapture() {
+      const snapshot = await getSnapshot(id!);
+      if (active && !snapshot) {
         // Unload rendered captures and blob URLs when their local record expires.
         window.location.replace(extensionUrl('/options.html'));
       }
     }
-    browser.storage.onChanged.addListener(onEntriesChanged);
-    return () => browser.storage.onChanged.removeListener(onEntriesChanged);
+    const unsubscribe = onSnapshotsChanged(({ ids }) => {
+      if (ids.includes(id)) void checkCapture();
+    });
+    void checkCapture();
+    return () => { active = false; unsubscribe(); };
   }, []);
 
   const params = new URLSearchParams(window.location.search);
@@ -1314,17 +1317,17 @@ function OptionsMain() {
     });
   }
 
-  async function updateSnapshotTags(snapshot_id: string, tags: string[], message: string) {
+  async function updateSnapshotTags(snapshot_id: string, change: (tags: string[]) => string[], message: string) {
     const existingSnapshot = await getSnapshot(snapshot_id);
     if (existingSnapshot?.remote_copies?.[server_id]?.snapshot_id) {
       try {
-        await syncArchiveBoxSnapshotTags(destination(), existingSnapshot.remote_copies![server_id]!.snapshot_id!, existingSnapshot.tags, tags);
+        await syncArchiveBoxSnapshotTags(destination(), existingSnapshot.remote_copies![server_id]!.snapshot_id!, existingSnapshot.tags, change(existingSnapshot.tags));
       } catch (error) {
         setSavedUrlStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
         return;
       }
     }
-    await updateSnapshot(snapshot_id, (snapshot) => ({ ...snapshot, tags }));
+    await updateSnapshot(snapshot_id, (snapshot) => ({ ...snapshot, tags: change(snapshot.tags) }));
     setSavedUrlStatus({ kind: 'success', text: message });
   }
 
@@ -1334,15 +1337,14 @@ function OptionsMain() {
       setInlineTagEditor(null);
       return;
     }
-    const nextTags = [...new Set([...snapshot.tags, tag])];
-    await updateSnapshotTags(snapshot.id, nextTags, t("Added tag \"$1\"", tag));
+    await updateSnapshotTags(snapshot.id, tags => [...new Set([...tags, tag])], t("Added tag \"$1\"", tag));
     setInlineTagEditor(null);
   }
 
   async function removeSnapshotTag(snapshot: Snapshot, tag: string) {
     await updateSnapshotTags(
       snapshot.id,
-      snapshot.tags.filter((item) => item !== tag),
+      tags => tags.filter((item) => item !== tag),
       t("Removed tag \"$1\"", tag),
     );
   }

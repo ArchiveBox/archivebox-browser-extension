@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { launchExtension, seedSnapshots } from './helpers/extension';
+import { launchExtension, readSnapshots, seedSnapshots } from './helpers/extension';
 import type { Snapshot } from '../src/lib/types';
 
 test('searched pages retain date, title, tag, and offset semantics', async () => {
@@ -47,6 +47,33 @@ test('searched pages retain date, title, tag, and offset semantics', async () =>
     expect(results.quoted.ids).toEqual(['d']);
     expect(results.url.ids).toEqual(['e']);
     expect(results.unfiltered).toEqual({ ids: ['d'], tags: [['archive']], hasMore: true });
+  } finally {
+    await harness.close();
+  }
+});
+
+test('two open options pages preserve concurrent tags on the same SQLite snapshot', async () => {
+  const harness = await launchExtension();
+  try {
+    const first = await harness.context.newPage();
+    await first.goto(`chrome-extension://${harness.id}/options.html`);
+    await expect(first.locator('.saved-url-count')).toBeVisible();
+    await seedSnapshots(first, [{ id: 'concurrent-tags', url: 'https://archivebox.io/tests/?tags',
+      timestamp: '2026-01-01T00:00:00.000Z', title: 'Concurrent tags', tags: ['original'], depth: 0 }]);
+    const second = await harness.context.newPage();
+    await second.goto(`chrome-extension://${harness.id}/options.html`);
+    for (const [page, tag] of [[first, 'first'], [second, 'second']] as const) {
+      await page.locator('.saved-url-table').getByTitle('Add tag', { exact: true }).click();
+      await page.getByPlaceholder('tag', { exact: true }).fill(tag);
+    }
+    await Promise.all([first, second].map(page => page.getByPlaceholder('tag', { exact: true }).press('Enter')));
+    await expect.poll(async () => (await readSnapshots(first))[0]?.tags.slice().sort()).toEqual(['first', 'original', 'second']);
+    for (const page of [first, second]) {
+      await page.reload();
+      for (const tag of ['first', 'original', 'second']) {
+        await expect(page.locator('.saved-url-table').getByTitle(`Remove tag ${tag}`, { exact: true })).toBeVisible();
+      }
+    }
   } finally {
     await harness.close();
   }

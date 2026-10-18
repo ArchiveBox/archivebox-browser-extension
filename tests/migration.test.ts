@@ -69,3 +69,44 @@ test('published entries arrays move into SQLite once, with receipts and captures
     await harness.close();
   }
 });
+
+test('a failed later migration batch preserves legacy data and resumes without duplicates', async () => {
+  const harness = await launchExtension();
+  try {
+    const page = await harness.context.newPage();
+    await page.goto(`chrome-extension://${harness.id}/options.html`);
+    await expect(page.locator('.saved-url-count')).toBeVisible();
+    const entries = Array.from({ length: 501 }, (_, index) => ({
+      id: `legacy-batch-${index}`, url: `https://archivebox.io/tests/?migration=${index}`,
+      timestamp: '2026-01-01T00:00:00.000Z', title: `Capture ${index}`, tags: ['migration'], depth: 0,
+    }));
+    // The first batch commits, but this malformed row makes the second batch
+    // fail a real NOT NULL constraint. The source and version must survive.
+    const malformed = entries.map((entry, index) => index === 500 ? { ...entry, timestamp: null } : entry);
+    const failed = await restartWithLegacyStorage(page, harness.id, { storage_schema_version: 1, entries: malformed });
+    const error = await failed.evaluate(async () => {
+      try {
+        await (globalThis as unknown as { archiveboxModels: { countSnapshots(): Promise<number> } }).archiveboxModels.countSnapshots();
+        return '';
+      } catch (error) {
+        const messages: string[] = [];
+        for (let cause: unknown = error; cause instanceof Error; cause = cause.cause) messages.push(cause.message);
+        return messages.join('\n');
+      }
+    });
+    expect(error).toContain('NOT NULL');
+    const unchanged = await storage(failed, ['storage_schema_version', 'entries', 'entries_backup_v1']);
+    expect(unchanged).toEqual({ storage_schema_version: 1, entries: malformed });
+
+    const resumed = await restartWithLegacyStorage(failed, harness.id, { storage_schema_version: 1, entries });
+    await expect.poll(async () => (await storage(resumed, ['storage_schema_version'])).storage_schema_version).toBe(2);
+    const snapshots = await readSnapshots(resumed);
+    expect(snapshots).toHaveLength(501);
+    expect(new Set(snapshots.map(snapshot => snapshot.id)).size).toBe(501);
+    for (const entry of entries) expect(snapshots.find(snapshot => snapshot.id === entry.id)).toMatchObject(entry);
+    await expect(resumed.locator('.tags-panel')).toContainText('migration501');
+    expect(await storage(resumed, ['entries', 'entries_backup_v1'])).toEqual({ entries_backup_v1: { entries } });
+  } finally {
+    await harness.close();
+  }
+});

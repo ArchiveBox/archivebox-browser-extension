@@ -32,6 +32,10 @@ test('delete everywhere stays open, reports server failure, and can restore the 
     const original = (await saved())!;
     const remoteId = Object.values(original.remote_copies!)[0]!.snapshot_id!;
     expect(original.mhtml?.path).toBeTruthy();
+    const viewer = await harness.context.newPage();
+    const viewerUrl = `chrome-extension://${harness.id}/options.html?mhtml=${original.id}`;
+    await viewer.goto(viewerUrl);
+    await expect(viewer.frameLocator('.mhtml-viewer-frame').getByRole('heading', { name: 'Automatic archiving regression' })).toBeVisible();
     const remoteStatus = () => fetch(`${archivebox.server}/api/v1/core/snapshot/${remoteId}`, { headers: { Authorization: `Bearer ${archivebox.key}` } }).then(response => response.status);
     await key.fill('invalid-delete-token'); await key.blur(); await waitForSavedSettings(options);
     await expect(popup.getByRole('button', { name: 'Delete everywhere', exact: true })).toBeVisible();
@@ -39,11 +43,14 @@ test('delete everywhere stays open, reports server failure, and can restore the 
     await expect(popup.getByRole('alert')).toContainText('401');
     expect(await saved()).toBeTruthy();
     expect(await remoteStatus()).toBe(200);
+    await expect(viewer).toHaveURL(viewerUrl);
     await key.fill(archivebox.key); await key.blur(); await waitForSavedSettings(options);
     await popup.getByRole('button', { name: 'Delete everywhere', exact: true }).click();
     await expect(popup.getByRole('heading', { name: 'Deleted everywhere', exact: true })).toBeVisible();
     expect(popup.isClosed()).toBe(false);
     expect(await saved()).toBeUndefined();
+    await expect(viewer).toHaveURL(`chrome-extension://${harness.id}/options.html`);
+    await expect(viewer.locator('.mhtml-viewer-frame')).toHaveCount(0);
     await expect.poll(remoteStatus).toBe(404);
     expect(await options.evaluate(async path => {
       try {

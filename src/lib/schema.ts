@@ -8,9 +8,11 @@ import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'driz
 // Tables, columns and names follow the ArchiveBox server's models
 // (archivebox/core/models.py: Snapshot, ArchiveResult, Tag, SnapshotTag; their
 // db_table names; and the search_backend_sqlite plugin's search_index),
-// keeping only the fields the extension uses, so a snapshot moves between the
-// browser and a server without translation. Only two things have no server
-// equivalent and keep the extension's existing names: per-server receipts
+// keeping only the fields the extension uses. This is a local projection, not
+// a copy of the server database: created_by_username carries ownership without
+// a local auth_user table, and output_json holds local capture metadata. The
+// API upload path still maps these records to the server's wire format.
+// Fields with no server equivalent keep the extension's names: per-server receipts
 // (remote_copies, from Snapshot.remote_copies) and the extension-only snapshot
 // fields (favIconUrl, persona_overrides, unassigned_remote_copy).
 //
