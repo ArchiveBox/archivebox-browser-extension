@@ -1018,8 +1018,9 @@ function OptionsMain() {
   const loadSnapshotWindow = useCallback(async (limit: number) => {
     const request = ++latestSnapshotLoad.current;
     const query = { search: searchText };
+    const total = countSnapshots();
     const [{ snapshots: rows, hasMore }, matching, saved, counts, allTags] = await Promise.all([
-      listSnapshots(query, savedUrlSort, { offset: 0, limit }), countSnapshots(query), countSnapshots(),
+      listSnapshots(query, savedUrlSort, { offset: 0, limit }), searchText.trim() ? countSnapshots(query) : total, total,
       snapshotTagCounts(), snapshotTags(),
     ]);
     // A page opened for one snapshot (?highlight=) shows it even when it is not on the first page.
