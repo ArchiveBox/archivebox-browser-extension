@@ -1,6 +1,16 @@
 name: Release browser extension
 
 on:
+  workflow_dispatch:
+    inputs:
+      publish_stores:
+        description: Submit the tested version to Chrome, Firefox, and Edge stores
+        type: boolean
+        default: false
+      tested_sha:
+        description: Exact version-tagged commit with successful full CI
+        type: string
+        required: true
   workflow_run:
     workflows: [CI]
     types: [completed]
@@ -17,30 +27,42 @@ concurrency:
 jobs:
   inspect:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      release_sha: ${{ steps.classify.outputs.release_sha }}
       candidate: ${{ steps.classify.outputs.candidate }}
       prepare: ${{ steps.classify.outputs.prepare }}
       version: ${{ steps.classify.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || inputs.tested_sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Classify tested main commit
         id: classify
         shell: bash
         env:
-          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha || inputs.tested_sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          [[ "$TESTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$TESTED_SHA"
+          echo "release_sha=$TESTED_SHA" >> "$GITHUB_OUTPUT"
           git fetch origin main --tags
           VERSION="$(node -p 'require("./package.json").version')"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if test "$EVENT_NAME" = workflow_dispatch; then
+            test "$(git rev-list -n 1 "v$VERSION")" = "$TESTED_SHA"
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$TESTED_SHA&status=success&event=push" \
+              --jq '.workflow_runs | any(.head_sha == env.TESTED_SHA and .conclusion == "success")' | grep -qx true
+          fi
           if test "$(git rev-list -n 1 "v$VERSION" 2>/dev/null || true)" = "$TESTED_SHA"; then
             git merge-base --is-ancestor "$TESTED_SHA" origin/main
             if ! git diff --quiet "$TESTED_SHA" origin/main -- entrypoints src public locales wxt.config.ts package.json pnpm-lock.yaml; then
@@ -80,7 +102,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || inputs.tested_sha }}
           fetch-depth: 0
           token: ${{ secrets.RELEASE_GH_TOKEN }}
       - uses: actions/setup-node@v4
@@ -89,7 +111,7 @@ jobs:
       - name: Allocate the next unreserved patch version
         shell: bash
         env:
-          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha || inputs.tested_sha }}
           RELEASE_TOKEN: ${{ secrets.RELEASE_GH_TOKEN }}
         run: |
           test -n "$RELEASE_TOKEN" || { echo 'RELEASE_GH_TOKEN is unavailable' >&2; exit 1; }
@@ -112,7 +134,7 @@ jobs:
       - name: Commit and atomically reserve the version
         shell: bash
         env:
-          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha || inputs.tested_sha }}
         run: |
           test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$TESTED_SHA"
           git config user.name 'archivebox-release-bot'
@@ -129,16 +151,16 @@ jobs:
     timeout-minutes: 30
     outputs:
       version: ${{ needs.inspect.outputs.version }}
-      release_sha: ${{ github.event.workflow_run.head_sha }}
+      release_sha: ${{ needs.inspect.outputs.release_sha }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || inputs.tested_sha }}
           persist-credentials: false
       - name: Confirm the versioned CI commit still owns main and its tag
         shell: bash
         env:
-          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha || inputs.tested_sha }}
           VERSION: ${{ needs.inspect.outputs.version }}
         run: |
           git fetch origin main
@@ -197,6 +219,7 @@ jobs:
           retention-days: 90
 
   chrome:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_stores
     needs: package
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -249,6 +272,7 @@ jobs:
         run: exit 1
 
   firefox:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_stores
     needs: package
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -300,6 +324,7 @@ jobs:
         run: exit 1
 
   edge:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_stores
     needs: package
     runs-on: ubuntu-latest
     timeout-minutes: 15

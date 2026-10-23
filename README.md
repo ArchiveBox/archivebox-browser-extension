@@ -250,3 +250,12 @@ Other projects that help with ingest URLs into ArchiveBox from various sources.
 MIT License
 
 Persona Detect Settings also saves UA client hints (browser brands, OS version, architecture and bitness) and syncs them with the user-agent string. Use Detect Settings and Sync now to refresh an existing profile created before these hints were captured.
+
+## Release automation
+
+Successful main CI reserves a version, builds and verifies the extension packages,
+and updates the Safari source pin. Store submission requires an explicitly
+authorized manual **Release browser extension** run on main with `publish_stores`
+enabled (false by default) and the exact version-tagged `tested_sha`. The workflow
+checks successful full CI, the version tag, and package hashes before submission.
+Automatic runs retain the downloadable packages without submitting to stores.
