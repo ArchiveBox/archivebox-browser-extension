@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import { createServer } from 'node:http';
+import type { ServerRegistry, ServerPolicy } from '../src/lib/types';
 import { test } from './helpers/archivebox';
 import { launchExtension, readSnapshots, waitForSavedSettings } from './helpers/extension';
 
@@ -63,4 +64,43 @@ test('snapshot metadata upload is a real switch that artifact uploads turn on', 
     await harness.close();
     await new Promise<void>((resolve, reject) => source.close(error => error ? reject(error) : resolve()));
   }
+});
+
+test('server policy saves preserve local capture edits waiting for storage', async ({ archivebox }) => {
+  const harness = await launchExtension(['tabs'], ['<all_urls>']);
+  try {
+    const options = await harness.context.newPage();
+    await options.goto(`chrome-extension://${harness.id}/options.html`);
+    await options.getByRole('button', { name: 'Configuration', exact: true }).click();
+    await options.getByLabel('ArchiveBox Server URL', { exact: true }).fill(archivebox.server);
+    await options.getByLabel('ArchiveBox Server URL', { exact: true }).blur();
+    await waitForSavedSettings(options);
+
+    // Contend for the real settings lock while a separate server-registry write
+    // completes. No API/storage implementation is replaced or intercepted.
+    await options.evaluate(() => new Promise<void>(acquired => {
+      void navigator.locks.request('archivebox-config', () => new Promise<void>(release => {
+        (globalThis as typeof globalThis & { releaseConfigLock: () => void }).releaseConfigLock = release;
+        acquired();
+      }));
+    }));
+    const viewport = options.getByLabel('Save viewport screenshots locally', { exact: true });
+    const metadata = options.getByLabel('Upload snapshot metadata to server', { exact: true });
+    await viewport.uncheck();
+    await expect(options.locator('main.app')).toHaveAttribute('aria-busy', 'true');
+    await metadata.uncheck();
+    await expect.poll(() => options.evaluate(async () => {
+      const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
+      const { server_registry, server_policies } = await api.storage.local.get(['server_registry', 'server_policies']);
+      const registry = server_registry as ServerRegistry;
+      return (server_policies as Record<string, ServerPolicy>)[registry.active_server_id!]!.upload_metadata_to_server;
+    })).toBe(false);
+    await expect(viewport).not.toBeChecked();
+    await options.evaluate(() => (globalThis as typeof globalThis & { releaseConfigLock: () => void }).releaseConfigLock());
+    await waitForSavedSettings(options);
+    await options.reload();
+    await options.getByRole('button', { name: 'Configuration', exact: true }).click();
+    await expect(viewport).not.toBeChecked();
+    await expect(metadata).not.toBeChecked();
+  } finally { await harness.close(); }
 });

@@ -891,7 +891,6 @@ function OptionsMain() {
       if (area !== 'local') return;
       if (Object.keys(changes).some((key) => key.startsWith('cookie_sync:'))) getCookieSyncStates().then(setCookieSyncStates);
       if (changes.personas) getPersonas().then((state) => setPersonasState(state.personas));
-      if (changes.server_registry || changes.server_policies || changes.local_retention_ms || changes.capture_retention_ms || Object.keys(changes).some(key => key.startsWith('save_'))) getConfig().then(setConfigState);
       if (changes.active_persona) setActivePersonaState(String(changes.active_persona.newValue || ''));
     }
     browser.storage.onChanged.addListener(refreshPersonas);
@@ -1139,9 +1138,7 @@ function OptionsMain() {
     try {
       if (patch.server?.trim() === '' && id) await removeServer(id);
       else await updateServer(id, patch);
-      setConfigState(await getConfig());
     } catch (error) {
-      setConfigState(await getConfig());
       setServerStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
     } finally {
       setSavingServer(false);
