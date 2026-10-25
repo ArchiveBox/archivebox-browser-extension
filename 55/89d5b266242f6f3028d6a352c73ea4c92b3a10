@@ -1,0 +1,29 @@
+tests/cookie-sync-ui.test.ts
+  s_b38c1d267bb984::t_8fb8897815ab22 118-133,135-148,152-157
+  s_b38c1d267bb984::t_82c3229742f7ca 134
+  s_b38c1d267bb984::t_cfa9dd93ed7adb 48-67,81,100-101
+  s_b38c1d267bb984::t_8a8cab57a78278 5,69,72-75,149-151
+src/options/OptionsApp.tsx
+  s_b38c1d267bb984::t_76bfd2168a8951 1765,1769-1770,1772-1778
+  s_b38c1d267bb984::t_5b99b6bae8bcd5 1150-1155,1764,1767,1771,2466
+README.md
+  s_b38c1d267bb984::t_5b99b6bae8bcd5 78-81
+src/options/CookieSitePicker.tsx
+  s_b38c1d267bb984::t_5b99b6bae8bcd5 22,26,31,37-38,40,43-51,65,72,91,93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5589d5b266242f6f3028d6a352c73ea4c92b3a10",
+  "prompts": {},
+  "sessions": {
+    "s_b38c1d267bb984": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1743b-cf99-71a3-a616-643d0e35afa2",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
