@@ -15,6 +15,7 @@ export type CookieSyncState = {
   persona_id: string;
   server_origin: string;
   domains: string[];
+  retained_domains?: string[]; // Saved on this server, but no longer tracked in the browser.
   fingerprint: string;
   pending: boolean;
   enabled?: boolean;
@@ -109,7 +110,7 @@ async function recordFailure(id: string, state: CookieSyncState, error: unknown)
 
 async function syncCookiesUnlocked(id: string, refresh: boolean, destination?: ServerConfiguration): Promise<boolean> {
   const state = await getState(id);
-  if (!state || state.enabled === false) return false; // A successful manual sync is the consent boundary.
+  if (!state || state.enabled === false || (refresh && !state.domains.length)) return false; // A successful manual sync is the consent boundary.
   const server = destination || (await getConfig()).servers.find((item) => item.id === state.server_id);
   if (!server || server.id !== state.server_id || serverOrigin(server.server) !== state.server_origin) return false;
   let persona: Persona | undefined;
@@ -127,13 +128,19 @@ async function syncCookiesUnlocked(id: string, refresh: boolean, destination?: S
     return false;
   }
   const domains = state.domains.filter((domain) => domain in persona.cookies);
-  const cookies = Object.fromEntries(domains.map((domain) => [domain, persona.cookies[domain] || []]));
+  // The upload replaces remote cookies. Include saved domains even after their
+  // browser cookies were cleared and their live-sync subscription stopped.
+  const retained_domains = (state.retained_domains || []).filter(domain => domain in persona.cookies);
+  const savedDomains = [...domains, ...retained_domains];
+  const cookies = Object.fromEntries(savedDomains.map(domain => [domain, persona.cookies[domain] || []]));
   const nextFingerprint = await fingerprint(cookies);
   if (!state.pending && nextFingerprint === state.fingerprint) {
-    if (domains.length !== state.domains.length) await saveState(id, { ...state, domains });
+    if (domains.length !== state.domains.length || retained_domains.length !== (state.retained_domains || []).length) {
+      await saveState(id, { ...state, domains, retained_domains });
+    }
     return true;
   }
-  const pending = { ...state, domains, pending: true, next_retry_at: Date.now() + retryDelayMs };
+  const pending = { ...state, domains, retained_domains, pending: true, next_retry_at: Date.now() + retryDelayMs };
   await saveState(id, pending);
   // One-shot recovery if the worker is suspended during the upload.
   await armRetry(id, pending);
@@ -211,7 +218,7 @@ function scheduleUpload(id: string, state: CookieSyncState): void {
   }, 500));
 }
 
-async function queueCookieChange(id: string, cookie: StoredCookie): Promise<void> {
+async function queueCookieChange(id: string, cookie: StoredCookie, removed: boolean): Promise<void> {
   await navigator.locks.request('archivebox-cookie-sync', async () => {
     const state = await getState(id);
     if (!state || state.enabled === false) return;
@@ -220,6 +227,22 @@ async function queueCookieChange(id: string, cookie: StoredCookie): Promise<void
     const domain = cookie.domain.replace(/^\./, '');
     const selected = state.domains.filter((item) => item.replace(/^\./, '') === domain);
     if (!selected.length) return;
+    if (removed) {
+      const remaining = await browser.cookies.getAll({ domain });
+      if (remaining.some(item => item.domain.replace(/^\./, '') === domain)) return;
+      const domains = state.domains.filter(item => !selected.includes(item));
+      // Browser deletion withdraws live sync, never the saved persona cookies.
+      // With nothing left to track, quietly cancel any outstanding upload.
+      if (!domains.length) {
+        clearTimeout(syncTimers.get(id));
+        syncTimers.delete(id);
+        await browser.alarms.clear(retryAlarmPrefix + id);
+      }
+      await saveState(id, { ...state, domains, retained_domains: [...(state.retained_domains || []), ...selected], ...(!domains.length
+        ? { pending: false, error: undefined, next_retry_at: undefined, retry_count: 0 }
+        : {}) });
+      return;
+    }
     let changed = false;
     await updatePersona(state.persona_id, (persona) => {
       const cookies = { ...persona.cookies };
@@ -253,12 +276,13 @@ export function configureCookieSync(): void {
     }
   };
   const onCookieChanged = (change: Browser.cookies.CookieChangeInfo) => {
-    if (change.removed) return;
+    // Renewals emit a removal followed by the replacement cookie.
+    if (change.removed && change.cause === 'overwrite') return;
     const domain = change.cookie.domain.replace(/^\./, '');
     void getRouting().then(async (states) => {
       for (const [id, state] of Object.entries(states)) {
         if (state.enabled !== false && state.domains.some((item) => item.replace(/^\./, '') === domain)) {
-          await queueCookieChange(id, normalizeCookie(change.cookie));
+          await queueCookieChange(id, normalizeCookie(change.cookie), change.removed);
         }
       }
     }).catch(() => undefined);

@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
 
-export type ArchiveBoxApi = { server: string; key: string; keyFile: string; api: (route: string, init?: RequestInit) => Promise<any> };
+export type ArchiveBoxApi = { server: string; key: string; keyFile: string; collection?: string; api: (route: string, init?: RequestInit) => Promise<any> };
 
 export async function withArchiveBox(use: (archivebox: ArchiveBoxApi) => Promise<void>): Promise<void> {
     const configured = process.env.ARCHIVEBOX_TEST_SERVER;
@@ -49,7 +49,7 @@ export async function withArchiveBox(use: (archivebox: ArchiveBoxApi) => Promise
         if (child?.exitCode != null) throw new Error(await readFile(path.join(root, 'server.log'), 'utf8'));
         return fetch(server + '/api/v1/core/snapshots?limit=1', { headers: { Authorization: `Bearer ${key}` } }).then(r => r.status).catch(() => 0);
       }, { timeout: 30000 }).toBe(200);
-      await use({ server, key, keyFile: keyFile || path.join(collection, 'test-api-key'), api });
+      await use({ server, key, keyFile: keyFile || path.join(collection, 'test-api-key'), collection: configured ? process.env.ARCHIVEBOX_TEST_COLLECTION : collection, api });
     } finally {
       if (child && child.exitCode === null && child.signalCode === null) {
         const exited = new Promise<void>(resolve => child!.once('exit', () => resolve()));

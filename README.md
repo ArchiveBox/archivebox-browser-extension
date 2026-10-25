@@ -79,6 +79,8 @@ Auto-syncing domains stay checked in their profile's list, including after
 switching tabs or reopening options. Partially synced sites show a mixed checkbox.
 Uncheck a synced site or domain to remove it from that profile; **Clear selection**
 only clears pending additions.
+Clearing a site's last cookie in the browser quietly stops that domain's auto-sync
+and leaves the profile's saved cookies intact, including on the ArchiveBox server.
 Uncheck Auto-sync to pause updates. Switching persona tabs only changes the
 editor; **Use for archiving** changes the profile used for captures.
 
