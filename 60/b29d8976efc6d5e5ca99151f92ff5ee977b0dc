@@ -1,0 +1,19 @@
+tests/popup.test.ts
+  s_b38c1d267bb984::t_4fe5c90c5a3518 172-184,1410-1417
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "60b29d8976efc6d5e5ca99151f92ff5ee977b0dc",
+  "prompts": {},
+  "sessions": {
+    "s_b38c1d267bb984": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1743b-cf99-71a3-a616-643d0e35afa2",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
