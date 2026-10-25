@@ -169,6 +169,19 @@ async function connectCdpWebSocket(webSocketDebuggerUrl: string): Promise<CdpCli
   const recentEvents: string[] = [];
   const eventListeners = new Map<string, Set<(event: CdpEvent) => void>>();
 
+  socket.addEventListener('close', () => {
+    for (const callbacks of pending.values()) {
+      clearTimeout(callbacks.timeout);
+      callbacks.reject(new Error('CDP websocket closed'));
+    }
+    pending.clear();
+    for (const waiter of eventWaiters) {
+      clearTimeout(waiter.timeout);
+      waiter.reject(new Error('CDP websocket closed'));
+    }
+    eventWaiters.clear();
+  });
+
   socket.addEventListener('message', (event) => {
     const message = JSON.parse(String(event.data));
     if (!message.id) {
@@ -1394,8 +1407,14 @@ test('native action popup supports local save, tags, depth, captures, navigation
     popup = await openNativePopup(harness, page);
     await waitForPopupText(harness, popup, testPageUrl);
     await waitForPopupText(harness, popup, 'Saved');
-    await popup.cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' }, popup.sessionId);
-    await waitForNoNativePopup(harness);
+    // Escape can destroy the target/socket before Chrome acknowledges the key.
+    // Require actual dismissal, without the cleanup helper closing it for us.
+    await popup.cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' }, popup.sessionId).catch(error => {
+      if (!(error instanceof Error) || error.message !== 'CDP websocket closed') throw error;
+    });
+    await expect.poll(() => extensionPopupTargets(harness)).toEqual([]);
+    expect(page.isClosed()).toBe(false);
+    await expect(page.locator('#fixture-marker')).toBeVisible();
     entries = await savedEntries(harness);
     expect(entries.some((entry) => entry.url === testPageUrl)).toBe(true);
 
