@@ -19,29 +19,36 @@ function SelectionCheckbox({ selected, total, label, onChange }: { selected: num
   return <input ref={input} type="checkbox" aria-label={label} checked={total > 0 && selected === total} onChange={event => onChange(event.currentTarget.checked)} />;
 }
 
-export function CookieSitePicker({ cookies, selected, setSelected, cachedIcons, savedDomains, loaded, onCopy, onRemove }: {
+export function CookieSitePicker({ cookies, selected, setSelected, syncingDomains, cachedIcons, savedDomains, loaded, onCopy, onRemove }: {
   cookies: Record<string, StoredCookie[]>;
   selected: Set<string>;
   setSelected: Dispatch<SetStateAction<Set<string>>>;
+  syncingDomains: Set<string>;
   cachedIcons: Record<string, string>;
   savedDomains: Set<string>;
   loaded: boolean;
   onCopy: (domain: string, cookies: StoredCookie[]) => void;
-  onRemove: (domain: string) => void;
+  onRemove: (domains: string[]) => void;
 }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const sites = useMemo(() => groupCookieSites(cookies), [cookies]);
+  // Draft additions clear after import; persisted sync membership does not.
+  const checkedDomains = new Set([...selected, ...syncingDomains]);
   const visible = sites.filter(site => (filter !== 'saved' || site.domains.some(([domain]) => savedDomains.has(domain)))
-    && (filter !== 'selected' || site.domains.some(([domain]) => selected.has(domain)))
+    && (filter !== 'selected' || site.domains.some(([domain]) => checkedDomains.has(domain)))
     && `${site.name} ${site.domains.map(([domain]) => domain).join(' ')}`.toLowerCase().includes(query.trim().toLowerCase()));
   const domains = visible.flatMap(site => site.domains.map(([domain]) => domain));
-  const select = (domains: string[], checked: boolean) => setSelected(current => {
-    const next = new Set(current);
-    domains.forEach(domain => checked ? next.add(domain) : next.delete(domain));
-    return next;
-  });
+  const select = (domains: string[], checked: boolean) => {
+    setSelected(current => {
+      const next = new Set(current);
+      domains.forEach(domain => checked && !syncingDomains.has(domain) ? next.add(domain) : next.delete(domain));
+      return next;
+    });
+    const removed = domains.filter(domain => syncingDomains.has(domain));
+    if (!checked && removed.length) onRemove(removed);
+  };
   return <div className="cookie-picker">
     <div className="cookie-picker-tools">
       <label className="search-field"><Search size={16} aria-hidden="true" />
@@ -55,14 +62,14 @@ export function CookieSitePicker({ cookies, selected, setSelected, cachedIcons, 
       </div>
     </div>
     {sites.length > 0 && <div className="cookie-picker-meta">
-      <label><SelectionCheckbox selected={domains.filter(domain => selected.has(domain)).length} total={domains.length}
+      <label><SelectionCheckbox selected={domains.filter(domain => checkedDomains.has(domain)).length} total={domains.length}
         label={t('Select all visible cookie domains')} onChange={checked => select(domains, checked)} />{t('Select visible')}</label>
       <span>{visible.length === 1 ? t('1 site') : t('$1 sites', visible.length)}</span>
     </div>}
     <div className="cookie-site-grid">
       {visible.map(site => {
         const siteDomains = site.domains.map(([domain]) => domain);
-        const selectedCount = siteDomains.filter(domain => selected.has(domain)).length;
+        const selectedCount = siteDomains.filter(domain => checkedDomains.has(domain)).length;
         const savedCount = siteDomains.filter(domain => savedDomains.has(domain)).length;
         const open = expanded.has(site.domain);
         return <article className={`cookie-site${selectedCount ? ' is-selected' : ''}`} key={site.domain} data-site={site.domain}>
@@ -81,9 +88,9 @@ export function CookieSitePicker({ cookies, selected, setSelected, cachedIcons, 
             </button>
           </div>
           {open && <div id={`cookie-domains-${site.domain}`} className="cookie-domains">{site.domains.map(([domain, domainCookies]) => <div key={domain}>
-            <label><input type="checkbox" aria-label={t('Select $1', domain)} checked={selected.has(domain)} onChange={event => select([domain], event.currentTarget.checked)} /><span title={domain}>{domain}</span><small>{domainCookies.length}</small></label>
+            <label><input type="checkbox" aria-label={t('Select $1', domain)} checked={checkedDomains.has(domain)} onChange={event => select([domain], event.currentTarget.checked)} /><span title={domain}>{domain}</span><small>{domainCookies.length}</small></label>
             <button className="cookie-icon-button" aria-label={t('Copy cookies for $1', domain)} title={t('Copy cookies.txt')} onClick={() => onCopy(domain, domainCookies)}><Copy size={13} aria-hidden="true" /></button>
-            {savedDomains.has(domain) && <button className="cookie-icon-button" aria-label={t('Remove $1', domain)} title={t('Remove $1 from profile', domain)} onClick={() => onRemove(domain)}><X size={13} aria-hidden="true" /></button>}
+            {savedDomains.has(domain) && <button className="cookie-icon-button" aria-label={t('Remove $1', domain)} title={t('Remove $1 from profile', domain)} onClick={() => onRemove([domain])}><X size={13} aria-hidden="true" /></button>}
           </div>)}</div>}
         </article>;
       })}

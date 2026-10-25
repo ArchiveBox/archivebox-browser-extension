@@ -1147,6 +1147,12 @@ function OptionsMain() {
   }
   const archiveboxServerUrlIsValid = isHttpUrl((server?.server || ''));
   const archiveboxServerBaseUrl = serverUrlBase((server?.server || ''));
+  const viewedCookieSyncState = cookieSyncStates[`${server_id}:${viewedPersona?.id}`];
+  const syncingCookieDomains = new Set(
+    viewedCookieSyncState?.enabled !== false && viewedCookieSyncState?.server_origin === archiveboxServerBaseUrl
+      ? viewedCookieSyncState.domains.filter(domain => domain in (viewedPersona?.cookies || {}))
+      : [],
+  );
 
   function updateSavedUrlFilter(value: string) {
     setFilterText(value);
@@ -1755,14 +1761,21 @@ function OptionsMain() {
     setPersonasState((await getPersonas()).personas);
   }
 
-  async function removePersonaDomain(persona: Persona, domain: string) {
-    await updatePersona(persona.id, (item) => {
+  async function removePersonaDomains(persona: Persona, domains: string[]) {
+    const removeDomains = (item: Persona) => {
       const cookies = { ...item.cookies };
-      delete cookies[domain];
+      domains.forEach(domain => delete cookies[domain]);
       return { ...item, cookies };
-    });
-    setSelectedCookieDomains(current => { const next = new Set(current); next.delete(domain); return next; });
-    setPersonasState((await getPersonas()).personas);
+    };
+    setPersonasState(items => items.map(item => item.id === persona.id ? removeDomains(item) : item));
+    setSelectedCookieDomains(current => new Set([...current].filter(domain => !domains.includes(domain))));
+    try {
+      await trackSave(() => updatePersona(persona.id, removeDomains));
+    } catch (error) {
+      setCookieStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setPersonasState((await getPersonas()).personas);
+    }
   }
 
   // Marks which import candidates are already saved (by URL); with selectNew,
@@ -2450,7 +2463,7 @@ function OptionsMain() {
           </div>
           <StatusBadge status={cookieStatus} />
           <CookieSitePicker cookies={{ ...viewedPersona?.cookies, ...cookiesByDomain }} selected={selectedCookieDomains} setSelected={setSelectedCookieDomains} cachedIcons={cachedCookieIcons}
-            savedDomains={new Set(Object.keys(viewedPersona?.cookies || {}))} loaded={cookiesLoaded} onCopy={copyDomainCookies} onRemove={domain => viewedPersona && removePersonaDomain(viewedPersona, domain)} />
+            syncingDomains={syncingCookieDomains} savedDomains={new Set(Object.keys(viewedPersona?.cookies || {}))} loaded={cookiesLoaded} onCopy={copyDomainCookies} onRemove={domains => viewedPersona && removePersonaDomains(viewedPersona, domains)} />
           {selectedCookieDomains.size > 0 && <div className="cookie-selection-bar">
             <span><Cookie size={16} aria-hidden="true" /><strong>{selectedCookieDomains.size === 1 ? t('1 domain selected') : t('$1 domains selected', selectedCookieDomains.size)}</strong></span>
             <button className="cookie-add-button" disabled={!viewedPersona || selectedCookieDomains.size === 0 || syncingPersonas.has(viewedPersona.id)} onClick={() => viewedPersona && importSelectedCookies(viewedPersona.id)}>

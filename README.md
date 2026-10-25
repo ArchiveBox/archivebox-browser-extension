@@ -75,6 +75,10 @@ list; all other sites are alphabetical, with friendly names for 100 common sites
 Select sites and choose **Add to [profile]**. **Sync now** uploads immediately and
 enables **Auto-sync** for that persona and server. Adding sites then syncs them
 automatically; the last-synced time changes only after a successful upload.
+Auto-syncing domains stay checked in their profile's list, including after
+switching tabs or reopening options. Partially synced sites show a mixed checkbox.
+Uncheck a synced site or domain to remove it from that profile; **Clear selection**
+only clears pending additions.
 Uncheck Auto-sync to pause updates. Switching persona tabs only changes the
 editor; **Use for archiving** changes the profile used for captures.
 

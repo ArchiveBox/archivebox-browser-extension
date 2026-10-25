@@ -2,6 +2,7 @@ import { expect } from '@playwright/test';
 import { test } from './helpers/archivebox';
 import { launchExtension, waitForSavedSettings } from './helpers/extension';
 import type { CookieSyncState } from '../src/lib/cookieSync';
+import type { Persona } from '../src/lib/types';
 
 test('sync controls report real uploads, sync added sites immediately, and persist disabling', async ({ archivebox }, testInfo) => {
   const harness = await launchExtension(['cookies', 'tabs', 'scripting'], ['<all_urls>']);
@@ -44,17 +45,40 @@ test('sync controls report real uploads, sync added sites immediately, and persi
     await expect(page.locator('.persona-sync-time time')).not.toHaveAttribute('datetime', second!);
     expect(requests).toHaveLength(3);
     expect(requests[2]!.auth_json.cookies).toEqual([expect.objectContaining({ domain: 'accounts.google.com', value: 'selected-login' })]);
+    const google = page.getByRole('checkbox', { name: 'Select Google', exact: true });
+    await expect(google).toBeChecked();
+    await expect(page.getByRole('button', { name: `Add to ${name}`, exact: true })).toHaveCount(0);
+    await page.getByRole('tab', { name: 'Work', exact: true }).click();
+    await expect(google).not.toBeChecked();
+    await page.getByRole('tab', { name, exact: true }).click();
+    await expect(google).toBeChecked();
+    await page.reload();
+    await page.getByRole('button', { name: 'Cookies', exact: true }).click();
+    await expect(google).toBeChecked();
+    await harness.context.addCookies([{ name: 'login', value: 'not-selected', domain: 'mail.google.com', path: '/' }]);
+    await page.getByRole('button', { name: 'Refresh cookies', exact: true }).click();
+    await expect(google).toBeChecked({ indeterminate: true });
+    await page.getByRole('button', { name: 'Show domains for Google', exact: true }).click();
+    await expect(page.getByRole('checkbox', { name: 'Select accounts.google.com', exact: true })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Select mail.google.com', exact: true })).not.toBeChecked();
+    await page.getByRole('checkbox', { name: 'Select example.org', exact: true }).check();
+    await page.getByRole('button', { name: 'Clear selection', exact: true }).click();
+    await expect(page.getByRole('checkbox', { name: 'Select example.org', exact: true })).not.toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Select accounts.google.com', exact: true })).toBeChecked();
     const synced = await page.locator('.persona-sync-time time').getAttribute('datetime');
-    const state = () => page.evaluate(async () => {
+    const state = () => page.evaluate(async name => {
       const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
       const stored = await api.storage.local.get(null);
-      return Object.entries(stored).find(([key]) => key.startsWith('cookie_sync:'))?.[1] as CookieSyncState;
-    });
+      const persona = (stored.personas as Persona[]).find(item => item.name === name)!;
+      return Object.entries(stored).find(([key, value]) => key.startsWith('cookie_sync:')
+        && (value as CookieSyncState).persona_id === persona.id)?.[1] as CookieSyncState;
+    }, name);
     await expect.poll(async () => (await state()).domains).toEqual(['accounts.google.com']);
     // The existing background listener updates the same visible timestamp.
     await harness.context.addCookies([{ name: 'login', value: 'renewed-login', domain: 'accounts.google.com', path: '/', secure: true, httpOnly: true }]);
     await expect(page.locator('.persona-sync-time time')).not.toHaveAttribute('datetime', synced!);
     await autoSync.uncheck();
+    await expect(page.getByRole('checkbox', { name: 'Select accounts.google.com', exact: true })).not.toBeChecked();
     await expect.poll(async () => (await state()).enabled).toBe(false);
     const disabledTime = (await state()).last_synced_at;
     await page.getByRole('checkbox', { name: 'Select example.org', exact: true }).check();
@@ -73,6 +97,8 @@ test('sync controls report real uploads, sync added sites immediately, and persi
     await expect(page.locator('.persona-sync-time time')).not.toHaveAttribute('datetime', disabledTime!);
     expect(requests).toHaveLength(4);
     expect(requests[3]!.auth_json.cookies.map(cookie => cookie.domain).sort()).toEqual(['accounts.google.com', 'example.org']);
+    await expect(google).toBeChecked({ indeterminate: true });
+    await expect(page.getByRole('checkbox', { name: 'Select example.org', exact: true })).toBeChecked();
     const beforeFailure = (await state()).last_synced_at;
     await harness.context.setOffline(true);
     await page.getByRole('button', { name: 'Sync now', exact: true }).click();
@@ -89,5 +115,45 @@ test('sync controls report real uploads, sync added sites immediately, and persi
     await page.setViewportSize({ width: 320, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
     await page.screenshot({ path: testInfo.outputPath('cookies-synced-mobile.png'), fullPage: true });
+
+    // The same browser domains can belong to multiple independent sync profiles.
+    await page.getByRole('tab', { name: 'Work', exact: true }).click();
+    await google.check();
+    await page.getByRole('checkbox', { name: 'Select example.org', exact: true }).check();
+    await page.getByRole('button', { name: 'Add to Work', exact: true }).click();
+    await expect(page.locator('.persona-identity')).toContainText('3 cookies');
+    await page.getByRole('button', { name: 'Sync now', exact: true }).click();
+    await expect(autoSync).toBeChecked();
+    await expect(google).toBeChecked();
+    await page.getByRole('tab', { name, exact: true }).click();
+    await expect(google).toBeChecked({ indeterminate: true });
+    await page.getByRole('checkbox', { name: 'Select example.org', exact: true }).uncheck();
+    await expect.poll(async () => (await state()).domains).toEqual(['accounts.google.com']);
+    await expect.poll(async () => (await state()).pending).toBe(false);
+    await expect(page.locator('.persona-identity')).toContainText('1 site');
+    await page.getByRole('button', { name: 'Show domains for Google', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Select accounts.google.com', exact: true }).uncheck();
+    await expect.poll(async () => (await state()).domains).toEqual([]);
+    await expect.poll(async () => (await state()).pending).toBe(false);
+    await expect(google).not.toBeChecked();
+    await page.getByRole('tab', { name: 'Work', exact: true }).click();
+    await expect(google).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Select example.org', exact: true })).toBeChecked();
+    // Unchecking a group removes all its synced subdomains in one edit.
+    await google.uncheck();
+    await expect(page.locator('.persona-identity')).toContainText('1 site');
+    await expect(page.locator('.persona-identity')).toContainText('1 cookie');
+    await expect.poll(() => page.evaluate(async () => {
+      const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
+      const stored = await api.storage.local.get(null);
+      return Object.entries(stored).filter(([key]) => key.startsWith('cookie_sync:'))
+        .map(([, value]) => value as CookieSyncState).filter(value => value.enabled && value.domains.length)
+        .map(value => ({ domains: value.domains, pending: value.pending }));
+    })).toEqual([{ domains: ['example.org'], pending: false }]);
+    await page.reload();
+    await page.getByRole('button', { name: 'Cookies', exact: true }).click();
+    await page.getByRole('tab', { name: 'Work', exact: true }).click();
+    await expect(google).not.toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Select example.org', exact: true })).toBeChecked();
   } finally { await harness.close(); }
 });
