@@ -1,0 +1,28 @@
+tests/cookie-clearing.test.ts
+  s_b38c1d267bb984::t_40c636b91f01f7 1-103
+tests/helpers/archivebox.ts
+  s_b38c1d267bb984::t_40c636b91f01f7 10,52
+src/lib/cookieSync.ts
+  s_b38c1d267bb984::t_8fb3e2025b8f6d 131-132,221,230-240,242-245,279,285
+  s_b38c1d267bb984::t_0b558c0d3493f8 18,135,241
+  s_b38c1d267bb984::t_778ff79742864d 280
+  s_b38c1d267bb984::t_db667996981817 113,133-134,138-140,143
+README.md
+  s_b38c1d267bb984::t_8fb3e2025b8f6d 82-83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "59a0917bb70ec2144bd9ea4f280ef1a6515c6a45",
+  "prompts": {},
+  "sessions": {
+    "s_b38c1d267bb984": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1743b-cf99-71a3-a616-643d0e35afa2",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
