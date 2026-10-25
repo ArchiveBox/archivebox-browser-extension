@@ -1,0 +1,19 @@
+.github/workflows/ci.yml
+  s_b38c1d267bb984::t_3f28074fbcc2be 18,24-31,51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "35a74ce0ea06553e742155bdefa8c46f774a1e01",
+  "prompts": {},
+  "sessions": {
+    "s_b38c1d267bb984": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1743b-cf99-71a3-a616-643d0e35afa2",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Nick Sweeting <git@sweeting.me>"
+    }
+  }
+}
