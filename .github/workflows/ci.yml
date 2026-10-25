@@ -41,4 +41,4 @@ jobs:
         if: matrix.browser == 'chrome'
       - name: Test real extension and ArchiveBox API flows
         if: matrix.browser == 'chrome'
-        run: pnpm exec playwright test
+        run: pnpm exec playwright test --reporter=line

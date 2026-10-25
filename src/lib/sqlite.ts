@@ -112,6 +112,10 @@ async function openConnection<TSchema extends Record<string, unknown>>(schema: T
   };
 
   await serial(() => exec('PRAGMA foreign_keys = ON'));
+  // The default ~2 MiB page cache thrashes IndexedDB during 500-snapshot
+  // import batches and FTS index merges. Keep the working pages in a bounded
+  // 8 MiB cache per connection; commit durability and batch sizes stay intact.
+  await serial(() => exec('PRAGMA cache_size = -8192'));
   const unqueued = drizzle(callback, { schema });
   return {
     orm: drizzle((sql, params, method) => serial(() => callback(sql, params, method)), { schema }),
