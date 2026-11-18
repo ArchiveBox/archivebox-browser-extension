@@ -783,7 +783,22 @@ export default function OptionsApp() {
 }
 
 function OptionsMain() {
-  const [tab, setTab] = useState<Tab>('urls');
+  const sectionFromHash = (): Tab => ({ Configuration: 'config', Personas: 'profiles', Import: 'import' } as Record<string, Tab>)[window.location.hash.slice(1)] || 'urls';
+  const [tab, setTab] = useState<Tab>(sectionFromHash);
+  const menuParams = new URLSearchParams(window.location.search);
+  const menuStatus = menuParams.get('menu_status') || '';
+  const cookieSourceUrl = menuParams.get('cookie_url') || '';
+  const cookieSourceTab = Number(menuParams.get('cookie_tab'));
+  const [copyingSiteCookies, setCopyingSiteCookies] = useState(false);
+  const historySite = (() => {
+    const value = menuParams.get('history_site') || '';
+    try { return value && new URL('https://' + value).hostname === value ? value : ''; } catch { return ''; }
+  })();
+  useEffect(() => {
+    const restore = () => setTab(sectionFromHash());
+    window.addEventListener('hashchange', restore);
+    return () => window.removeEventListener('hashchange', restore);
+  }, []);
   // Saved URLs shows a window of the matching snapshots, loaded from the
   // database a page at a time; nothing here holds the whole collection.
   const [snapshots, setSnapshotsState] = useState<Snapshot[]>([]);
@@ -827,7 +842,7 @@ function OptionsMain() {
   const [importLoading, setImportLoading] = useState(false);
   const [importFilter, setImportFilter] = useState('');
   const [showNewOnly, setShowNewOnly] = useState(false);
-  const [importStartDate, setImportStartDate] = useState(dateInputValue(yesterday));
+  const [importStartDate, setImportStartDate] = useState(dateInputValue(historySite ? new Date(Date.now() - 90 * 86400000) : yesterday));
   const [importEndDate, setImportEndDate] = useState(dateInputValue(today));
   const [importTags, setImportTags] = useState('');
   const [editingTags, setEditingTags] = useState(false);
@@ -871,7 +886,8 @@ function OptionsMain() {
     }
     setCookieSyncStates(await getCookieSyncStates());
     setPersonasState(personaState.personas);
-    setActivePersonaState(personaState.active_persona);
+    const requestedPersona = new URLSearchParams(window.location.search).get('persona');
+    setActivePersonaState(personaState.personas.some(persona => persona.id === requestedPersona) ? requestedPersona! : personaState.active_persona);
     setAnonymousPersonaId(personaState.anonymous_persona || '');
   }
 
@@ -1618,6 +1634,21 @@ function OptionsMain() {
     }
   }
 
+  async function copyMenuSiteCookies() {
+    if (!viewedPersona || !cookieSourceUrl || !Number.isInteger(cookieSourceTab)) return;
+    setCopyingSiteCookies(true);
+    try {
+      const response: RuntimeResponse = await browser.runtime.sendMessage({
+        type: 'copy_site_cookies', tab_id: cookieSourceTab, expected_url: cookieSourceUrl, persona_id: viewedPersona.id,
+      } satisfies RuntimeMessage);
+      if (!response.ok || !response.siteCookies) throw new Error(response.errorMessage || t('No cookies were copied.'));
+      setPersonasState((await getPersonas()).personas);
+      setCookieStatus({ kind: 'success', text: t('$1 site cookies saved locally to $2. No server sync was requested.', response.siteCookies.count, response.siteCookies.personaName) });
+    } catch (error) {
+      setCookieStatus({ kind: 'error', text: error instanceof Error ? error.message : t('No cookies were copied.') });
+    } finally { setCopyingSiteCookies(false); }
+  }
+
   async function importSelectedCookies(targetPersonaId: string) {
     const targetPersona = personas.find((persona) => persona.id === targetPersonaId);
     if (!targetPersona) {
@@ -1815,7 +1846,7 @@ function OptionsMain() {
       return;
     }
     try {
-      const items = await toImportItems(await loadHistorySnapshots(importStartDate, importEndDate));
+      const items = await toImportItems(await loadHistorySnapshots(importStartDate, importEndDate, historySite || undefined));
       setImportItems(items);
       setImportStatus({ kind: 'success', text: t("Loaded $1 history URLs", items.length) });
     } catch (error) {
@@ -2061,6 +2092,8 @@ function OptionsMain() {
 
   return (
     <main className="app" aria-busy={pendingSaves > 0}>
+      {menuStatus && <p role="status" className="status status-idle">{menuStatus}</p>}
+      {historySite && tab === 'import' && <p role="status">{t('History review is scoped to $1, initially the last 90 days. Load history, review URLs, then import selected visits.', historySite)}</p>}
       <header className="topbar">
         <div className="topbar__brand">
           <img src={extensionUrl('icon/48.png')} alt="" />
@@ -2390,6 +2423,13 @@ function OptionsMain() {
             <div className="cookies-heading-title"><Cookie size={19} aria-hidden="true" /><h2>{t('Cookies & profiles')}</h2></div>
             <button onClick={createPersona}><Plus size={15} aria-hidden="true" />{t('New Profile')}</button>
           </div>
+          {cookieSourceUrl && <div className="toolbar">
+            <p>{t('Choose a Persona below, then copy cookies for this source site: $1', menuParams.get('site') || cookieSourceUrl)}</p>
+            <button disabled={!viewedPersona || copyingSiteCookies} onClick={copyMenuSiteCookies}>
+              {t("Save this site's cookies to $1 (local only)", viewedPersona?.name || t('selected Persona'))}
+            </button>
+            <StatusBadge status={cookieStatus} />
+          </div>}
           <div className="persona-tabs" role="tablist" aria-label={t('Archiving profiles')}>
             {personas.map((persona, index) => <button key={persona.id} id={`persona-tab-${persona.id}`} role="tab" aria-label={persona.name} title={persona.name}
               aria-selected={viewedPersona?.id === persona.id} aria-controls="persona-panel" tabIndex={viewedPersona?.id === persona.id ? 0 : -1}

@@ -10,6 +10,7 @@ export function parseLocalDate(value: string): Date {
 export async function loadHistorySnapshots(
   startDateValue: string,
   endDateValue: string,
+  hostname?: string,
 ): Promise<Snapshot[]> {
   const startDate = parseLocalDate(startDateValue);
   const endDate = parseLocalDate(endDateValue);
@@ -21,13 +22,20 @@ export async function loadHistorySnapshots(
   }
 
   const historyItems = await browser.history.search({
-    text: '',
+    text: hostname || '',
     startTime: startDate.getTime(),
     endTime: endDate.getTime(),
     maxResults: 10000,
   });
 
-  return historyItems.map((item) => ({
+  return historyItems.filter(item => {
+    if (!hostname) return true;
+    try {
+      const url = new URL(item.url || '');
+      return ['http:', 'https:'].includes(url.protocol)
+        && url.hostname.toLowerCase().replace(/\.$/, '') === hostname;
+    } catch { return false; }
+  }).map((item) => ({
     ...createSnapshot(item.url || '', [], item.title || ''),
     timestamp: new Date(item.lastVisitTime || Date.now()).toISOString(),
   }));

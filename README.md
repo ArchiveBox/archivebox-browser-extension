@@ -265,3 +265,30 @@ authorized manual **Release browser extension** run on main with `publish_stores
 enabled (false by default) and the exact version-tagged `tested_sha`. The workflow
 checks successful full CI, the version tag, and package hashes before submission.
 Automatic runs retain the downloadable packages without submitting to stores.
+
+## Toolbar right-click menu
+
+Right-click the pinned ArchiveBox toolbar icon for current-tab save, window save,
+confirmed save-and-close, and URL search. Chromium limits this menu to six root
+items, so **This site** and **Help** contain the remaining native
+flyouts. The existing webpage “Save to ArchiveBox” menu remains available.
+
+Window actions use the clicked tab's window, tag saves with `save-all-tabs` or
+`close-all-tabs`, and leave unsupported, private, changed, or unsuccessfully saved
+tabs open. Save-and-close requires the configured server's acknowledgment, or a
+verified saved record when using local-only storage. The toolbar badge/title
+reports the result; settings failures open Configuration with an explanation.
+
+Site rules match the exact hostname (not substring lookalikes). Enabling one
+site while automatic archiving is off replaces the inactive allow expression
+with that site's rule, rather than accidentally enabling an old global pattern.
+Existing enabled rules and unrelated exclusions are retained.
+
+The cookie menu opens the Persona choice UI without reading or saving cookies.
+Its explicit local-save button copies only cookies applicable to the source HTTPS URL from
+its verified browser cookie store into the selected existing local Persona.
+Existing cookie/site permissions are required; otherwise the profile editor is
+opened for review. It does not initiate a server sync or enable ongoing sync.
+Use the existing Persona sync controls separately when you want that transfer.
+History opens the existing review/import screen scoped to the exact site, with
+an initial last-90-days date range; only selected visits are imported.

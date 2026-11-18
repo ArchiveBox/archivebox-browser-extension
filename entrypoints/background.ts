@@ -1,3 +1,5 @@
+import { siteCookieSource } from '@/src/lib/siteRules';
+import { copySiteCookiesToPersona, handleActionMenu, rebuildActionMenus } from '@/src/lib/actionMenu';
 import { defaultServers, requireServer } from '@/src/lib/server_registry';
 import { configureLocalRetention, withSnapshotArtifacts } from '@/src/lib/retention';
 import { configureCookieSync } from '@/src/lib/cookieSync';
@@ -849,17 +851,27 @@ async function autoArchive(
   await syncSnapshotToServer(snapshot, tab.id);
 }
 
-async function saveTab(tab?: Browser.tabs.Tab): Promise<void> {
-  if (!tab?.id || !tab.url) return;
-  if (!isArchiveablePageUrl(tab.url)) return;
-  if (await isConfiguredArchiveBoxUrl(tab.url)) return;
-  console.info(`ArchiveBox: saving ${tab.url}`);
+async function saveTab(tab?: Browser.tabs.Tab, tags: string[] = []): Promise<boolean> {
+  if (!tab?.id || !tab.url || tab.incognito) return false;
+  if (!isArchiveablePageUrl(tab.url)) return false;
+  if (await isConfiguredArchiveBoxUrl(tab.url)) return false;
   try {
-    const { snapshot, created } = await ensureSnapshotForTab(tab);
-    await captureConfiguredSnapshotArtifacts(tab, snapshot, created);
-    await syncSnapshotToServer(snapshot, tab.id);
-  } catch (error) {
-    console.error('Failed to save tab to ArchiveBox:', error);
+    const saved = await ensureSnapshotForTab(tab);
+    let snapshot = saved.snapshot;
+    if (tags.length) {
+      const tagged = await updateSnapshot(snapshot.id, item => ({ ...item, tags: [...new Set([...item.tags, ...tags])] }));
+      if (!tagged) return false;
+      snapshot = tagged;
+    }
+    await captureConfiguredSnapshotArtifacts(tab, snapshot, saved.created);
+    const submitted = await syncSnapshotToServer(snapshot, tab.id);
+    const config = await getConfig();
+    // Closing requires a real acknowledged server submission when configured,
+    // or a verified durable local record in explicit local-only mode.
+    const needsServer = defaultServers(config)[0]?.policy.upload_metadata_to_server;
+    return submitted || Boolean(config.save_snapshots_locally && !needsServer && await getSnapshot(snapshot.id));
+  } catch {
+    return false;
   }
 }
 
@@ -895,29 +907,21 @@ export default defineBackground(() => {
   refreshUiLanguage().catch(() => undefined);
   refreshServerUsername().catch(() => undefined);
   browser.runtime.onInstalled.addListener(() => {
-    refreshUiLanguage()
-      .catch(() => undefined)
-      .then(() => {
-        browser.contextMenus.removeAll();
-        browser.contextMenus.create({
-          id: 'save_to_archivebox_ctxmenu',
-          title: t("Save to ArchiveBox"),
-          contexts: ['page'],
-        });
-      });
+    void refreshUiLanguage().then(rebuildActionMenus).catch(() => undefined);
+  });
+  browser.runtime.onStartup.addListener(() => {
+    void refreshUiLanguage().then(rebuildActionMenus).catch(() => undefined);
   });
 
   browser.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.server_registry) refreshServerUsername().catch(() => undefined);
-    if (area === 'local' && changes.ui_language) {
-      refreshUiLanguage()
-        .then(() => browser.contextMenus.update('save_to_archivebox_ctxmenu', { title: t("Save to ArchiveBox") }))
-        .catch(() => undefined);
+    if (area === 'local' && (changes.ui_language || changes.personas)) {
+      void refreshUiLanguage().then(rebuildActionMenus).catch(() => undefined);
     }
   });
 
-  browser.contextMenus.onClicked.addListener((_item, tab) => {
-    saveTab(tab);
+  browser.contextMenus.onClicked.addListener((item, tab) => {
+    void handleActionMenu(item.menuItemId, tab, saveTab);
   });
 
   browser.commands.onCommand.addListener(async (command) => {
@@ -931,6 +935,23 @@ export default defineBackground(() => {
     _sender,
   ): Promise<RuntimeResponse> | RuntimeResponse => {
     switch (message.type) {
+      case 'copy_site_cookies':
+        return (async () => {
+          // Only the extension's explicit Persona choice UI may request this.
+          if (_sender.id !== browser.runtime.id || !_sender.url?.startsWith(browser.runtime.getURL('/'))
+            || new URL(_sender.url).pathname !== '/options.html') {
+            return { ok: false, errorMessage: t('Open the Persona choice screen first.') };
+          }
+          try {
+            const tab = await getMessageTab(message.tab_id);
+            if (!tab.url || siteCookieSource(tab.url) !== message.expected_url) return { ok: false, errorMessage: t('The source tab changed. No cookies were copied.') };
+            const siteCookies = await copySiteCookiesToPersona(tab, message.persona_id);
+            return { ok: true, siteCookies };
+          } catch {
+            return { ok: false, errorMessage: t('Site cookies could not be copied. Check HTTPS, this site’s existing cookie permission, the selected Persona and its browser tab. No sync was requested.') };
+          }
+        })();
+
       case 'set_config':
         return setConfig(message.patch)
           .then(() => ({ ok: true }))

@@ -321,6 +321,7 @@ export type ScreenshotRestoreScrollMessage = {
 };
 
 export type RuntimeMessage =
+  | { type: 'copy_site_cookies'; tab_id: number; expected_url: string; persona_id: string }
   | { type: 'submit_agent_task'; server_id: string; snapshot_id: string; task: string }
   | { type: 'set_config'; patch: ConfigPatch }
   | ArchiveboxAddMessage
@@ -341,6 +342,7 @@ export type RuntimeMessage =
 
 export type RuntimeResponse = {
   ok: boolean;
+  siteCookies?: { count: number; personaName: string };
   receipt?: ArchiveSubmissionReceipt | null;
   agentTask?: AgentTaskReceipt;
   error?: string;
