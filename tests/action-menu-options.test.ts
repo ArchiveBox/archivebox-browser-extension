@@ -27,7 +27,7 @@ test('toolbar settings and site history links open existing sections and keep ex
     await expect(options.getByText('History review is scoped to localhost', { exact: false })).toBeVisible();
     const start = new Date(await options.getByLabel('History start date').inputValue()).getTime();
     expect(Math.abs(Date.now() - start - 90 * 86400000)).toBeLessThan(2 * 86400000);
-    await options.getByRole('button', { name: 'Import from Browser History', exact: true }).click();
+    await options.getByRole('button', { name: 'Load Browser History', exact: true }).click();
     await expect(options.locator('tbody tr')).toHaveCount(1);
     await expect(options.locator('tbody tr')).toContainText(selected);
     await expect(options.locator('tbody tr')).not.toContainText(lookalike);

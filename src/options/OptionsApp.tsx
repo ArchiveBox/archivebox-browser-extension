@@ -2540,9 +2540,8 @@ function OptionsMain() {
           </details>
           <div className="toolbar">
             {supportsDirectBrowserImport && <>
-              <button disabled={importLoading} onClick={loadHistory}>{t("Import from Browser History")}</button>
-              <button disabled={importLoading} onClick={loadBookmarks}>{t("Import from Browser Bookmarks")}</button>
-              <button disabled={importLoading} onClick={loadTabManagerPlus}>{t("Import from Tab Manager Plus")}</button>
+              <button disabled={importLoading} onClick={loadHistory}>{t("Load Browser History")}</button>
+              <button disabled={importLoading} onClick={loadBookmarks}>{t("Load Browser Bookmarks")}</button>
             </>}
             <input type="date" aria-label={t('History start date')} disabled={importLoading} value={importStartDate} onChange={(event) => setImportStartDate(event.currentTarget.value)} />
             <input type="date" aria-label={t('History end date')} disabled={importLoading} value={importEndDate} onChange={(event) => setImportEndDate(event.currentTarget.value)} />

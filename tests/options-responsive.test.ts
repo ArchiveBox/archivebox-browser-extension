@@ -104,7 +104,9 @@ test('options sections and saved URL actions fit mobile and desktop viewports', 
           await expect(page.locator('.cookie-site')).toHaveCount(1);
         }
         if (name === 'Bulk Import URLs' && width === 320) {
-          await page.getByRole('button', { name: 'Import from Browser Bookmarks', exact: true }).click();
+          await expect(page.getByRole('button', { name: 'Load Browser History', exact: true })).toBeVisible();
+          await expect(page.getByRole('button', { name: 'Import from Tab Manager Plus', exact: true })).toHaveCount(0);
+          await page.getByRole('button', { name: 'Load Browser Bookmarks', exact: true }).click();
           await expect(page.locator('.data-table tbody tr')).toHaveCount(1);
         }
         await expectPageFits(page);
