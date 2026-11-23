@@ -168,21 +168,23 @@ body {
   word-break: break-word;
 }
 
-.archivebox-overlay__page-meta {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 24px;
+.archivebox-overlay__page-heading {
+  display: flex;
   gap: 6px;
   align-items: start;
-  margin-top: 8px;
+}
+
+.archivebox-overlay__page-heading > .archivebox-overlay__page-title {
+  flex: 1 1 auto;
 }
 
 .archivebox-overlay__page-actions {
   display: flex;
-  flex-direction: column;
+  flex: 0 0 auto;
 }
 
 .archivebox-overlay__page-tags {
-  margin-top: 0;
+  margin-top: 8px;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;

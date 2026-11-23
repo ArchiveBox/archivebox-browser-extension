@@ -1024,52 +1024,52 @@ function ArchiveBoxOverlay() {
   return (
     <section className="archivebox-overlay" aria-label={t("ArchiveBox save panel")} aria-busy={deleteBusy}>
       <div className="archivebox-overlay__page">
-        <button className="archivebox-overlay__page-link archivebox-overlay__page-title" onClick={!deleted && remoteStatus === 'archived' ? viewRemoteSnapshot : openCurrentSnapshotInOptions} title={!deleted && remoteStatus === 'archived' ? t("View archived copy on server") : t("Show this URL in Saved URLs")}>
-          <strong title={pageTitle}>{pageTitle}</strong>
-          <span className="archivebox-overlay__page-url">
-            <span className="archivebox-overlay__page-link--favicon" aria-hidden="true">
-              {showPageFavicon ? (
-                <img src={pageFavicon || ''} alt="" onError={() => setFaviconFailed(true)} />
-              ) : (
-                <span className="archivebox-overlay__favicon-placeholder" aria-hidden="true" />
-              )}
+        <div className="archivebox-overlay__page-heading">
+          <button className="archivebox-overlay__page-link archivebox-overlay__page-title" onClick={!deleted && remoteStatus === 'archived' ? viewRemoteSnapshot : openCurrentSnapshotInOptions} title={!deleted && remoteStatus === 'archived' ? t("View archived copy on server") : t("Show this URL in Saved URLs")}>
+            <strong title={pageTitle}>{pageTitle}</strong>
+            <span className="archivebox-overlay__page-url">
+              <span className="archivebox-overlay__page-link--favicon" aria-hidden="true">
+                {showPageFavicon ? (
+                  <img src={pageFavicon || ''} alt="" onError={() => setFaviconFailed(true)} />
+                ) : (
+                  <span className="archivebox-overlay__favicon-placeholder" aria-hidden="true" />
+                )}
+              </span>
+              <code title={pageUrl}>{pageUrl}</code>
             </span>
-            <code title={pageUrl}>{pageUrl}</code>
-          </span>
-        </button>
-        <div className="archivebox-overlay__page-meta">
-          {!deleted && !deleteBusy && <TagList className="archivebox-overlay__page-tags">
-            {snapshot?.tags.map((tag) => (
-              <TagChip key={tag} label={tag} onRemove={() => removeTag(tag)} removeTitle={t("Remove tag $1", tag)} />
-            ))}
-            {suggestions.map((tag) => (
-              <TagChip key={tag} label={tag} suffix="+" variant="suggestion" onClick={() => addTag(tag)} />
-            ))}
-            {snapshot && localStatus !== 'removed' && (
-              <TagInputChip
-                value={input}
-                placeholder={t("+ tag")}
-                suggestions={filteredSuggestions}
-                onCommit={addTag}
-                onCancel={close}
-                onChange={setInput}
-                onBlur={(event) => {
-                  const nextTag = event.currentTarget.value.trim();
-                  if (nextTag) void addTag(nextTag);
-                }}
-                autoFocus
-              />
-            )}
-          </TagList>}
-          <div className="archivebox-overlay__page-actions">
-            {!deleted && <button className="archivebox-overlay__delete" onClick={() => removeSnapshot(true)} disabled={!snapshot || deleteBusy} title={t('Delete everywhere')} aria-label={t('Delete everywhere')}>
+          </button>
+          {!deleted && <div className="archivebox-overlay__page-actions">
+            <button className="archivebox-overlay__delete" onClick={() => removeSnapshot(true)} disabled={!snapshot || deleteBusy} title={t('Delete everywhere')} aria-label={t('Delete everywhere')}>
               <X size={24} strokeWidth={2} aria-hidden="true" />
-            </button>}
-            {!deleted && <button className="archivebox-overlay__settings" onClick={() => openOptions()} title={t("Options")} aria-label={t("Options")}>
+            </button>
+            <button className="archivebox-overlay__settings" onClick={() => openOptions()} title={t("Options")} aria-label={t("Options")}>
               <Settings size={24} strokeWidth={2} aria-hidden="true" />
-            </button>}
-          </div>
+            </button>
+          </div>}
         </div>
+        {!deleted && !deleteBusy && <TagList className="archivebox-overlay__page-tags">
+          {snapshot?.tags.map((tag) => (
+            <TagChip key={tag} label={tag} onRemove={() => removeTag(tag)} removeTitle={t("Remove tag $1", tag)} />
+          ))}
+          {suggestions.map((tag) => (
+            <TagChip key={tag} label={tag} suffix="+" variant="suggestion" onClick={() => addTag(tag)} />
+          ))}
+          {snapshot && localStatus !== 'removed' && (
+            <TagInputChip
+              value={input}
+              placeholder={t("+ tag")}
+              suggestions={filteredSuggestions}
+              onCommit={addTag}
+              onCancel={close}
+              onChange={setInput}
+              onBlur={(event) => {
+                const nextTag = event.currentTarget.value.trim();
+                if (nextTag) void addTag(nextTag);
+              }}
+              autoFocus
+            />
+          )}
+        </TagList>}
 
       </div>
 
