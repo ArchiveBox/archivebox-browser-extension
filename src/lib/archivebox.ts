@@ -157,12 +157,14 @@ export async function addToArchiveBox(
   update_all = false,
   snapshot_ids: string[] = [],
   only_new?: boolean,
+  options: { requireBatchApi?: boolean } = {},
 ): Promise<ArchiveSubmissionReceipt> {
   return navigator.locks.request<Promise<ArchiveSubmissionReceipt>>(`archivebox-submissions:${server.id}`, async () => {
     const { server: configuredServerUrl, token } = server;
     if (!configuredServerUrl) {
       throw new Error(t("Server not configured"));
     }
+    if (options.requireBatchApi && !token) throw new Error(t('An API key is required to queue one history crawl.'));
     const archiveboxServerUrl = serverBaseUrl(configuredServerUrl);
     const archiveableItems = urls
       .map((url, index) => ({ url, index }))
@@ -177,6 +179,7 @@ export async function addToArchiveBox(
       ? archiveableItems.map(({ index }) => snapshot_ids[index] || '')
       : [];
     async function recordSubmission(result: ArchiveSubmissionReceipt): Promise<void> {
+      if (!archiveableSnapshotIds.some(Boolean)) return;
       const submitted_at = new Date().toISOString();
       await updateSnapshots(archiveableSnapshotIds.filter(Boolean), (snapshot) => {
         const index = archiveableSnapshotIds.indexOf(snapshot.id);
@@ -192,8 +195,9 @@ export async function addToArchiveBox(
       });
     }
     const formattedTags = tags.join(',');
-    const { personas } = await getPersonas();
-    const persona = personas.find((item) => item.id === server.policy.local_persona_id);
+    // A one-crawl history import sends selected URLs, not local Persona cookies.
+    const persona = options.requireBatchApi ? undefined
+      : (await getPersonas()).personas.find((item) => item.id === server.policy.local_persona_id);
 
     await ensureServerHostPermission(archiveboxServerUrl);
 
@@ -246,14 +250,14 @@ export async function addToArchiveBox(
         if (data?.success !== true || !Array.isArray(data.errors) || data.errors.length
           || typeof data.result?.crawl_id !== 'string' || !data.result.crawl_id.trim()
           || !Array.isArray(data.result.queued_urls)
-          || !archiveableUrls.every((url) => data.result!.queued_urls!.includes(url))) {
+          || (!options.requireBatchApi && !archiveableUrls.every((url) => data.result!.queued_urls!.includes(url)))) {
           throw new Error(t("ArchiveBox did not confirm that the URLs were added. Open the server's Add URLs page to check the form errors."));
         }
         const receipt: SubmissionReceipt = { server_id: server.id, crawl_id: data.result.crawl_id, queued_urls: data.result.queued_urls };
         await recordSubmission(receipt);
         return receipt;
       }
-      if (response.status !== 404 && response.status !== 405) {
+      if (options.requireBatchApi || (response.status !== 404 && response.status !== 405)) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
     }

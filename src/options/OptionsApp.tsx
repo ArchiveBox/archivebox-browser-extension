@@ -33,6 +33,7 @@ import { SnapshotSyncStatus } from '@/src/components/SnapshotSyncStatus';
 import { refreshSnapshotArtifactReceipts } from '@/src/lib/archiveboxArtifacts';
 import { getServerPersonas, submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotTags, testApiKey, testServerUrl } from '@/src/lib/archivebox';
 import { defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture, supportsDirectBrowserImport } from '@/src/lib/browserCapabilities';
+import { siteHostname } from '@/src/lib/siteRules';
 import { loadBookmarkSnapshots, loadHistorySnapshots, loadSafariExportSnapshots, type SafariImportSource } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
 import { CookieSitePicker } from './CookieSitePicker';
@@ -794,6 +795,10 @@ function OptionsMain() {
     const value = menuParams.get('history_site') || '';
     try { return value && new URL('https://' + value).hostname === value ? value : ''; } catch { return ''; }
   })();
+  const historyTag = historySite.length <= 92 ? `history-${historySite}` : 'history-90d';
+  const historySubmitLock = useRef(false);
+  const [historySubmissionStarted, setHistorySubmissionStarted] = useState(false);
+  const [historyCrawl, setHistoryCrawl] = useState<{ id: string; url: string }>();
   useEffect(() => {
     const restore = () => setTab(sectionFromHash());
     window.addEventListener('hashchange', restore);
@@ -1897,7 +1902,79 @@ function OptionsMain() {
     }
   }
 
+  async function queueSiteHistory() {
+    if (historySubmitLock.current) return;
+    const selected = importItems.filter(item => item.selected && item.isNew);
+    const scoped = [...new Map(selected.filter(item => siteHostname(item.url) === historySite)
+      .map(item => [item.url, item])).values()];
+    if (!scoped.length || selected.some(item => siteHostname(item.url) !== historySite)) {
+      setImportStatus({ kind: 'warning', text: t('Select history URLs from $1 before queuing.', historySite) });
+      return;
+    }
+    if (!server?.token || !archiveboxServerUrlIsValid) {
+      setImportStatus({ kind: 'warning', text: t('Configure an ArchiveBox server and API key before queuing a history crawl.') });
+      return;
+    }
+    if (scoped.some(item => config.servers.some(configured => archiveBoxServerUrlMatches(configured.server, item.url)))) {
+      setImportStatus({ kind: 'warning', text: t('ArchiveBox server URLs are ignored.') });
+      return;
+    }
+    historySubmitLock.current = true;
+    setImportLoading(true);
+    setImportStatus({ kind: 'idle', text: t('Queuing $1 selected URLs in one crawl…', scoped.length) });
+    try {
+      await requestServerHostPermission(archiveboxServerBaseUrl);
+    } catch (error) {
+      historySubmitLock.current = false;
+      setImportLoading(false);
+      setImportStatus({ kind: 'error', text: (error as Error).message });
+      return;
+    }
+    setHistorySubmissionStarted(true);
+    const tags = [...new Set([historyTag, ...importTags.split(',').map(tag => tag.trim()).filter(Boolean)])];
+    try {
+      // Exactly one POST with all reviewed URLs. Do not fall back to the web
+      // form, split the list or retry after any ambiguous response.
+      const receipt = await addToArchiveBox(server, scoped.map(item => item.url), tags, 0, false, false, [], true, { requireBatchApi: true });
+      if (receipt.legacy) throw new Error(t('ArchiveBox did not confirm the history crawl.'));
+      const crawlId = receipt.crawl_id;
+      const serverBase = new URL(server.server).href.replace(/\/$/, '');
+      if (/^(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/i.test(crawlId)) {
+        setHistoryCrawl({ id: crawlId, url: `${serverBase}/admin/crawls/crawl/${crawlId}/change/` });
+      }
+      const confirmed = new Set(receipt.queued_urls);
+      const accepted = scoped.filter(item => confirmed.has(item.url));
+      const submitted_at = new Date().toISOString();
+      try {
+        await addSnapshots(accepted.map(({ selected: _selected, isNew: _isNew, ...snapshot }) => ({
+          ...snapshot,
+          id: uuidv7(),
+          tags: [...new Set([...snapshot.tags, ...tags])],
+          remote_copies: { [server.id]: {
+            status: 'accepted', submitted_at, submitted_to: serverBase,
+            crawl_id: crawlId, persona: server.persona, artifacts: {},
+          } },
+        })), { skipSavedUrls: true });
+      } catch {
+        setImportStatus({ kind: 'warning', text: t('Crawl $1 was accepted, but saving its URLs locally did not finish. Do not submit it again.', crawlId) });
+        return;
+      }
+      const complete = accepted.length === scoped.length;
+      setImportStatus({ kind: complete ? 'success' : 'warning', text: complete
+        ? t('Queued $1 URLs in one crawl, tagged $2.', accepted.length, historyTag)
+        : t('Crawl $1 confirmed $2 of $3 URLs. Check it before submitting any remaining URLs.', crawlId, accepted.length, scoped.length) });
+      setImportItems(current => current.map(item => ({
+        ...item, selected: false, isNew: item.isNew && !confirmed.has(item.url),
+      })));
+    } catch (error) {
+      setImportStatus({ kind: 'error', text: t('Crawl not confirmed: $1. Check the server’s Crawls before submitting again.', (error as Error).message) });
+    } finally {
+      setImportLoading(false);
+    }
+  }
+
   async function importSelectedUrls() {
+    if (historySite) return queueSiteHistory();
     const tagsToAdd = importTags.split(',').map((tag) => tag.trim()).filter(Boolean);
     const selected = importItems.filter((item) => item.selected);
     if (!selected.length) {
@@ -2093,7 +2170,7 @@ function OptionsMain() {
   return (
     <main className="app" aria-busy={pendingSaves > 0}>
       {menuStatus && <p role="status" className="status status-idle">{menuStatus}</p>}
-      {historySite && tab === 'import' && <p role="status">{t('History review is scoped to $1, initially the last 90 days. Load history, review URLs, then import selected visits.', historySite)}</p>}
+      {historySite && tab === 'import' && <p role="status">{t('History review is scoped to $1, initially the last 90 days. Load history and review the URLs before queuing one crawl.', historySite)}</p>}
       <header className="topbar">
         <div className="topbar__brand">
           <img src={extensionUrl('icon/48.png')} alt="" />
@@ -2515,8 +2592,10 @@ function OptionsMain() {
 
       {tab === 'import' && (
         <section className="panel">
-          <SectionHeader title={t("Bulk Import URLs")} detail={t("Import URLs from browser history or bookmarks into the saved URL list.")} />
-          <details open={!supportsDirectBrowserImport}>
+          <SectionHeader title={t("Bulk Import URLs")} detail={historySite
+            ? t('Queue selected history URLs on $1 as one crawl tagged $2.', server?.server || t('your configured ArchiveBox server'), historyTag)
+            : t("Import URLs from browser history or bookmarks into the saved URL list.")} />
+          {!historySite && <details open={!supportsDirectBrowserImport}>
             <summary>{t('Import a Safari export')}</summary>
             <p>{t('Safari requires a file export to import existing bookmarks, Reading List, or history. On Mac, choose File → Export Browsing Data to File. On iPhone or iPad, open Settings → Apps → Safari → Export. Select Bookmarks, Reading List, and History as available.')}</p>
             <p>{t('Choose the data and history dates below, then select the exported ZIP, bookmark HTML, or history JSON files. Files are read locally; only URLs you select are imported. Passwords and payment cards are ignored.')}</p>
@@ -2537,11 +2616,11 @@ function OptionsMain() {
                 }} />
               </label>
             </div>
-          </details>
+          </details>}
           <div className="toolbar">
             {supportsDirectBrowserImport && <>
-              <button disabled={importLoading} onClick={loadHistory}>{t("Load Browser History")}</button>
-              <button disabled={importLoading} onClick={loadBookmarks}>{t("Load Browser Bookmarks")}</button>
+              <button disabled={importLoading || historySubmissionStarted} onClick={loadHistory}>{t("Load Browser History")}</button>
+              {!historySite && <button disabled={importLoading} onClick={loadBookmarks}>{t("Load Browser Bookmarks")}</button>}
             </>}
             <input type="date" aria-label={t('History start date')} disabled={importLoading} value={importStartDate} onChange={(event) => setImportStartDate(event.currentTarget.value)} />
             <input type="date" aria-label={t('History end date')} disabled={importLoading} value={importEndDate} onChange={(event) => setImportEndDate(event.currentTarget.value)} />
@@ -2551,8 +2630,11 @@ function OptionsMain() {
             </label>
             <label className="toggle"><input type="checkbox" checked={showNewOnly} onChange={(event) => setShowNewOnly(event.currentTarget.checked)} /> {t("Show new only")}</label>
             <input value={importTags} onChange={(event) => setImportTags(event.currentTarget.value)} placeholder={t("tags,comma,separated")} />
-            <button disabled={!importItems.some((item) => item.selected)} onClick={importSelectedUrls}>{t("Import Selected ($1)", visibleSelectedImportCount)}</button>
+            <button disabled={importLoading || historySubmissionStarted || !importItems.some(item => item.selected)} onClick={importSelectedUrls}>
+              {historySite ? t('Queue One Crawl ($1)', importItems.filter(item => item.selected).length) : t("Import Selected ($1)", visibleSelectedImportCount)}
+            </button>
             <StatusBadge status={importStatus} />
+            {historyCrawl && <a href={historyCrawl.url} target="_blank" rel="noreferrer">{t('Open Crawl $1', historyCrawl.id)}</a>}
           </div>
           <table className="data-table">
             <thead>
