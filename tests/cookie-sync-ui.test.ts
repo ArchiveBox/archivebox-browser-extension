@@ -80,6 +80,10 @@ test('sync controls report real uploads, sync added sites immediately, and persi
     await autoSync.uncheck();
     await expect(page.getByRole('checkbox', { name: 'Select accounts.google.com', exact: true })).not.toBeChecked();
     await expect.poll(async () => (await state()).enabled).toBe(false);
+    expect(await page.evaluate(async () => {
+      const api = (globalThis as typeof globalThis & { chrome: typeof browser }).chrome;
+      return (await api.alarms.getAll()).filter(alarm => alarm.name.startsWith('archivebox-persona-storage:'));
+    })).toEqual([]);
     const disabledTime = (await state()).last_synced_at;
     await page.getByRole('checkbox', { name: 'Select example.org', exact: true }).check();
     await page.getByRole('button', { name: `Add to ${name}`, exact: true }).click();

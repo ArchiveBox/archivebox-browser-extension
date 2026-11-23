@@ -9,14 +9,16 @@ import { createServer } from 'node:net';
 
 export type ArchiveBoxApi = { server: string; key: string; keyFile: string; collection?: string; api: (route: string, init?: RequestInit) => Promise<any> };
 
-export async function withArchiveBox(use: (archivebox: ArchiveBoxApi) => Promise<void>): Promise<void> {
-    const configured = process.env.ARCHIVEBOX_TEST_SERVER;
-    const keyFile = process.env.ARCHIVEBOX_TEST_KEY_FILE;
+export async function withArchiveBox(use: (archivebox: ArchiveBoxApi) => Promise<void>, project?: string): Promise<void> {
+    // An explicit project selects a disposable compatibility server, even when
+    // the normal fixture is configured to use an existing server.
+    const configured = project ? undefined : process.env.ARCHIVEBOX_TEST_SERVER;
+    const keyFile = configured ? process.env.ARCHIVEBOX_TEST_KEY_FILE : undefined;
     if (configured && !keyFile) throw new Error('ARCHIVEBOX_TEST_KEY_FILE is required with ARCHIVEBOX_TEST_SERVER');
     const root = await mkdtemp(path.join(tmpdir(), 'archivebox-api-test-'));
     const collection = path.join(root, 'collection');
     await mkdir(collection);
-    const runtime = ['run', '--project', process.env.ARCHIVEBOX_TEST_PROJECT
+    const runtime = ['run', '--project', project || process.env.ARCHIVEBOX_TEST_PROJECT
       || fileURLToPath(new URL('../archivebox-server', import.meta.url))];
     const run = promisify(execFile);
     let child: ReturnType<typeof spawn> | undefined;

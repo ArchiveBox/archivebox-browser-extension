@@ -64,9 +64,9 @@ async function syncedIdentity(persona: Persona): Promise<Persona['settings']> {
   return { ...persona.settings, ...live };
 }
 
-async function buildPersonaSyncPayload(persona: Persona) {
+async function buildPersonaSyncPayload(persona: Persona, includeIndexedDB: boolean) {
   // Cookies are the profile's login; browser storage only supplements them.
-  const storage = await capturePersonaStorage(persona).catch((error: unknown) => {
+  const storage = await capturePersonaStorage(persona, includeIndexedDB).catch((error: unknown) => {
     console.warn(`ArchiveBox: kept saved browser storage for profile ${persona.name}: ${error instanceof Error ? error.message : String(error)}`);
     return persona.storage;
   });
@@ -97,12 +97,17 @@ async function buildPersonaSyncPayload(persona: Persona) {
       captured_at: new Date().toISOString(),
       user_agent: persona.settings.userAgent || '',
       cookies,
-      ...(storage || {}),
+      ...(storage ? {
+        origins: storage.origins.map(origin => includeIndexedDB ? origin : {
+          origin: origin.origin, localStorage: origin.localStorage,
+        }),
+        tabs: storage.tabs,
+      } : {}),
     },
   };
 }
 
-export async function syncPersonaToArchiveBox(server: ServerConfiguration, persona: Persona, expectedServerOrigin?: string): Promise<PersonaSyncResponse> {
+export async function syncPersonaToArchiveBox(server: ServerConfiguration, persona: Persona, expectedServerOrigin?: string, includeIndexedDB = false): Promise<PersonaSyncResponse> {
   const serverUrl = normalizeServerUrl(server.server);
   if (expectedServerOrigin && serverUrl !== expectedServerOrigin) {
     throw new Error(t("ArchiveBox server changed; sync this profile to the new server manually."));
@@ -113,7 +118,8 @@ export async function syncPersonaToArchiveBox(server: ServerConfiguration, perso
   if (!(await hasServerHostPermission(serverUrl))) {
     throw new Error(t("Allow access to your ArchiveBox server in extension settings before syncing."));
   }
-  const payload = await buildPersonaSyncPayload(persona);
+  const payload = await buildPersonaSyncPayload(persona, includeIndexedDB);
+  if (includeIndexedDB && !payload.auth_json.origins?.length) return { success: true };
 
   const response = await fetch(`${serverUrl}/api/v1/personas/sync`, {
     method: 'POST',

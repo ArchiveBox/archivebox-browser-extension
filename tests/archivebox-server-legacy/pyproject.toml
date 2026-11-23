@@ -1,0 +1,14 @@
+[project]
+name = "archivebox-extension-legacy-test-server"
+version = "0.0.0"
+requires-python = "==3.13.*"
+dependencies = [
+  "archivebox @ git+https://github.com/ArchiveBox/ArchiveBox.git@39c19a84ac49c091be2ea6ac3e174cf0dab6e2c0",
+]
+
+# Keep the pre-merge persona API and 25 MB body limit for real compatibility
+# and oversized IndexedDB rejection coverage.
+[tool.uv]
+override-dependencies = [
+  "abx-plugins[opencode] @ git+https://github.com/ArchiveBox/abx-plugins.git@28f39eba8a9dd6d83e1ffa8f9ebc079964533fa9",
+]

@@ -1256,8 +1256,10 @@ test('persona sync exports real localStorage, sessionStorage and IndexedDB witho
     page.on('request', request => { if (request.url().endsWith('/api/v1/personas/sync') && request.method() === 'POST') requests.push(request.postDataJSON()); });
     await page.locator('.persona.active').getByRole('button', { name: 'Sync now', exact: true }).click();
     await expect.poll(async () => await page.locator('.persona-sync-link--synced').count() ? 'synced' : (await page.locator('.status').allTextContents()).join('; ')).toBe('synced');
-    expect(requests).toHaveLength(1);
-    const sent = requests[0] as { settings: { geolocation: unknown }; auth_json: { cookies: Array<{ expirationDate?: number }>; origins: Array<{ localStorage: unknown; indexedDB: Array<{ name: string; version: number; stores: Array<{ indexes: unknown[] }>; data: string }> }>; tabs: unknown } };
+    await expect(page.locator('.persona.active').getByRole('button', { name: 'Sync now', exact: true })).toBeEnabled();
+    expect(requests).toHaveLength(2);
+    expect((requests[0] as { auth_json: { origins: unknown[] } }).auth_json.origins[0]).not.toHaveProperty('indexedDB');
+    const sent = requests[1] as { settings: { geolocation: unknown }; auth_json: { cookies: Array<{ expirationDate?: number }>; origins: Array<{ localStorage: unknown; indexedDB: Array<{ name: string; version: number; stores: Array<{ indexes: unknown[] }>; data: string }> }>; tabs: unknown } };
     expect(sent.settings.geolocation).toEqual({ latitude: 48.85, longitude: 2.35 });
     expect(sent.auth_json.cookies[0]!.expirationDate).toBeNull();
     expect(sent.auth_json.origins[0]!.localStorage).toEqual([{ name: 'login', value: 'local-token' }]);

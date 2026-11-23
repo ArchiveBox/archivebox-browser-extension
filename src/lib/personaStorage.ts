@@ -5,10 +5,11 @@ import type { Persona, PersonaOriginStorage, PersonaTabStorage } from './types';
 // Runs in the isolated content-script world, against the page's actual origin.
 // localStorage and IndexedDB are shared by every tab of an origin, so only one
 // tab per origin exports them. sessionStorage belongs to each tab.
-export async function captureOriginStorage(includeOrigin: boolean) {
+export async function captureOriginStorage(includeOrigin: boolean, includeIndexedDB = true) {
   const entries = (storage: Storage) => Object.entries(storage).map(([name, value]) => ({ name, value }));
   const tab = { origin: location.origin, url: location.href, sessionStorage: entries(sessionStorage) };
   if (!includeOrigin) return tab;
+  if (!includeIndexedDB) return { ...tab, localStorage: entries(localStorage) };
   const databases = await indexedDB.databases();
   const exports: PersonaOriginStorage['indexedDB'] = [];
   for (const database of databases) {
@@ -30,7 +31,7 @@ export async function captureOriginStorage(includeOrigin: boolean) {
   return { ...tab, localStorage: entries(localStorage), indexedDB: exports };
 }
 
-export async function capturePersonaStorage(persona: Persona) {
+export async function capturePersonaStorage(persona: Persona, includeIndexedDB = true) {
   const domains = Object.keys(persona.cookies).map(domain => domain.replace(/^\./, ''));
   const matchesDomain = (url: string) => {
     const hostname = new URL(url).hostname;
@@ -59,10 +60,10 @@ export async function capturePersonaStorage(persona: Persona) {
       // waits for a toolbar click, which would hang the sync.
       if (!await browser.permissions.contains({ origins: [`${protocol}//${hostname}/*`] })) continue;
       await browser.scripting.executeScript({ target: { tabId: tab.id! }, files: ['/content-scripts/persona-storage.js'] });
-      const state = await browser.tabs.sendMessage(tab.id!, { type: 'persona_capture_storage', includeOrigin: !exportedOrigins.has(origin) }) as Awaited<ReturnType<typeof captureOriginStorage>>;
+      const state = await browser.tabs.sendMessage(tab.id!, { type: 'persona_capture_storage', includeOrigin: !exportedOrigins.has(origin), includeIndexedDB }) as Awaited<ReturnType<typeof captureOriginStorage>>;
       if (state?.origin !== origin) throw new Error('The tab navigated during export.');
       if ('localStorage' in state) {
-        origins.set(origin, { origin, localStorage: state.localStorage, indexedDB: state.indexedDB });
+        origins.set(origin, { origin, localStorage: state.localStorage, indexedDB: ('indexedDB' in state ? state.indexedDB : origins.get(origin)?.indexedDB) || [] });
         exportedOrigins.add(origin);
       }
       savedTabs.push({ url: state.url, sessionStorage: state.sessionStorage });

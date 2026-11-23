@@ -6,8 +6,8 @@ export default defineContentScript({
     const scope = globalThis as typeof globalThis & { archiveboxPersonaStorageInstalled?: boolean };
     if (scope.archiveboxPersonaStorageInstalled) return;
     scope.archiveboxPersonaStorageInstalled = true;
-    browser.runtime.onMessage.addListener((message: { type: string; includeOrigin?: boolean }) => {
-      if (message.type === 'persona_capture_storage') return captureOriginStorage(message.includeOrigin !== false);
+    browser.runtime.onMessage.addListener((message: { type: string; includeOrigin?: boolean; includeIndexedDB?: boolean }) => {
+      if (message.type === 'persona_capture_storage') return captureOriginStorage(message.includeOrigin !== false, message.includeIndexedDB !== false);
     });
   },
 });

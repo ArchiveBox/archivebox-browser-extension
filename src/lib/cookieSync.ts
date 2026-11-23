@@ -8,6 +8,8 @@ const syncStatePrefix = 'cookie_sync:';
 const syncAlarm = 'archivebox-cookie-sync';
 const retryAlarmPrefix = `${syncAlarm}:`;
 const retryDelayMs = 30_000;
+const storageAlarmPrefix = 'archivebox-persona-storage:';
+const storageSyncIntervalMs = 24 * 60 * 60 * 1000;
 const syncTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 export type CookieSyncState = {
@@ -21,6 +23,7 @@ export type CookieSyncState = {
   enabled?: boolean;
   error?: string;
   last_synced_at?: string;
+  indexeddb_attempted_at?: number;
   retry_count?: number;
   next_retry_at?: number;
 };
@@ -160,6 +163,18 @@ export async function syncPersonaCookies(server: ServerConfiguration, id: string
   return navigator.locks.request('archivebox-cookie-sync', () => syncCookiesUnlocked(`${server.id}:${id}`, true, server));
 }
 
+async function armStorageSync(id: string, state: CookieSyncState): Promise<void> {
+  const name = storageAlarmPrefix + id;
+  if (state.enabled === false) return void await browser.alarms.clear(name);
+  // Existing profiles without an attempt timestamp keep their first scheduled
+  // alarm across restarts rather than postponing it each time the worker wakes.
+  if (!state.indexeddb_attempted_at && await browser.alarms.get(name)) return;
+  await browser.alarms.create(name, {
+    when: Math.max(Date.now() + 1000, (state.indexeddb_attempted_at || Date.now()) + storageSyncIntervalMs),
+    periodInMinutes: storageSyncIntervalMs / 60_000,
+  });
+}
+
 export async function disablePersonaCookieSync(serverId: string, personaId: string): Promise<void> {
   const id = `${serverId}:${personaId}`;
   await navigator.locks.request('archivebox-cookie-sync', async () => {
@@ -169,22 +184,30 @@ export async function disablePersonaCookieSync(serverId: string, personaId: stri
     syncTimers.delete(id);
     await saveState(id, { ...state, enabled: false, pending: false, error: undefined, next_retry_at: undefined, retry_count: 0 });
     await browser.alarms.clear(retryAlarmPrefix + id);
+    await browser.alarms.clear(storageAlarmPrefix + id);
   });
 }
 
-export async function syncPersonaManually(server: ServerConfiguration, persona_id: string) {
+export async function syncPersonaManually(server: ServerConfiguration, persona_id: string, respectStorageInterval = false) {
   return navigator.locks.request('archivebox-cookie-sync', async () => {
     const origin = serverOrigin(server.server);
     const id = `${server.id}:${persona_id}`;
+    const previous = await getState(id);
+    if (respectStorageInterval) {
+      if (!previous || previous.enabled === false || previous.server_origin !== origin) return { success: false, persona: undefined };
+      if (previous.indexeddb_attempted_at && Date.now() - previous.indexeddb_attempted_at < storageSyncIntervalMs) {
+        await armStorageSync(id, previous);
+        return { success: true, persona: undefined };
+      }
+    }
     const original = (await getPersonas()).personas.find((persona) => persona.id === persona_id);
     if (!original) throw new Error('Persona not found');
-    const persona = await refreshCookies(persona_id, Object.keys(original.cookies));
+    const persona = await refreshCookies(persona_id, respectStorageInterval ? previous!.domains : Object.keys(original.cookies));
     if (!persona) throw new Error('Persona not found');
-    const previous = await getState(id);
     // An enabled profile's explicit edits extend its selected domains immediately.
     // Keep failed edits pending, so they use the existing worker recovery path.
     const pending = previous && previous.enabled !== false && previous.server_origin === origin
-      ? { ...previous, domains: Object.keys(persona.cookies), pending: true, error: undefined, next_retry_at: Date.now() + retryDelayMs }
+      ? { ...previous, domains: respectStorageInterval ? previous.domains : Object.keys(persona.cookies), pending: true, error: undefined, next_retry_at: Date.now() + retryDelayMs }
       : undefined;
     if (pending) {
       await saveState(id, pending);
@@ -199,13 +222,33 @@ export async function syncPersonaManually(server: ServerConfiguration, persona_i
     }
     await saveState(id, {
       server_id: server.id, persona_id, server_origin: origin,
-      domains: Object.keys(persona.cookies),
+      domains: respectStorageInterval ? previous!.domains : Object.keys(persona.cookies),
+      retained_domains: respectStorageInterval ? previous!.retained_domains : undefined,
       fingerprint: await fingerprint(persona.cookies),
       pending: false,
       enabled: true,
       last_synced_at: new Date().toISOString(),
+      indexeddb_attempted_at: previous?.server_origin === origin ? previous.indexeddb_attempted_at : undefined,
     });
     await browser.alarms.clear(retryAlarmPrefix + id);
+    // Commit the lightweight sync before exporting or sending IndexedDB. A
+    // storage failure must not mark cookies pending or start cookie retries.
+    // Both requests use the original endpoint and full payload structure: older
+    // servers replace auth.json instead of merging individual storage fields.
+    const synced = (await getState(id))!;
+    // Count attempts, not only successes: a rejected large upload must not be
+    // retried on every cookie change or worker restart. Manual sync overrides it.
+    const attempted = { ...synced, indexeddb_attempted_at: Date.now() };
+    await saveState(id, attempted);
+    await armStorageSync(id, attempted);
+    const latest = (await getPersonas()).personas.find(item => item.id === persona_id);
+    if (latest) {
+      try {
+        await syncPersonaToArchiveBox(server, latest, origin, true);
+      } catch (error) {
+        throw new Error(`Cookies and browser settings synced. IndexedDB sync failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
     return response;
   });
 }
@@ -271,6 +314,7 @@ export function configureCookieSync(): void {
   const catchUp = async () => {
     for (const [id, state] of Object.entries(await getRouting())) {
       if (state.enabled === false) continue;
+      await armStorageSync(id, state);
       if (state.pending && (state.next_retry_at || 0) > Date.now()) await armRetry(id, state);
       else await navigator.locks.request('archivebox-cookie-sync', () => syncCookiesUnlocked(id, true)).catch(() => undefined);
     }
@@ -295,6 +339,17 @@ export function configureCookieSync(): void {
   registerCookies();
   browser.permissions.onAdded.addListener(registerCookies);
   browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name.startsWith(storageAlarmPrefix)) {
+      const id = alarm.name.slice(storageAlarmPrefix.length);
+      void (async () => {
+        const state = await getState(id);
+        if (!state || state.enabled === false) return;
+        const server = (await getConfig()).servers.find(item => item.id === state.server_id);
+        if (!server || state.server_origin !== serverOrigin(server.server)) return;
+        await syncPersonaManually(server, state.persona_id, true);
+      })().catch(error => console.warn('ArchiveBox: scheduled persona storage sync failed:', error));
+      return;
+    }
     if (!alarm.name.startsWith(retryAlarmPrefix)) return;
     const id = alarm.name.slice(retryAlarmPrefix.length);
     void navigator.locks.request('archivebox-cookie-sync', async () => {

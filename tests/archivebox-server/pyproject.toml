@@ -3,13 +3,8 @@ name = "archivebox-extension-test-server"
 version = "0.0.0"
 requires-python = "==3.13.*"
 dependencies = [
-  "archivebox @ git+https://github.com/ArchiveBox/ArchiveBox.git@39c19a84ac49c091be2ea6ac3e174cf0dab6e2c0",
+  "archivebox @ git+https://github.com/ArchiveBox/ArchiveBox.git@7356a98a3fa7faf61e94876c4c43c9897417ff7f",
 ]
 
-# The persona API and Chrome schema must both understand synced client hints.
-# Pin this integration-test pair until both changes reach published releases;
-# production dependencies still advance through the release coordinator.
-[tool.uv]
-override-dependencies = [
-  "abx-plugins[opencode] @ git+https://github.com/ArchiveBox/abx-plugins.git@28f39eba8a9dd6d83e1ffa8f9ebc079964533fa9",
-]
+# Pin the host source containing phased browser-state field merging; its
+# published package dependencies follow ArchiveBox's own release pins.
