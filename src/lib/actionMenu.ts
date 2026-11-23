@@ -1,3 +1,4 @@
+import { actionMenuItems, isClickedPageTab, menuAction, pageSaveId } from './actionMenuItems';
 import { siteCookieSource, siteHostname, siteRulePatch } from './siteRules';
 import { isArchiveablePageUrl, isConfiguredArchiveBoxUrl } from './archivebox';
 import { normalizeCookie } from './cookies';
@@ -6,7 +7,6 @@ import { activeServer, defaultServers } from './server_registry';
 import { getConfig, getPersonas, setConfig, updatePersona } from './storage';
 
 type SaveTab = (tab: Browser.tabs.Tab, tags?: string[]) => Promise<boolean>;
-const prefix = 'archivebox-action-';
 
 async function openOptions(section = '', params: Record<string, string> = {}) {
   const url = new URL(browser.runtime.getURL('/options.html'));
@@ -24,31 +24,13 @@ let menuUpdate = Promise.resolve();
 export function rebuildActionMenus(): Promise<void> {
   menuUpdate = menuUpdate.catch(() => undefined).then(async () => {
     await browser.contextMenus.removeAll();
-    browser.contextMenus.create({ id: 'save_to_archivebox_ctxmenu', title: t('Save to ArchiveBox'), contexts: ['page'] });
-    const add = (id: string, title: string, parentId?: string, type?: 'separator') => browser.contextMenus.create({
-      id: prefix + id, ...(type ? { type } : { title: t(title) }), contexts: ['action'], ...(parentId ? { parentId: prefix + parentId } : {}),
-    });
-    // Chromium renders at most SIX action-menu roots. Keep the common four
-    // operations directly accessible; group every other item in native flyouts.
-    add('save', '💾 Save current tab only');
-    add('save-all', '📚 Save all tabs in this window');
-    add('close-all', '🧹 Save + close all tabs in this window');
-    add('search', '🔎 Search for current URL in archive');
-    add('site', '🌐 This site');
-    add('allow', '✅ Always archive URLs on this domain', 'site');
-    add('deny', '⛔ Never archive URLs on this domain', 'site');
-    add('site-separator', '', 'site', 'separator');
-    add('cookies', '🍪 Save site login Cookies to your Persona', 'site');
-    add('history', '🕘 Save last 90d of visits on this site', 'site');
-    add('extension', '❓ Help');
-    add('website', '🌐 Website', 'extension');
-    add('github', '💻 Github', 'extension');
-    add('bug', '🐛 Report a bug', 'extension');
-    add('mobile', '📱 Setup on Mobile', 'extension');
-    add('extension-separator', '', 'extension', 'separator');
-    add('admin', '🏛 Server Admin UI', 'extension');
-    add('settings', '⚙ Extension Settings', 'extension');
-    add('collection', '🗃 Collection', 'extension');
+    for (const { id, title, context, parentId } of actionMenuItems()) {
+      browser.contextMenus.create({
+        id, ...(title ? { title: t(title) } : { type: 'separator' }), contexts: [context],
+        ...(parentId ? { parentId } : {}),
+        ...(context === 'page' && id !== pageSaveId ? { documentUrlPatterns: ['http://*/*', 'https://*/*'] } : {}),
+      });
+    }
   });
   return menuUpdate;
 }
@@ -115,10 +97,17 @@ export async function copySiteCookiesToPersona(tab: Browser.tabs.Tab, personaId:
   return { count: cookies.length, personaName: persona.name };
 }
 
-export async function handleActionMenu(id: string | number, tab: Browser.tabs.Tab | undefined, save: SaveTab): Promise<void> {
-  const item = String(id);
+export async function handleActionMenu(
+  click: Pick<Browser.contextMenus.OnClickData, 'menuItemId' | 'pageUrl'>,
+  tab: Browser.tabs.Tab | undefined,
+  save: SaveTab,
+): Promise<void> {
+  const menu = menuAction(String(click.menuItemId));
+  if (!menu) return;
+  const { action, page } = menu;
   try {
-    if (item === 'save_to_archivebox_ctxmenu' || item === prefix + 'save') {
+    if (page && !isClickedPageTab(tab, click.pageUrl)) throw new Error(t('Choose a normal HTTP or HTTPS page first.'));
+    if (action === 'save') {
       if (!tab || !(await save(tab))) throw new Error(t('The tab was not saved. It remains open.'));
       return feedback(t('Current tab saved.'));
     }
@@ -126,7 +115,6 @@ export async function handleActionMenu(id: string | number, tab: Browser.tabs.Ta
       website: 'https://extension.archivebox.io', github: 'https://github.com/ArchiveBox/archivebox-browser-extension',
       bug: 'https://github.com/ArchiveBox/archivebox-browser-extension/issues', mobile: 'https://app.archivebox.io',
     };
-    const action = item.slice(prefix.length);
     if (links[action]) { await browser.tabs.create({ url: links[action] }); return; }
     if (action === 'settings') return openOptions('Configuration');
     if (action === 'collection') return openOptions();

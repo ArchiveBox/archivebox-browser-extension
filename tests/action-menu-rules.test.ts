@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { actionMenuItems, isClickedPageTab, menuAction, pageSaveId } from '../src/lib/actionMenuItems';
 import { siteCookieSource, siteHostname, siteRulePatch, siteUrlPattern } from '../src/lib/siteRules';
 
 test('native-menu domain rules match exact hosts, never substring lookalikes', () => {
@@ -41,4 +42,37 @@ test('Persona navigation strips query and fragment and rejects embedded credenti
   expect(siteCookieSource('https://user:password@example.com/')).toBeNull();
   expect(siteCookieSource('chrome://settings')).toBeNull();
   expect(siteCookieSource('https://example.com:8443/path')).toBe('https://example.com:8443/path');
+});
+
+test('webpage menu keeps Save and shares only the site action titles and routing', () => {
+  const items = actionMenuItems();
+  const pages = items.filter(item => item.context === 'page');
+  const action = items.filter(item => item.context === 'action');
+  expect(new Set(items.map(item => item.id)).size).toBe(items.length);
+  expect(pages[0]).toEqual({ id: pageSaveId, title: 'Save to ArchiveBox', context: 'page' });
+  expect(pages.filter(item => item.title).map(item => menuAction(item.id)?.action))
+    .toEqual(['save', 'search', 'allow', 'deny', 'cookies', 'history']);
+  for (const item of pages.slice(1)) {
+    expect(item.parentId).toBeUndefined();
+    const toolbarItem = action.find(other => other.id === item.id.replace('archivebox-page-', 'archivebox-action-'));
+    expect(toolbarItem?.title).toBe(item.title);
+    if (item.title) expect(menuAction(item.id)).toEqual({ action: menuAction(toolbarItem!.id)?.action, page: true });
+  }
+  expect(action.filter(item => !item.parentId)).toHaveLength(6);
+  expect(menuAction('archivebox-page-close-all')).toBeUndefined();
+  expect(menuAction('archivebox-page-settings')).toBeUndefined();
+});
+
+test('page actions require the clicked normal top-level document, not a stale tab or another site', () => {
+  const url = 'https://clicked.test/article?one=1#section';
+  const tab = { id: 42, url };
+  expect(isClickedPageTab(tab, url)).toBe(true);
+  expect(isClickedPageTab(tab, 'https://clicked.test/next')).toBe(false);
+  expect(isClickedPageTab(tab, 'https://unrelated.test/article')).toBe(false);
+  expect(isClickedPageTab(tab, undefined)).toBe(false);
+  expect(isClickedPageTab(undefined, url)).toBe(false);
+  expect(isClickedPageTab({ ...tab, incognito: true }, url)).toBe(false);
+  expect(isClickedPageTab({ ...tab, pendingUrl: 'https://navigating.test/' }, url)).toBe(false);
+  expect(isClickedPageTab({ id: 42, url: 'chrome://settings/' }, 'chrome://settings/')).toBe(false);
+  expect(isClickedPageTab({ id: 42, url: 'https://user:dummy@clicked.test/' }, 'https://user:dummy@clicked.test/')).toBe(false);
 });

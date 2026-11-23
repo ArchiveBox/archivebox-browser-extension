@@ -921,7 +921,7 @@ export default defineBackground(() => {
   });
 
   browser.contextMenus.onClicked.addListener((item, tab) => {
-    void handleActionMenu(item.menuItemId, tab, saveTab);
+    void handleActionMenu(item, tab, saveTab);
   });
 
   browser.commands.onCommand.addListener(async (command) => {

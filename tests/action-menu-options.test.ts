@@ -39,3 +39,29 @@ test('toolbar settings and site history links open existing sections and keep ex
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });
+
+
+test('disposable browser registers page actions and retains the original save item', async () => {
+  const harness = await launchExtension();
+  try {
+    const options = await harness.context.newPage();
+    await options.goto(`chrome-extension://${harness.id}/options.html`);
+    const ids = ['save_to_archivebox_ctxmenu', 'archivebox-page-search', 'archivebox-page-allow',
+      'archivebox-page-deny', 'archivebox-page-cookies', 'archivebox-page-history'];
+    // WebExtensions has no list() for native context menus. A no-op update
+    // succeeds only when the browser already has the given menu ID.
+    await expect.poll(() => options.evaluate(ids => {
+      const api = (globalThis as typeof globalThis & {
+        chrome: {
+          contextMenus: { update(id: string, changes: object, callback: () => void): void };
+          runtime: { lastError?: object };
+        };
+      }).chrome;
+      return Promise.all(ids.map(id => new Promise<string | null>(resolve => {
+        api.contextMenus.update(id, {}, () => resolve(api.runtime.lastError ? null : id));
+      })));
+    }, ids)).toEqual(ids);
+  } finally {
+    await harness.close();
+  }
+});
