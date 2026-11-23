@@ -1160,6 +1160,12 @@ function OptionsMain() {
     try {
       if (patch.server?.trim() === '' && id) await removeServer(id);
       else await updateServer(id, patch);
+      if (patch.server !== undefined) {
+        // A saved address can select a different server ID. Publish that
+        // identity before the key field re-enables, not in a later effect.
+        const { servers, active_server_id, default_server_ids, server_policies } = await getConfig();
+        setConfigState(current => ({ ...current, servers, active_server_id, default_server_ids, server_policies }));
+      }
     } catch (error) {
       setServerStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
     } finally {
@@ -2378,7 +2384,7 @@ function OptionsMain() {
             {t("The base URL of your self-hosted ArchiveBox server. Local HTTP servers such as")} <code>http://localhost:5797</code> {t("are supported, as are HTTPS deployments.")}
           </p>
           <Field label={t("API Key")}>
-            <input aria-label={t("API Key")} type="password" disabled={savingServer} value={tokenDraft ?? server?.token ?? ''} onChange={(event) => setTokenDraft(event.currentTarget.value)} onBlur={async () => { if (tokenDraft !== null) { await saveServer({ token: tokenDraft.trim() }); setTokenDraft(null); } }} placeholder="... abcexamplekey1234 ..." />
+            <input aria-label={t("API Key")} type="password" disabled={savingServer || !server} value={tokenDraft ?? server?.token ?? ''} onChange={(event) => setTokenDraft(event.currentTarget.value)} onBlur={async () => { if (tokenDraft !== null) { await saveServer({ token: tokenDraft.trim() }); setTokenDraft(null); } }} placeholder="... abcexamplekey1234 ..." />
             <button disabled={!archiveboxServerUrlIsValid} onClick={() => window.open(`${archiveboxServerBaseUrl}/admin/api/apitoken/add/`, '_blank')}>{t("Generate")}</button>
             <button disabled={!archiveboxServerUrlIsValid} onClick={testApiKeyValue}>{t("Test")}</button>
             <StatusBadge status={apiStatus} />
