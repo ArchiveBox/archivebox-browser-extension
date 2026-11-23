@@ -3,9 +3,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { Sparkles, LoaderCircle, Check, X, Trash2, Eye, Settings } from 'lucide-react';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { archiveBoxServerUrlMatches, findSubmittedSnapshot, getServerPersonas, hasServerHostPermission, isArchiveablePageUrl, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotMetadata, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
-import { uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
-import { mhtmlUnsupportedMessage, singleFileChromeWebStoreUrl, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
+import { archiveBoxServerUrlMatches, findSubmittedSnapshot, getServerPersonas, hasServerHostPermission, isArchiveablePageUrl, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
+import { ensureArtifactSnapshotId, uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
+import { mhtmlUnsupportedMessage, singleFileCompanion, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { addSnapshots, assertLocalCaptureStorageAvailable, deleteSnapshotFiles, deleteSnapshots, ensureSnapshot, getSnapshot, onSnapshotsChanged, putSnapshots, snapshotTags, updateSnapshot } from '@/src/lib/models';
 import { createSnapshot } from '@/src/lib/snapshots';
@@ -296,22 +296,9 @@ function ArchiveBoxOverlay() {
     }
   }
 
-  async function ensureServerSnapshotId(connection: ServerDestination, snapshot_id: string, latestSnapshot: Snapshot): Promise<Snapshot> {
-    if (latestSnapshot.remote_copies?.[connection.id]?.snapshot_id) return latestSnapshot;
-    const metadata = await syncArchiveBoxSnapshotMetadata(connection, latestSnapshot);
-    if (!metadata.id) return latestSnapshot;
-    const updated = await updateSnapshot(snapshot_id, (item) => item.remote_copies?.[connection.id]?.crawl_id === latestSnapshot.remote_copies?.[connection.id]?.crawl_id ? {
-      ...item, remote_copies: { ...item.remote_copies, [connection.id]: {
-        status: 'accepted', ...item.remote_copies?.[connection.id], submitted_to: new URL(connection.server).origin, snapshot_id: metadata.id,
-      } },
-    } : item) || latestSnapshot;
-    setSnapshot(updated);
-    return updated;
-  }
-
   async function uploadCapturedArtifactIfArchived(
     snapshot_id: string,
-    kind: 'screenshot' | 'mhtml' | 'singlefile',
+    kind: 'screenshot' | 'mhtml',
     artifactLabel: string,
   ): Promise<void> {
     let latestSnapshot = await getSnapshot(snapshot_id);
@@ -322,12 +309,12 @@ function ArchiveBoxOverlay() {
     const connection = await resolvePersona(configured, latestSnapshot);
     if (kind === 'screenshot' && !connection.policy.upload_screenshots_to_server && !connection.policy.upload_viewport_screenshots_to_server) return;
     if (kind === 'mhtml' && !connection.policy.upload_mhtml_to_server) return;
-    if (kind === 'singlefile' && !connection.policy.upload_singlefile_to_server) return;
 
     try {
       setOk(null);
       setStatus(t("Uploading $1 to ArchiveBox Server...", artifactLabel));
-      latestSnapshot = await ensureServerSnapshotId(connection, snapshot_id, latestSnapshot);
+      latestSnapshot = await ensureArtifactSnapshotId(connection, latestSnapshot);
+      setSnapshot(latestSnapshot);
       await uploadSnapshotCaptureArtifactsToArchiveBox(connection, latestSnapshot);
       setOk(true);
       setRemoteDetail('');
@@ -960,20 +947,14 @@ function ArchiveBoxOverlay() {
     });
 
     if (!response.ok) {
+      await refresh();
       const errorMessage = response.errorMessage || response.error || t("Unknown error");
       setOk(false);
-      if (kind === 'singlefile') {
-        const installMessage = t("Make sure you have SingleFile installed.");
-        setStatus(installMessage);
-        setStatusLink({
-          href: singleFileChromeWebStoreUrl,
-          label: t("Install SingleFile from the Chrome Web Store"),
-          status: installMessage,
-        });
-      } else {
-        setStatus(t("Failed to save local $1: $2", artifactLabel, errorMessage));
+      const message = t("Failed to save local $1: $2", artifactLabel, errorMessage);
+      setStatus(message);
+      if (kind === 'singlefile' && singleFileCompanion && response.error === 'singlefile_unavailable') {
+        setStatusLink({ href: singleFileCompanion.url, label: t("Install SingleFile"), status: message });
       }
-      await refresh();
       return;
     }
 
@@ -982,7 +963,14 @@ function ArchiveBoxOverlay() {
     setLocalStatus('saved');
     setOk(true);
     setStatus(t("Saved local $1", artifactLabel));
-    await uploadCapturedArtifactIfArchived(currentSnapshot.id, kind, artifactLabel);
+    if (kind === 'mhtml') {
+      await uploadCapturedArtifactIfArchived(currentSnapshot.id, kind, artifactLabel);
+    } else if (response.singlefileUploaded) {
+      setStatus(t("Saved local $1 and uploaded to ArchiveBox Server", artifactLabel));
+    } else if (response.singlefileUploadError) {
+      setOk(false);
+      setStatus(t("Saved local $1. Failed to upload artifact: $2", artifactLabel, response.singlefileUploadError));
+    }
   }
 
   async function addTag(tag: string) {
@@ -1108,15 +1096,13 @@ function ArchiveBoxOverlay() {
               {t("MHTML unavailable")}
             </button>
           )}
-          {/* SingleFile capture is unfinished; keep its button hidden for now.
-          <button
+          {singleFileCompanion && <button
             className={`archivebox-overlay__capture-button${snapshot?.singlefile ? ' archivebox-overlay__capture-button--saved' : ''}`}
             onClick={() => captureLocalArtifact('singlefile')}
-            title={snapshot?.singlefile ? t("Open saved SingleFile HTML snapshot") : singleFileCaptureUnavailableMessage()}
+            title={snapshot?.singlefile ? t("Open saved SingleFile HTML snapshot") : t("Save a SingleFile HTML snapshot for this URL")}
           >
             {snapshot?.singlefile ? `✓ ${t("SingleFile")}` : t("SingleFile")}
-          </button>
-          */}
+          </button>}
         </div>
         <div className="archivebox-overlay__crawl">
           <button

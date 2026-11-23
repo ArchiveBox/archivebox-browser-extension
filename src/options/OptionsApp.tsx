@@ -32,7 +32,7 @@ import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
 import { SnapshotSyncStatus } from '@/src/components/SnapshotSyncStatus';
 import { refreshSnapshotArtifactReceipts } from '@/src/lib/archiveboxArtifacts';
 import { getServerPersonas, submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotTags, testApiKey, testServerUrl } from '@/src/lib/archivebox';
-import { defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture, supportsDirectBrowserImport } from '@/src/lib/browserCapabilities';
+import { defaultTabManagerPlusExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture, supportsDirectBrowserImport, singleFileCompanion } from '@/src/lib/browserCapabilities';
 import { siteHostname } from '@/src/lib/siteRules';
 import { loadBookmarkSnapshots, loadHistorySnapshots, loadSafariExportSnapshots, type SafariImportSource } from '@/src/lib/browserData';
 import { formatCookiesForExport, getCookiesByDomain } from '@/src/lib/cookies';
@@ -2425,10 +2425,12 @@ function OptionsMain() {
                 { kind: 'viewport_screenshot', icon: Camera, title: t('Viewport screenshot'), detail: t('The visible part of the page · PNG'), local: 'save_viewport_screenshots_locally', upload: 'upload_viewport_screenshots_to_server', localLabel: t('Save viewport screenshots locally'), uploadLabel: t('Upload viewport screenshots to server'), retentionLabel: t('Viewport screenshot retention') },
                 { kind: 'screenshot', icon: ScanLine, title: t('Full-page screenshot'), detail: t('The entire page, top to bottom · PNG'), local: 'save_screenshots_locally', upload: 'upload_screenshots_to_server', localLabel: t('Save full-page screenshots locally'), uploadLabel: t('Upload full-page screenshots to server'), retentionLabel: t('Full-page screenshot retention') },
                 { kind: 'mhtml', icon: FileCode2, title: t('Web page'), detail: t('HTML and page resources · MHTML'), local: 'save_mhtml_locally', upload: 'upload_mhtml_to_server', localLabel: t('Save MHTML snapshots locally'), uploadLabel: t('Upload MHTML snapshots to server'), retentionLabel: t('MHTML retention') },
+                { kind: 'singlefile', icon: FileCode2, title: t('SingleFile HTML'), detail: t('Approve ArchiveBox in SingleFile on the first capture.'), local: 'save_singlefile_locally', upload: 'upload_singlefile_to_server', localLabel: t('Save SingleFile HTML snapshots locally'), uploadLabel: t('Upload SingleFile HTML snapshots to server'), retentionLabel: t('SingleFile retention') },
               ] as const).map(output => {
+                if (output.kind === 'singlefile' && !singleFileCompanion) return null;
                 const available = output.kind !== 'mhtml' || supportsMhtmlCapture;
                 return <div className="capture-output" key={output.kind}>
-                  <div className="capture-output-name"><span className={`capture-output-icon capture-output-icon--${output.kind}`}><output.icon size={21} aria-hidden="true" /></span><div><h3>{output.title}</h3><p>{available ? output.detail : mhtmlUnsupportedMessage()}</p></div></div>
+                  <div className="capture-output-name"><span className={`capture-output-icon capture-output-icon--${output.kind}`}><output.icon size={21} aria-hidden="true" /></span><div><h3>{output.title}</h3><p>{available ? output.detail : mhtmlUnsupportedMessage()}{output.kind === 'singlefile' && singleFileCompanion && <> <a href={singleFileCompanion.url} target="_blank" rel="noreferrer">{t('Install SingleFile')}</a></>}</p></div></div>
                   <label className="capture-choice"><span>{t('Save locally')}</span><input className="config-switch" type="checkbox" aria-label={output.localLabel} disabled={!available} checked={available && config[output.local]} onChange={event => updateLocalCaptureSetting(output.local, event.currentTarget.checked)} /></label>
                   <label className="capture-choice"><span>{t('Upload')}</span><input className="config-switch" type="checkbox" aria-label={output.uploadLabel} disabled={!available} checked={available && Boolean(server?.policy[output.upload])} onChange={event => saveServer({ policy: { [output.upload]: event.currentTarget.checked, ...(event.currentTarget.checked ? { upload_metadata_to_server: true } : {}) } })} /></label>
                   <label className="capture-retention"><span>{t('Keep locally')}</span><select aria-label={output.retentionLabel} disabled={!available} value={config.capture_retention_ms[output.kind] ?? 'snapshot'} onChange={event => {
@@ -2442,12 +2444,6 @@ function OptionsMain() {
               })}
             </div>
             <StatusBadge status={localCaptureStatus} />
-            {config.save_singlefile_locally && <Field label={t('SingleFile retention')}>
-              <select aria-label={t('SingleFile retention')} value={config.capture_retention_ms.singlefile ?? 'snapshot'} onChange={event => {
-                const value = event.currentTarget.value;
-                void saveConfig({ capture_retention_ms: { singlefile: value === 'snapshot' ? null : value === 'never' ? 'never' : Number(value) as ConfigState['local_retention_ms'] } });
-              }}><option value="snapshot">{t('Same as metadata')}</option>{retentionDurations.filter(value => config.local_retention_ms === 'never' || (value !== 'never' && value <= config.local_retention_ms)).map(value => <option key={value} value={value}>{t(value === 'never' ? 'never' : value === 60000 ? '1 minute' : value === 86400000 ? '1 day' : value === 2592000000 ? '30 days' : '90 days')}</option>)}</select>
-            </Field>}
             <details className="config-cleanup-help"><summary><ShieldCheck size={15} aria-hidden="true" />{t('Safe cleanup: server copies are always kept')}</summary><p>{t('File timers start after confirmed upload. Cleanup verifies the same server still has each file before deleting local data. Unuploaded files are kept. Individual file retention can be shorter than the snapshot default; the snapshot row and upload receipts remain until the snapshot expires.')}</p></details>
           </section>
           <section className="panel config-card" aria-labelledby="automatic-heading">

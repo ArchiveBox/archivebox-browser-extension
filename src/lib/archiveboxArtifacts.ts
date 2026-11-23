@@ -6,6 +6,7 @@ import {
   uploadSnapshotArchiveResultFiles,
   hasServerHostPermission,
   fetchWithTimeout,
+  syncArchiveBoxSnapshotMetadata,
   type ArchiveResultOutputFile,
   type ArchiveResultUploadFile,
 } from './archivebox';
@@ -206,6 +207,18 @@ async function uploadSnapshotArtifactGroup(server: ServerDestination, group: Sna
   }
 
   return { uploaded: true, id: archiveResult.id };
+}
+
+export async function ensureArtifactSnapshotId(server: ServerDestination, snapshot: Snapshot): Promise<Snapshot> {
+  const copy = snapshot.remote_copies?.[server.id];
+  if (!copy || copy.snapshot_id) return snapshot;
+  const metadata = await syncArchiveBoxSnapshotMetadata(server, snapshot);
+  if (!metadata.id) return snapshot;
+  return await updateSnapshot(snapshot.id, item => item.remote_copies?.[server.id]?.crawl_id === copy.crawl_id ? {
+    ...item, remote_copies: { ...item.remote_copies, [server.id]: {
+      status: 'accepted', ...item.remote_copies?.[server.id], submitted_to: copy.submitted_to, snapshot_id: metadata.id,
+    } },
+  } : item) || snapshot;
 }
 
 export async function uploadSnapshotCaptureArtifactsToArchiveBox(server: ServerDestination, snapshot: Snapshot, snapshot_id = snapshot.remote_copies?.[server.id]?.snapshot_id): Promise<{

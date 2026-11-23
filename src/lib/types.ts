@@ -354,6 +354,8 @@ export type RuntimeResponse = {
   screenshot?: SnapshotScreenshot;
   mhtml?: SnapshotMhtml;
   singlefile?: SnapshotSingleFile;
+  singlefileUploaded?: boolean;
+  singlefileUploadError?: string;
 };
 
 export type SubmissionReceipt = {

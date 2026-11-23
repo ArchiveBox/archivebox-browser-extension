@@ -4,12 +4,13 @@ import { defaultServers, requireServer } from '@/src/lib/server_registry';
 import { configureLocalRetention, withSnapshotArtifacts } from '@/src/lib/retention';
 import { configureCookieSync } from '@/src/lib/cookieSync';
 import { hasServerHostPermission, submitAgentTask, findSubmittedSnapshot, removeFreshOwnedCapture, submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, supportsArchiveBoxApi, testApiKey, testServerUrl } from '@/src/lib/archivebox';
-import { defaultSingleFileExtensionId, mhtmlUnsupportedMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
+import { singleFileCompanion, singleFileCaptureUnavailableMessage, mhtmlUnsupportedMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { addSnapshots, appendSnapshotScreenshotParts, ensureSnapshot, getSnapshot, latestSnapshotForUrl, updateSnapshot, writeSnapshotMhtmlBytes, writeSnapshotScreenshot, writeSnapshotScreenshotParts, writeSnapshotSingleFileHtml } from '@/src/lib/models';
 import { createSnapshot } from '@/src/lib/snapshots';
 import { getArchiveBoxServerUrl, getConfig, getPersonas, setConfig, updateServer } from '@/src/lib/storage';
 import type { RuntimeMessage, RuntimeResponse, Snapshot, SnapshotMhtml, SnapshotScreenshot, SnapshotSingleFile } from '@/src/lib/types';
+import { ensureArtifactSnapshotId, uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { compactUuid } from '@/src/lib/uuid';
 
 type PageMetrics = {
@@ -608,39 +609,50 @@ function saveAsMhtmlBytes(pageCapture: ChromePageCaptureApi, tabId: number): Pro
 type SingleFileCaptureResult = {
   content?: string;
   filename?: string;
-  mimeType?: string;
-  title?: string;
-  url?: string;
+  error?: string;
 };
 
-async function captureSingleFileHtml(_tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<SnapshotSingleFile> {
-  if (!_tab.id) throw new Error(t("No tab ID available for SingleFile capture."));
+class SingleFileUnavailableError extends Error {}
+
+function describeSingleFileCaptureError(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/receiving end does not exist|extension (?:was )?not found/i.test(message)) {
+    return new SingleFileUnavailableError(singleFileCaptureUnavailableMessage());
+  }
+  if (message === 'SingleFile capture was not approved for this extension') {
+    return new Error(t("Allow ArchiveBox in SingleFile’s External capture API settings, then try again."));
+  }
+  return new Error(message);
+}
+
+async function captureSingleFileHtml(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<SnapshotSingleFile> {
+  if (!tab.id || tab.url !== snapshot.url || !isArchiveablePageUrl(tab.url)) {
+    throw new Error(t("The tab is no longer available for SingleFile capture."));
+  }
+  if (!singleFileCompanion) throw new Error(t("SingleFile capture is not available in this browser."));
   const { singlefile_extension_id } = await getConfig();
-  const extensionId = singlefile_extension_id.trim() || defaultSingleFileExtensionId;
-  if (!extensionId) {
-    throw new Error(t("SingleFile extension ID is not configured."));
-  }
-
   const sendExternalMessage = browser.runtime.sendMessage as unknown as (
-    extensionId: string,
-    message: unknown,
-  ) => Promise<SingleFileCaptureResult>;
+    extensionId: string, message: unknown,
+  ) => Promise<SingleFileCaptureResult | false | null | undefined>;
 
-  let pageData: SingleFileCaptureResult;
+  let pageData: SingleFileCaptureResult | false | null | undefined;
   try {
-    pageData = await sendExternalMessage(extensionId, {
+    pageData = await sendExternalMessage(singlefile_extension_id.trim() || singleFileCompanion.id, {
       method: 'capture-page',
-      tabId: _tab.id,
-      displayName: t("ArchiveBox"),
+      tabId: tab.id,
+      displayName: 'ArchiveBox',
     });
-  } catch {
-    throw new Error(t("Make sure you have SingleFile installed."));
+  } catch (error) {
+    throw describeSingleFileCaptureError(error);
   }
-
-  if (!pageData?.content) {
+  // Firefox rejects; SingleFile's Chromium listener returns the same reason in a reply.
+  if (pageData == null) throw new SingleFileUnavailableError(t("Install or update SingleFile to version 1.40 or later."));
+  if (pageData && pageData.error) throw describeSingleFileCaptureError(pageData.error);
+  if (!pageData || typeof pageData.content !== 'string' || !pageData.content) {
     throw new Error(t("SingleFile capture returned an empty file."));
   }
-
+  const currentTab = await browser.tabs.get(tab.id).catch(() => null);
+  if (currentTab?.url !== snapshot.url) throw new Error(t("The tab is no longer available for SingleFile capture."));
   return writeSnapshotSingleFileHtml(snapshot, pageData.content, pageData.filename);
 }
 
@@ -1062,14 +1074,31 @@ export default defineBackground(() => {
       }
 
       case 'capture_snapshot_singlefile': {
-        return getSnapshot(message.snapshot_id)
-          .then(async (snapshot) => {
-            const tab = await getMessageTab(message.tabId);
-            if (!snapshot) throw new Error(t("Saved snapshot not found."));
-            return captureAndAttachSnapshotSingleFile(tab, snapshot);
-          })
-          .then((singlefile) => ({ ok: true, singlefile }))
-          .catch((error: Error) => ({ ok: false, errorMessage: error.message }));
+        return (async (): Promise<RuntimeResponse> => {
+          const snapshot = await getSnapshot(message.snapshot_id);
+          const tab = await getMessageTab(message.tabId);
+          if (!snapshot) throw new Error(t("Saved snapshot not found."));
+          const singlefile = await captureAndAttachSnapshotSingleFile(tab, snapshot);
+          // SingleFile may open its permission page and dismiss our native popup.
+          // Finish delivery here, only to a previously authorized archive destination.
+          try {
+            const configured = defaultServers(await getConfig())[0];
+            const latest = await getSnapshot(snapshot.id);
+            const copy = configured && latest?.remote_copies?.[configured.id];
+            if (!configured?.policy.upload_singlefile_to_server || !latest || !copy
+              || copy.submitted_to !== new URL(configured.server).toString().replace(/\/$/, '')
+              || !(await hasServerHostPermission(configured.server))) return { ok: true, singlefile };
+            const current = await ensureArtifactSnapshotId(configured, latest);
+            await uploadSnapshotCaptureArtifactsToArchiveBox(configured, current);
+            const receipt = (await getSnapshot(current.id))?.remote_copies?.[configured.id]?.artifacts?.singlefile;
+            return { ok: true, singlefile, singlefileUploaded: receipt?.status === 'uploaded' };
+          } catch (error) {
+            return { ok: true, singlefile, singlefileUploadError: error instanceof Error ? error.message : String(error) };
+          }
+        })().catch((error: Error) => ({
+          ok: false, errorMessage: error.message,
+          error: error instanceof SingleFileUnavailableError ? 'singlefile_unavailable' : undefined,
+        }));
       }
 
       case 'test_server_url':
