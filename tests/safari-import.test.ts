@@ -1,6 +1,7 @@
 import { launchExtension, readSnapshots } from './helpers/extension';
 import { expect, test } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import path from 'node:path';
 import { zipSync } from 'fflate';
 import type { Snapshot } from '../src/lib/types';
@@ -8,8 +9,14 @@ import type { Snapshot } from '../src/lib/types';
 // Real exported Safari records, processed by the shipped options UI and saved
 // through real extension storage. No API replacement or intercepted requests.
 test('imports Safari exports, separates Reading List, and preserves saved URL deduplication', async ({}, testInfo) => {
-  const harness = await launchExtension();
+  // Direct navigation to popup.html does not grant activeTab like clicking
+  // the actual toolbar icon does. Give this disposable profile tab access.
+  const harness = await launchExtension(['tabs']);
   const { context, id, profile } = harness;
+  const site = createServer((_request, response) => {
+    response.writeHead(200, { 'Content-Type': 'text/html' });
+    response.end('<title>Popup layout fixture</title>');
+  });
   try {
     const page = await context.newPage();
     await page.goto(`chrome-extension://${id}/options.html?tab=import`);
@@ -75,11 +82,22 @@ test('imports Safari exports, separates Reading List, and preserves saved URL de
       await page.screenshot({ path: testInfo.outputPath(`safari-import-${width}.png`), fullPage: true });
     }
 
+    // Exercise the normal capture layout on a real page rather than the tab
+    // access gate or the empty browser window.
+    await new Promise<void>(resolve => site.listen(0, '127.0.0.1', resolve));
+    const address = site.address();
+    if (!address || typeof address === 'string') throw new Error('Missing local fixture port');
+    const target = await context.newPage();
+    const targetURL = `http://127.0.0.1:${address.port}/popup-layout`;
+    await target.goto(targetURL);
+    await target.bringToFront();
+
     // Desktop popup hosts begin with a tiny viewport, then measure content.
     // Its intrinsic width must not collapse to that provisional viewport.
     await page.setViewportSize({ width: 120, height: 600 });
     await page.goto(`chrome-extension://${id}/popup.html`);
     await expect(page.getByRole('region', { name: 'ArchiveBox save panel' })).toBeVisible();
+    await expect(page.getByText(targetURL, { exact: true })).toBeVisible();
     expect(await page.locator('body').evaluate(element => element.getBoundingClientRect().width)).toBe(560);
     await page.setViewportSize({ width: 560, height: 600 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -93,6 +111,9 @@ test('imports Safari exports, separates Reading List, and preserves saved URL de
     await expect(page.getByRole('button', { name: 'Crawl', exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('popup-touch.png') });
   } finally {
-    await harness.close();
+    try { await harness.close(); }
+    finally {
+      if (site.listening) await new Promise<void>((resolve, reject) => site.close(error => error ? reject(error) : resolve()));
+    }
   }
 });
