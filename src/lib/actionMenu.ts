@@ -1,6 +1,5 @@
 import { actionMenuItems, isClickedPageTab, menuAction, pageSaveId } from './actionMenuItems';
 import { siteCookieSource, siteHostname, siteRulePatch } from './siteRules';
-import { isArchiveablePageUrl, isConfiguredArchiveBoxUrl } from './archivebox';
 import { normalizeCookie } from './cookies';
 import { t } from './i18n';
 import { activeServer, defaultServers } from './server_registry';
@@ -43,14 +42,14 @@ async function saveWindow(tab: Browser.tabs.Tab, save: SaveTab, close: boolean) 
     const tabs = await browser.tabs.query({ windowId: tab.windowId });
     let saved = 0, closed = 0, kept = 0;
     for (const candidate of tabs) {
-      if (!candidate.id || !candidate.url || candidate.incognito || !isArchiveablePageUrl(candidate.url)
-        || await isConfiguredArchiveBoxUrl(candidate.url)) { kept++; continue; }
+      if (!candidate.id) { kept++; continue; }
       if (!(await save(candidate, [close ? 'close-all-tabs' : 'save-all-tabs']))) { kept++; continue; }
       saved++;
       if (close) {
         const current = await browser.tabs.get(candidate.id).catch(() => undefined);
         // Never close a tab that moved windows or navigated during capture.
-        if (current?.windowId === tab.windowId && current.url === candidate.url && !current.incognito) {
+        if (current?.windowId === tab.windowId && current.url === candidate.url && !current.incognito
+          && (!current.pendingUrl || current.pendingUrl === candidate.url)) {
           await browser.tabs.remove(candidate.id);
           closed++;
         } else kept++;
@@ -127,7 +126,8 @@ export async function handleActionMenu(
     }
     if (action === 'save-all' || action === 'close-all') {
       if (!tab) throw new Error(t('Choose a browser window first.'));
-      return saveWindow(tab, save, action === 'close-all');
+      await saveWindow(tab, save, action === 'close-all');
+      return;
     }
     if (!tab?.url || tab.incognito || !siteHostname(tab.url)) throw new Error(t('Choose a normal HTTP or HTTPS page first.'));
     if (action === 'search') return openOptions('', { search: tab.url });

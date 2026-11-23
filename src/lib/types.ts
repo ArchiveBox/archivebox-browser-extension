@@ -218,6 +218,7 @@ export type ArchiveboxAddMessage = {
   type: 'archivebox_add';
   server_id: string;
   tabId?: number;
+  captureLocal?: false;
   body: {
     urls: string[];
     tags: string[];

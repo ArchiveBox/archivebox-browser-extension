@@ -41,6 +41,36 @@ export function isArchiveablePageUrl(targetUrl: string): boolean {
   }
 }
 
+export function archiveableTabPage(tab: { url?: string; title?: string; favIconUrl?: string; discarded?: boolean }) {
+  if (!tab.url) return null;
+  const { url, title = '', discarded = false } = tab;
+  if (isArchiveablePageUrl(url)) return { url, title, favIconUrl: tab.favIconUrl || null, suspended: discarded };
+
+  let placeholder: URL;
+  try {
+    placeholder = new URL(url);
+  } catch {
+    return null;
+  }
+  if (!['chrome-extension:', 'moz-extension:'].includes(placeholder.protocol)
+    || !/\/(?:suspend(?:ed)?|park(?:ed)?|sleep(?:ing)?|discarded)\.html$/i.test(placeholder.pathname)) return null;
+
+  const hash = placeholder.hash.slice(1);
+  const query = placeholder.search.slice(1);
+  for (const encoded of [hash, query]) {
+    // Great Suspender and Marvellous append a raw URI last. Its query and
+    // fragment belong to the original page, including any literal '&' or '+'.
+    const raw = /(?:^|&)uri=(https?:\/\/.*)$/i.exec(encoded);
+    const params = new URLSearchParams(raw ? encoded.slice(0, raw.index) : encoded);
+    const original = raw?.[1] ?? params.get('uri') ?? params.get('url') ?? params.get('u') ?? params.get('originalUrl');
+    if (original && /^https?:\/\//i.test(original) && isArchiveablePageUrl(original)) {
+      const originalTitle = params.get('ttl') || params.get('title') || params.get('t');
+      return { url: original, title: originalTitle || title, favIconUrl: null, suspended: true };
+    }
+  }
+  return null;
+}
+
 export function archiveBoxServerUrlMatches(serverUrl: string, targetUrl: string): boolean {
   if (!serverUrl || !targetUrl) return false;
 

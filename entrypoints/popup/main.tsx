@@ -3,7 +3,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { Sparkles, LoaderCircle, Check, X, Trash2, Eye, Settings } from 'lucide-react';
 import { TagChip, TagInputChip, TagList } from '@/src/components/Tags';
-import { archiveBoxServerUrlMatches, findSubmittedSnapshot, getServerPersonas, hasServerHostPermission, isArchiveablePageUrl, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
+import { archiveBoxServerUrlMatches, findSubmittedSnapshot, getServerPersonas, hasServerHostPermission, removeFromArchiveBox, requestServerHostPermission, syncArchiveBoxSnapshotTags } from '@/src/lib/archivebox';
+import { archiveableTabPage } from '@/src/lib/archiveboxUrlExclusions';
 import { ensureArtifactSnapshotId, uploadSnapshotCaptureArtifactsToArchiveBox } from '@/src/lib/archiveboxArtifacts';
 import { mhtmlUnsupportedMessage, singleFileCompanion, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
@@ -27,11 +28,14 @@ type ScreenshotCaptureState = {
 };
 type ActivePage = {
   favIconUrl?: string | null;
+  suspended: boolean;
   tabId: number;
   title: string;
   url: string;
   windowId: number;
 };
+
+class TabAccessRequired extends Error {}
 
 function crawlDepthOptions(): Array<{
   value: ArchiveDepth;
@@ -48,24 +52,27 @@ function crawlDepthOptions(): Array<{
 
 async function getActivePage(): Promise<ActivePage> {
   const registry = await getConfig();
-  const archivebox_server_url = defaultServers(registry)[0]?.server || '';
   const extensionOrigin = browser.runtime.getURL('');
-  const isOwnExtensionPage = (url = '') => url.startsWith(extensionOrigin);
-  const isArchiveablePage = (url = '') => isArchiveablePageUrl(url) && !registry.servers.some((server) => server.server && archiveBoxServerUrlMatches(server.server, url));
-  const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
-  const tab = activeTab?.url && !isOwnExtensionPage(activeTab.url) && isArchiveablePage(activeTab.url)
-    ? activeTab
-    : (await browser.tabs.query({ currentWindow: true }))
-      .filter((candidate) => candidate.id && candidate.url && !isOwnExtensionPage(candidate.url) && isArchiveablePage(candidate.url))
-      .sort((left, right) => (right.lastAccessed || 0) - (left.lastAccessed || 0))[0];
-  if (!tab?.id || !tab.url) throw new Error(t("Open a website tab, then click the ArchiveBox extension to save it."));
-  return {
-    favIconUrl: tab.favIconUrl || null,
-    tabId: tab.id,
-    title: tab.title || t("Untitled page"),
-    url: tab.url,
-    windowId: tab.windowId,
+  const pageForTab = (tab?: Browser.tabs.Tab): ActivePage | null => {
+    if (!tab?.id || tab.url?.startsWith(extensionOrigin)) return null;
+    const page = archiveableTabPage(tab);
+    if (!page || registry.servers.some((server) => server.server && archiveBoxServerUrlMatches(server.server, page.url))) return null;
+    return { ...page, tabId: tab.id, title: page.title || t("Untitled page"), windowId: tab.windowId };
   };
+  const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (activeTab?.id && activeTab.url === undefined && !(await browser.permissions.contains({ permissions: ['tabs'] }))) {
+    throw new TabAccessRequired(t("Allow tab access to save this tab’s original URL."));
+  }
+  const active = pageForTab(activeTab);
+  if (active) return active;
+  if (!activeTab?.url || !/^(chrome|moz)-extension:/i.test(activeTab.url) || activeTab.url.startsWith(extensionOrigin)) {
+    const fallback = (await browser.tabs.query({ currentWindow: true }))
+      .sort((left, right) => (right.lastAccessed || 0) - (left.lastAccessed || 0))
+      .map(pageForTab)
+      .find(page => page !== null);
+    if (fallback) return fallback;
+  }
+  throw new Error(t("Open a website tab, then click the ArchiveBox extension to save it."));
 }
 
 function toArchiveDepth(value: number): ArchiveDepth {
@@ -95,6 +102,7 @@ function ArchiveBoxOverlay() {
   const [now, setNow] = useState(Date.now);
   const [confirmedRemoteId, setConfirmedRemoteId] = useState<string | null>(null);
   const [activePage, setActivePage] = useState<ActivePage | null>(null);
+  const [needsTabAccess, setNeedsTabAccess] = useState(false);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [allTags, setAllTags] = useState<string[]>([]);
   const [input, setInput] = useState('');
@@ -395,10 +403,12 @@ function ArchiveBoxOverlay() {
       setStatus(t("Saved locally. Failed to archive on server: $1", errorMessage));
       return;
     }
+    const page = activePage || await getActivePage();
     const response = await browser.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
       type: 'archivebox_add',
       server_id: destination().id,
-      tabId: (activePage || await getActivePage()).tabId,
+      tabId: page.tabId,
+      ...(page.suspended ? { captureLocal: false } : {}),
       body: {
         urls: [url],
         tags,
@@ -431,6 +441,25 @@ function ArchiveBoxOverlay() {
     }
   }
 
+  function showPageError(error: unknown) {
+    setNeedsTabAccess(error instanceof TabAccessRequired);
+    setOk(false);
+    setStatus(error instanceof Error ? error.message : String(error));
+  }
+
+  async function allowTabAccess() {
+    try {
+      if (!(await browser.permissions.request({ permissions: ['tabs'] }))) {
+        setStatus(t("Permission denied"));
+        return;
+      }
+      setNeedsTabAccess(false);
+      await refresh(true);
+    } catch (error) {
+      showPageError(error);
+    }
+  }
+
   useEffect(() => {
     getConfig()
       .then(({ ui_language }) => {
@@ -438,10 +467,7 @@ function ArchiveBoxOverlay() {
       })
       .catch(() => undefined)
       .then(() => refresh(true))
-      .catch((error: unknown) => {
-        setOk(false);
-        setStatus(error instanceof Error ? error.message : String(error));
-      });
+      .catch(showPageError);
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') close();
     }
@@ -821,8 +847,6 @@ function ArchiveBoxOverlay() {
       setStatus(mhtmlUnsupportedMessage());
       return;
     }
-    if (kind === 'mhtml' && !(await ensureMhtmlPermission())) return;
-
     const nextActivePage = activePage || await getActivePage();
     setActivePage(nextActivePage);
     const { currentSnapshot } = await getCurrentSnapshot(nextActivePage);
@@ -838,6 +862,8 @@ function ArchiveBoxOverlay() {
       openCaptureView('singlefile');
       return;
     }
+    if (nextActivePage.suspended) return;
+    if (kind === 'mhtml' && !(await ensureMhtmlPermission())) return;
 
     if (!(await ensureLocalCaptureStoragePermission())) return;
     if (kind === 'screenshot') {
@@ -989,6 +1015,8 @@ function ArchiveBoxOverlay() {
   const pageTitle = snapshot?.title || activePage?.title || t("Untitled page");
   const pageUrl = snapshot?.url || activePage?.url || '';
   const pageFavicon = snapshot?.favIconUrl || activePage?.favIconUrl || null;
+  const suspended = activePage?.suspended;
+  const suspendedCaptureTitle = t("Local capture is unavailable while this tab is suspended.");
   const showPageFavicon = Boolean(pageFavicon && !faviconFailed);
   const depthOptions = crawlDepthOptions();
   const currentDepthLabel = depthOptions.find((option) => option.value === depth)?.label || t("Depth 0: just this page");
@@ -1008,6 +1036,13 @@ function ArchiveBoxOverlay() {
       : (snapshot?.screenshot || snapshot?.viewport_screenshot)
         ? `✓ ${t("Screenshot")} ${savedScreenshotCount}`
         : t("Screenshot");
+
+  if (needsTabAccess) return (
+    <section className="archivebox-overlay" aria-label={t("ArchiveBox save panel")}>
+      <p role="status">{status}</p>
+      <button className="archivebox-overlay__capture-button" onClick={allowTabAccess}>{t("Allow tab access")}</button>
+    </section>
+  );
 
   return (
     <section className="archivebox-overlay" aria-label={t("ArchiveBox save panel")} aria-busy={deleteBusy}>
@@ -1071,11 +1106,13 @@ function ArchiveBoxOverlay() {
           <button
             className={screenshotButtonClass}
             onClick={() => captureLocalArtifact('screenshot')}
+            disabled={suspended && !(snapshot?.screenshot || snapshot?.viewport_screenshot)}
             title={screenshotCaptureActive
               ? t("Cancel full-page screenshot capture and restore scroll position")
               : (snapshot?.screenshot || snapshot?.viewport_screenshot)
                 ? t("Open saved screenshot")
-                : t("Save a screenshot for this URL. Full-page scrolling may ask for optional scripting permission; denying it saves the visible area.")}
+                : suspended ? suspendedCaptureTitle
+                  : t("Save a screenshot for this URL. Full-page scrolling may ask for optional scripting permission; denying it saves the visible area.")}
           >
             {screenshotButtonLabel}
           </button>
@@ -1083,7 +1120,8 @@ function ArchiveBoxOverlay() {
             <button
               className={`archivebox-overlay__capture-button${snapshot?.mhtml ? ' archivebox-overlay__capture-button--saved' : ''}`}
               onClick={() => captureLocalArtifact('mhtml')}
-              title={snapshot?.mhtml ? t("Open saved MHTML snapshot") : t("Save an MHTML snapshot for this URL")}
+              disabled={suspended && !snapshot?.mhtml}
+              title={snapshot?.mhtml ? t("Open saved MHTML snapshot") : suspended ? suspendedCaptureTitle : t("Save an MHTML snapshot for this URL")}
             >
               {snapshot?.mhtml ? `✓ ${t("MHTML")}` : t("MHTML")}
             </button>
@@ -1091,6 +1129,7 @@ function ArchiveBoxOverlay() {
             <button
               className="archivebox-overlay__capture-button archivebox-overlay__capture-button--disabled"
               onClick={() => captureLocalArtifact('mhtml')}
+              disabled={suspended}
               title={mhtmlUnsupportedMessage()}
             >
               {t("MHTML unavailable")}
@@ -1099,7 +1138,8 @@ function ArchiveBoxOverlay() {
           {singleFileCompanion && <button
             className={`archivebox-overlay__capture-button${snapshot?.singlefile ? ' archivebox-overlay__capture-button--saved' : ''}`}
             onClick={() => captureLocalArtifact('singlefile')}
-            title={snapshot?.singlefile ? t("Open saved SingleFile HTML snapshot") : t("Save a SingleFile HTML snapshot for this URL")}
+            disabled={suspended && !snapshot?.singlefile}
+            title={snapshot?.singlefile ? t("Open saved SingleFile HTML snapshot") : suspended ? suspendedCaptureTitle : t("Save a SingleFile HTML snapshot for this URL")}
           >
             {snapshot?.singlefile ? `✓ ${t("SingleFile")}` : t("SingleFile")}
           </button>}

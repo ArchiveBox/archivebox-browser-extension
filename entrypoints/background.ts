@@ -4,6 +4,7 @@ import { defaultServers, requireServer } from '@/src/lib/server_registry';
 import { configureLocalRetention, withSnapshotArtifacts } from '@/src/lib/retention';
 import { configureCookieSync } from '@/src/lib/cookieSync';
 import { hasServerHostPermission, submitAgentTask, findSubmittedSnapshot, removeFreshOwnedCapture, submitSnapshot, addToArchiveBox, archiveBoxServerUrlMatches, archiveBoxSnapshotUrl, isArchiveablePageUrl, isConfiguredArchiveBoxUrl, removeFromArchiveBox, supportsArchiveBoxApi, testApiKey, testServerUrl } from '@/src/lib/archivebox';
+import { archiveableTabPage } from '@/src/lib/archiveboxUrlExclusions';
 import { singleFileCompanion, singleFileCaptureUnavailableMessage, mhtmlUnsupportedMessage, supportsMhtmlCapture } from '@/src/lib/browserCapabilities';
 import { setUiLanguage, t } from '@/src/lib/i18n';
 import { addSnapshots, appendSnapshotScreenshotParts, ensureSnapshot, getSnapshot, latestSnapshotForUrl, updateSnapshot, writeSnapshotMhtmlBytes, writeSnapshotScreenshot, writeSnapshotScreenshotParts, writeSnapshotSingleFileHtml } from '@/src/lib/models';
@@ -276,11 +277,17 @@ async function writeBitmapScreenshotParts(
   return writeSnapshotScreenshotParts(snapshot, partBlobs, width, height, viewport);
 }
 
-async function captureVisibleTabPng(windowId: number): Promise<Blob> {
+async function captureVisibleTabPng(tab: Browser.tabs.Tab, url: string): Promise<Blob> {
   if (typeof browser.tabs.captureVisibleTab !== 'function') {
     throw new Error(t("Screenshot capture is not available in this browser."));
   }
-  const dataUrl = await withCaptureVisibleTabQuota(() => browser.tabs.captureVisibleTab(windowId, { format: 'png' }));
+  const dataUrl = await withCaptureVisibleTabQuota(async () => {
+    const [visible] = await browser.tabs.query({ active: true, windowId: tab.windowId });
+    if (visible?.id !== tab.id || visible?.url !== url || visible.discarded || (visible.pendingUrl && visible.pendingUrl !== url)) {
+      throw new Error(t("The tab is unavailable for local capture."));
+    }
+    return browser.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+  });
   return dataUrlToBlob(dataUrl);
 }
 
@@ -290,8 +297,10 @@ async function captureVisibleScreenshot(tab: Browser.tabs.Tab, snapshot: Snapsho
   if (typeof createImageBitmap !== 'function') {
     throw new Error(t("Screenshot capture is not available in this browser."));
   }
+  const current = await browser.tabs.get(tab.id);
+  if (current.url !== snapshot.url || current.discarded) throw new Error(t("The tab is unavailable for local capture."));
   await browser.tabs.update(tab.id, { active: true }).catch(() => undefined);
-  const blob = await captureVisibleTabPng(tab.windowId);
+  const blob = await captureVisibleTabPng(tab, snapshot.url);
   const bitmap = await createImageBitmap(blob);
   const width = bitmap.width;
   const height = bitmap.height;
@@ -346,6 +355,7 @@ async function ensureArchiveBoxContentScript(tab: Browser.tabs.Tab): Promise<voi
 
 async function measureScreenshotPage(tab: Browser.tabs.Tab): Promise<PageMetrics> {
   if (!tab.id) throw new Error(t("No tab ID available."));
+  if (tab.discarded || !isArchiveablePageUrl(tab.url || '')) throw new Error(t("The tab is unavailable for local capture."));
   const scripting = getScriptingApi();
   if (!scripting) {
     throw new Error(t("The scripting API is not available in this browser."));
@@ -446,7 +456,7 @@ async function captureFullPageScreenshot(tab: Browser.tabs.Tab, snapshot: Snapsh
       if (capturedPositions.has(key)) break;
       capturedPositions.add(key);
 
-      const blob = await captureVisibleTabPng(tab.windowId);
+      const blob = await captureVisibleTabPng(tab, snapshot.url);
       const bitmap = await createImageBitmap(blob);
       scaleX = bitmap.width / viewportWidth;
       scaleY = bitmap.height / viewportHeight;
@@ -525,10 +535,10 @@ async function captureMhtml(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<
   if (!liveTab || typeof liveTab.id !== 'number') {
     throw new Error(t("The tab is no longer available for MHTML capture."));
   }
-  if (!isArchiveablePageUrl(liveTab.url || '')) {
+  if (liveTab.discarded || !isArchiveablePageUrl(liveTab.url || '')) {
     throw new Error(t("This page cannot be captured as MHTML."));
   }
-  if ((liveTab.url || '') !== snapshot.url) {
+  if (liveTab.url !== snapshot.url || (liveTab.pendingUrl && liveTab.pendingUrl !== snapshot.url)) {
     throw new Error(t("The tab navigated to a different page before MHTML capture."));
   }
   if (liveTab.status && liveTab.status !== 'complete') {
@@ -555,7 +565,7 @@ async function captureMhtml(tab: Browser.tabs.Tab, snapshot: Snapshot): Promise<
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     if (attempt > 0) {
       const stillThere = await browser.tabs.get(tabId).catch(() => null);
-      if (!stillThere || (stillThere.url || '') !== snapshot.url || !isArchiveablePageUrl(stillThere.url || '')) {
+      if (stillThere?.url !== snapshot.url || stillThere.discarded || (stillThere.pendingUrl && stillThere.pendingUrl !== snapshot.url)) {
         throw new Error(t("The tab is no longer available for MHTML capture."));
       }
     }
@@ -662,6 +672,7 @@ async function captureAndAttachSnapshotScreenshot(
   fullPage = true,
 ): Promise<SnapshotScreenshot> {
   return withSnapshotArtifacts(snapshot.id, async () => {
+    if (tab.discarded || tab.url !== snapshot.url) throw new Error(t("The tab is unavailable for local capture."));
     if (!(await getSnapshot(snapshot.id))) throw new Error(t("Saved snapshot not found."));
     if (await usesFastTestCapture()) {
       const screenshot = await writeSnapshotScreenshot(snapshot, dataUrlToBlob(testScreenshotPngDataUrl), 1, 1, !fullPage);
@@ -691,6 +702,7 @@ async function captureAndAttachSnapshotMhtml(
   snapshot: Snapshot,
 ): Promise<SnapshotMhtml> {
   return withSnapshotArtifacts(snapshot.id, async () => {
+    if (tab.discarded || tab.url !== snapshot.url) throw new Error(t("The tab is unavailable for local capture."));
     if (!(await getSnapshot(snapshot.id))) throw new Error(t("Saved snapshot not found."));
     if (await usesFastTestCapture()) {
       const bytes = new TextEncoder().encode([
@@ -718,6 +730,7 @@ async function captureAndAttachSnapshotSingleFile(
   snapshot: Snapshot,
 ): Promise<SnapshotSingleFile> {
   return withSnapshotArtifacts(snapshot.id, async () => {
+    if (tab.discarded || tab.url !== snapshot.url) throw new Error(t("The tab is unavailable for local capture."));
     if (!(await getSnapshot(snapshot.id))) throw new Error(t("Saved snapshot not found."));
     const singlefile = await captureSingleFileHtml(tab, snapshot);
     await attachSingleFileToSnapshot(snapshot.id, singlefile);
@@ -795,14 +808,6 @@ async function captureConfiguredSnapshotArtifacts(
   await captureAndAttachSnapshotArtifacts(tab, snapshot, options);
 }
 
-async function ensureSnapshotForTab(tab: Browser.tabs.Tab): Promise<{
-  snapshot: Snapshot;
-  created: boolean;
-}> {
-  if (!tab.url) throw new Error(t("No URL found for the current tab."));
-  return ensureSnapshot(createSnapshot(tab.url, [], tab.title || '', tab.favIconUrl || null));
-}
-
 async function shouldAutoArchive(url: string): Promise<boolean> {
   try {
     if (!isArchiveablePageUrl(url)) return false;
@@ -838,7 +843,7 @@ async function autoArchive(
   changeInfo: { status?: string },
   tab: Browser.tabs.Tab,
 ): Promise<void> {
-  if (changeInfo.status !== 'complete' || !tab.url) return;
+  if (changeInfo.status !== 'complete' || !tab.url || tab.discarded) return;
   if (!isArchiveablePageUrl(tab.url)) return;
 
   // Runs for every page load, enabled or not, so it only reads the config
@@ -864,18 +869,23 @@ async function autoArchive(
 }
 
 async function saveTab(tab?: Browser.tabs.Tab, tags: string[] = []): Promise<boolean> {
-  if (!tab?.id || !tab.url || tab.incognito) return false;
-  if (!isArchiveablePageUrl(tab.url)) return false;
-  if (await isConfiguredArchiveBoxUrl(tab.url)) return false;
+  if (!tab?.id || tab.incognito) return false;
+  if (!tab.url) {
+    if (!(await browser.permissions.request({ permissions: ['tabs'] }).catch(() => false))) return false;
+    tab = await browser.tabs.get(tab.id).catch(() => undefined);
+    if (!tab?.id || tab.incognito) return false;
+  }
+  const page = archiveableTabPage(tab);
+  if (!page || await isConfiguredArchiveBoxUrl(page.url)) return false;
   try {
-    const saved = await ensureSnapshotForTab(tab);
+    const saved = await ensureSnapshot(createSnapshot(page.url, [], page.title, page.favIconUrl));
     let snapshot = saved.snapshot;
     if (tags.length) {
       const tagged = await updateSnapshot(snapshot.id, item => ({ ...item, tags: [...new Set([...item.tags, ...tags])] }));
       if (!tagged) return false;
       snapshot = tagged;
     }
-    await captureConfiguredSnapshotArtifacts(tab, snapshot, saved.created);
+    if (!page.suspended) await captureConfiguredSnapshotArtifacts(tab, snapshot, saved.created);
     const submitted = await syncSnapshotToServer(snapshot, tab.id);
     const config = await getConfig();
     // Closing requires a real acknowledged server submission when configured,
@@ -936,10 +946,9 @@ export default defineBackground(() => {
     void handleActionMenu(item, tab, saveTab);
   });
 
-  browser.commands.onCommand.addListener(async (command) => {
+  browser.commands.onCommand.addListener(async (command, tab) => {
     if (command !== 'save-to-archivebox-action') return;
-    const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
-    await saveTab(activeTab);
+    await saveTab(tab ?? (await browser.tabs.query({ active: true, currentWindow: true }))[0]);
   });
 
   browser.runtime.onMessage.addListener((
@@ -987,10 +996,13 @@ export default defineBackground(() => {
           const snapshot = saved?.url === message.body.urls[0] ? saved : null;
           if (snapshot && message.body.urls.length === 1) {
             if (message.body.replace_fresh) await removeFreshOwnedCapture(server, snapshot);
-            const captureReady = message.tabId === undefined ? undefined : () => getMessageTab(message.tabId!)
+            const captureReady = message.tabId === undefined || message.captureLocal === false ? undefined : () => getMessageTab(message.tabId!)
               .then(async (tab) => {
-                if (tab.url !== snapshot.url) throw new Error('The tab navigated before capture.');
-                await captureConfiguredSnapshotArtifacts(tab, snapshot, message.body.only_new === false);
+                const page = archiveableTabPage(tab);
+                if (page?.url !== snapshot.url) throw new Error('The tab navigated before capture.');
+                if (!page.suspended) {
+                  await captureConfiguredSnapshotArtifacts(tab, snapshot, message.body.only_new === false);
+                }
               });
             return new Promise<Awaited<ReturnType<typeof submitSnapshot>>>((resolve, reject) => {
               void submitSnapshot(server, { ...snapshot, tags: message.body.tags, depth: message.body.depth ?? 0,

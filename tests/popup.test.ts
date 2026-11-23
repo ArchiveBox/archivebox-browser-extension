@@ -1044,6 +1044,54 @@ async function configureServer(harness: BrowserHarness, server: string, key: str
   });
 }
 
+test('popup submits a browser-discarded tab without waking it or capturing local artifacts', async ({ archivebox }) => {
+  const harness = await launchHarness();
+  const source = await startFixtureServer();
+  try {
+    const serverId = await configureServer(harness, archivebox.server, archivebox.key);
+    await setExtensionStorage(harness, {
+      save_screenshots_locally: true,
+      save_viewport_screenshots_locally: true,
+      save_mhtml_locally: true,
+      save_singlefile_locally: true,
+    });
+    const url = `${source.url}?discarded=${Date.now()}`;
+    const target = await harness.context.newPage();
+    await target.goto(url);
+    await harness.storagePage.bringToFront();
+    const tabId = await harness.storagePage.evaluate(async url => {
+      const { chrome } = globalThis as typeof globalThis & { chrome: typeof browser };
+      const [tab] = await chrome.tabs.query({ url });
+      if (!tab?.id) throw new Error('Cannot find the tab to discard.');
+      const discardedTab = await chrome.tabs.discard(tab.id);
+      if (!discardedTab?.id) throw new Error('Could not discard the tab.');
+      return discardedTab.id;
+    }, url);
+    const discarded = () => harness.storagePage.evaluate(async id => {
+      const { chrome } = globalThis as typeof globalThis & { chrome: typeof browser };
+      return (await chrome.tabs.get(id)).discarded;
+    }, tabId);
+    expect(await discarded()).toBe(true);
+
+    const popup = await openNativePopup(harness, harness.storagePage);
+    try {
+      const saved = await waitForSavedEntry(harness, url,
+        entry => (entry as Snapshot).remote_copies?.[serverId]?.status === 'complete', 'discarded tab URL delivery') as Snapshot;
+      const crawl = await archivebox.api('/api/v1/crawls/crawl/' + saved.remote_copies![serverId]!.crawl_id);
+      expect(crawl.urls).toContain(url);
+      expect(await popupElementsHtml(popup, '.archivebox-overlay__capture-button:disabled')).toHaveLength(3);
+      expect([saved.screenshot, saved.viewport_screenshot, saved.mhtml, saved.singlefile].filter(Boolean)).toHaveLength(0);
+      expect(await discarded()).toBe(true);
+    } finally {
+      await harness.cdp.send('Target.closeTarget', { targetId: popup.targetId });
+      popup.cdp.close();
+    }
+  } finally {
+    await closeHarness(harness);
+    await new Promise<void>(resolve => source.server.close(() => resolve()));
+  }
+});
+
 test('persona URL submission uses real API acceptance without fetching API documentation', async ({ archivebox }) => {
   const harness = await launchHarness();
   const source = await startFixtureServer();

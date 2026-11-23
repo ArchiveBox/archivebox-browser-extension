@@ -26,6 +26,7 @@ This is a browser extension that lets you send individual browser tabs or all UR
 ## Features
 
 - 📸 Save the current page with the toolbar button, keyboard shortcut, or right-click menu.
+- 💤 Save original URLs from suspended tabs, including The Marvellous Suspender, The Great Suspender, Tab Suspender, TabZen, and browser-discarded tabs. Tabs stay suspended during URL-only saves.
 - 🏛️ Send URLs to your own ArchiveBox server to preserve websites for later.
 - 🏷️ Search, sort, tag, and manage your saved URLs in one place.
 - ⚙️ Automatically archive pages that match your chosen URL patterns, with allowlists and denylists.
@@ -96,6 +97,8 @@ Browser-captured files stay local when using the anonymous default; the server
 captures with that profile's own state.
 
 ## Local Captures
+
+Saving a suspended tab skips local screenshots, MHTML, and SingleFile capture. If your browser hides the suspended tab's address from ArchiveBox, choose **Allow tab access** when prompted.
 
 Viewport screenshots and MHTML captures (Chrome/Edge/Brave) are enabled by default, along with uploading these artifacts to the selected server. Safari and Firefox do not capture MHTML. Full-page capture and upload are separate opt-in settings. Viewport and full-page images are stored independently when both are enabled. Existing explicit capture and upload choices are preserved.
 

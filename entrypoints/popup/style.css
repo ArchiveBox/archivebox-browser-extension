@@ -440,14 +440,15 @@ button.archivebox-overlay__tag-chip {
   color: #6b4a00;
 }
 
-.archivebox-overlay__capture-button--disabled {
+.archivebox-overlay__capture-button--disabled,
+.archivebox-overlay__capture-button:disabled {
   border-color: #d0c7bb;
   background: #f3eee7;
   color: #74695d;
   cursor: help;
 }
 
-.archivebox-overlay__capture-button:hover {
+.archivebox-overlay__capture-button:hover:not(:disabled) {
   border-color: #a95656;
   background: #f7eeee;
 }
