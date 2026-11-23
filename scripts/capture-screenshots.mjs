@@ -66,7 +66,7 @@ try {
   for (let index = 0; index < 8; index++) await article.goto(`${base}/reading/${index}`);
   const nav = name => page.getByRole('navigation').getByRole('button', { name, exact: true }).click();
   await nav('Bulk Import URLs');
-  await page.getByRole('button', { name: 'Import from Browser Bookmarks', exact: true }).click();
+  await page.getByRole('button', { name: 'Load Browser Bookmarks', exact: true }).click();
   await expect(page.locator('.data-table tbody tr')).toHaveCount(titles.length);
   await page.getByPlaceholder('tags,comma,separated', { exact: true }).fill('reading,research,public-web');
   await page.getByRole('checkbox', { name: 'Select all visible import URLs' }).check();
@@ -103,7 +103,7 @@ try {
   await capture(page, 'cookies', 'Archiving profile and imported browser cookies', 'src/options/OptionsApp.tsx');
   await nav('Bulk Import URLs');
   await page.getByRole('checkbox', { name: 'Show new only', exact: true }).uncheck();
-  await page.getByRole('button', { name: 'Import from Browser History', exact: true }).click();
+  await page.getByRole('button', { name: 'Load Browser History', exact: true }).click();
   await expect(page.locator('.data-table tbody tr').first()).toBeVisible();
   await capture(page, 'import-history', 'Import browser history', 'src/options/OptionsApp.tsx');
   await article.bringToFront();

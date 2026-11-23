@@ -70,8 +70,9 @@ test('cookie picker groups sites, preserves precise selections and imports into 
       await page.screenshot({ path: testInfo.outputPath(`cookies-${width}.png`), fullPage: true });
     }
     const longName = 'Research and personal archiving with a very long profile name';
-    await page.getByLabel('Profile name').fill(longName);
-    await page.getByLabel('Profile name').blur();
+    const profileName = page.getByRole('textbox', { name: 'Profile name', exact: true });
+    await profileName.fill(longName);
+    await profileName.blur();
     const longDomain = 'my-very-long-browser-profile-login.department.example.net';
     await context.addCookies([{ name: 'login', value: 'long-domain-layout', domain: longDomain, path: '/' }]);
     await page.getByRole('button', { name: 'Refresh cookies', exact: true }).click();
