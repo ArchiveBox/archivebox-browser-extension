@@ -70,12 +70,31 @@ test(`saved URLs stay fast with ${total} snapshots`, async ({}, testInfo) => {
       };
     }, total);
 
+    // Pair the original first-paint memory sample with renderer diagnostics.
+    // Do not force GC, use these metrics for acceptance, or change the timed intervals.
+    const cdp = await harness.context.newCDPSession(page).catch(() => null);
+    const sampleRenderer = async () => {
+      if (!cdp) return null;
+      try {
+        const [heap, dom, { id: isolate }] = await Promise.all([
+          cdp.send('Runtime.getHeapUsage'),
+          cdp.send('Memory.getDOMCounters'),
+          cdp.send('Runtime.getIsolateId'),
+        ]);
+        return { heap, dom, isolate };
+      } catch {
+        return null;
+      }
+    };
+    const beforeReload = await sampleRenderer();
+
     // A fresh page load renders the first rows; its heap must not hold the collection.
     await page.reload();
     const opened = Date.now();
     await expect(page.locator('.saved-url-table tbody tr')).toHaveCount(100, { timeout: 60_000 });
     const firstRender = Date.now() - opened;
     const heapMb = await page.evaluate(() => (performance as Performance & { memory: { usedJSHeapSize: number } }).memory.usedJSHeapSize / 1e6);
+    const firstPaint = await sampleRenderer();
     await page.getByPlaceholder('Search by URL, title, or tags').fill(`article/${total - 7}`);
     const searched = Date.now();
     await expect(page.locator('.saved-url-table tbody tr')).toHaveCount(1, { timeout: 60_000 });
@@ -99,6 +118,18 @@ test(`saved URLs stay fast with ${total} snapshots`, async ({}, testInfo) => {
     expect(timings.count).toBeLessThan(3_000);
     expect(firstRender).toBeLessThan(5_000);
     expect(searchRender).toBeLessThan(5_000);
+    const afterSearch = await sampleRenderer();
+    await new Promise(resolve => setTimeout(resolve, 750));
+    const settledAfterSearch = await sampleRenderer();
+    const heapDiagnostic = Object.fromEntries(Object.entries({ beforeReload, firstPaint, afterSearch, settledAfterSearch })
+      .map(([phase, sample]) => [phase, sample && {
+        heap: sample.heap,
+        dom: sample.dom,
+        sameIsolateAsBeforeReload: beforeReload ? sample.isolate === beforeReload.isolate : null,
+      }]));
+    console.log(JSON.stringify({ heapDiagnostic, heapMb }));
+    await testInfo.attach('heap-diagnostic.json', { body: JSON.stringify(heapDiagnostic, null, 2), contentType: 'application/json' });
+    await cdp?.detach().catch(() => {});
     expect(heapMb).toBeLessThan(80);
   } finally {
     await harness.close();
