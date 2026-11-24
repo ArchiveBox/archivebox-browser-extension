@@ -27,7 +27,8 @@ export async function launchExtension(permissions: string[] = [], hostPermission
     '--enable-unsafe-extension-debugging', '--headless=new', '--no-first-run',
     // Keep the new-tab page's Google requests from adding unrelated cookies
     // to the real cookie-import fixture. Test page networking stays enabled.
-    '--no-default-browser-check', '--disable-background-networking', 'about:blank',
+    '--no-default-browser-check', '--disable-background-networking',
+    ...(JSON.parse(process.env.CHROME_ARGS_EXTRA || '[]') as string[]), 'about:blank',
     ...(process.platform === 'linux' ? ['--no-sandbox'] : []),
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
   let browserStderr = '';
