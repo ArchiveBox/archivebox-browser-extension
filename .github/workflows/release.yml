@@ -85,7 +85,19 @@ jobs:
             echo 'Release commit has no matching version tag' >&2
             exit 1
           fi
-          LAST_TAG="$(git tag --merged HEAD --list 'v[0-9]*' --sort=-version:refname | head -n 1)"
+          # A tag reserves its version before CI, so it is not necessarily a release baseline.
+          LAST_TAG=''
+          while IFS= read -r tag; do
+            [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+            tag_sha="$(git rev-list -n 1 "$tag")"
+            qualified="$(TAG_SHA="$tag_sha" gh api --paginate \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$tag_sha&status=success&event=push" \
+              --jq '.workflow_runs[] | select(.head_sha == env.TAG_SHA and .conclusion == "success") | .id')"
+            if test -n "$qualified"; then
+              LAST_TAG="$tag"
+              break
+            fi
+          done < <(git tag --merged HEAD --list 'v[0-9]*' --sort=-version:refname)
           if test -n "$LAST_TAG" && git diff --quiet "$LAST_TAG" HEAD -- entrypoints src public locales wxt.config.ts package.json pnpm-lock.yaml; then
             echo 'prepare=false' >> "$GITHUB_OUTPUT"
             echo 'candidate=false' >> "$GITHUB_OUTPUT"
